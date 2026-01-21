@@ -30,15 +30,19 @@ const manifest = {
   },
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
-  host_permissions: ['<all_urls>'],
-  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel'],
+  host_permissions: [
+    '<all_urls>',
+    'https://cloudapi.polymas.com/*',
+    'https://hike-teaching-center.polymas.com/*',
+    'https://*.polymas.com/*',
+  ],
+  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel', 'cookies', 'activeTab'],
   options_page: 'options/index.html',
   background: {
     service_worker: 'background.js',
     type: 'module',
   },
   action: {
-    default_popup: 'popup/index.html',
     default_icon: 'icon-34.png',
   },
   chrome_url_overrides: {

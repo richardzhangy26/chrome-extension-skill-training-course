@@ -6,7 +6,7 @@
   "private": true,
   "sideEffects": true,
   "scripts": {
-    "start": "tsx index.mts",
+    "start": "node --import tsx index.mts",
     "lint": "eslint .",
     "lint:fix": "pnpm lint --fix",
     "format": "prettier . --write --ignore-path ../../.prettierignore"

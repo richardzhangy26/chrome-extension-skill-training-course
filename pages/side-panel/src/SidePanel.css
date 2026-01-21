@@ -1,30 +1,89 @@
-.App {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  text-align: center;
-  height: 100%;
-  padding: 1rem;
+/* 能力训练助手 - Side Panel 样式 */
+
+/* 基础重置 */
+* {
+  box-sizing: border-box;
 }
 
-.App-logo {
-  height: 50vmin;
-  margin-bottom: 1rem;
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
 }
 
-.App-header {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-code {
-  background: rgba(148, 163, 184, 0.5);
-  border-radius: 0.25rem;
-  padding: 0.2rem 0.5rem;
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #06B6D4, #3B82F6);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #0891B2, #2563EB);
+}
+
+/* 输入框placeholder动画 */
+textarea::placeholder {
+  transition: opacity 0.2s ease;
+}
+
+textarea:focus::placeholder {
+  opacity: 0.5;
+}
+
+/* 按钮点击效果 */
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* 消息气泡入场动画 */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-bubble {
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+/* 渐变文字效果（可选） */
+.gradient-text {
+  background: linear-gradient(135deg, #06B6D4, #3B82F6, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 玻璃态效果增强 */
+.glass {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 禁用状态的统一样式 */
+button:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 焦点可见性（无障碍） */
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
+
+/* 平滑过渡 */
+button,
+textarea,
+div {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }

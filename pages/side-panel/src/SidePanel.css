@@ -15,12 +15,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #06B6D4, #3B82F6);
+  background: linear-gradient(180deg, #14B8A6, #06B6D4);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #0891B2, #2563EB);
+  background: linear-gradient(180deg, #0D9488, #0891B2);
 }
 
 /* 输入框placeholder动画 */
@@ -55,7 +55,7 @@ button:active:not(:disabled) {
 
 /* 渐变文字效果（可选） */
 .gradient-text {
-  background: linear-gradient(135deg, #06B6D4, #3B82F6, #8B5CF6);
+  background: linear-gradient(135deg, #14B8A6, #06B6D4, #0EA5E9);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -77,7 +77,7 @@ textarea:disabled {
 /* 焦点可见性（无障碍） */
 button:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #3B82F6;
+  outline: 2px solid #06B6D4;
   outline-offset: 2px;
 }
 

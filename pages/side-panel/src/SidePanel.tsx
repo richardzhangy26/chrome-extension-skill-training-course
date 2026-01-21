@@ -1,35 +1,47 @@
 import '@src/SidePanel.css';
-import React, { useRef, useEffect, useState } from 'react';
-import { useAgentChat } from './hooks/useAgentChat';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
+import { useAgentChat } from './hooks/useAgentChat';
+import { useRef, useEffect, useState } from 'react';
 
 // ============ SVG图标组件 ============
 const Icons = {
   // Logo图标 - 基于logo配色的抽象图形
   Logo: () => (
-    <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
+    <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
       <path d="M12 2L2 7l10 5 10-5-10-5z" fill="url(#logoGradient)" />
-      <path d="M2 17l10 5 10-5" stroke="url(#logoGradient)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 12l10 5 10-5" stroke="url(#logoGradient)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M2 17l10 5 10-5"
+        stroke="url(#logoGradient)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2 12l10 5 10-5"
+        stroke="url(#logoGradient)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <defs>
         <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#06B6D4" />
-          <stop offset="50%" stopColor="#3B82F6" />
-          <stop offset="100%" stopColor="#8B5CF6" />
+          <stop offset="0%" stopColor="#14B8A6" />
+          <stop offset="50%" stopColor="#06B6D4" />
+          <stop offset="100%" stopColor="#0EA5E9" />
         </linearGradient>
       </defs>
     </svg>
   ),
   // 用户图标
   User: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
     </svg>
   ),
   // AI助手图标
   Bot: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
       <rect x="3" y="11" width="18" height="10" rx="2" />
       <circle cx="12" cy="5" r="2" />
       <path d="M12 7v4" />
@@ -39,7 +51,7 @@ const Icons = {
   ),
   // 系统消息图标
   Info: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -47,14 +59,14 @@ const Icons = {
   ),
   // 发送图标
   Send: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
       <line x1="22" y1="2" x2="11" y2="13" />
       <polygon points="22 2 15 22 11 13 2 9 22 2" />
     </svg>
   ),
   // AI魔法棒图标
   Sparkles: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
       <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
       <path d="M5 19l1 3 1-3 3-1-3-1-1-3-1 3-3 1 3 1z" />
       <path d="M19 12l1 2 1-2 2-1-2-1-1-2-1 2-2 1 2 1z" />
@@ -62,39 +74,54 @@ const Icons = {
   ),
   // 重置图标
   Refresh: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
       <polyline points="23 4 23 10 17 10" />
       <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
     </svg>
   ),
   // 播放/开始图标
   Play: () => (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
       <polygon points="5 3 19 12 5 21 5 3" />
+    </svg>
+  ),
+  // 循环运行图标
+  Repeat: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+      <polyline points="17 1 21 5 17 9" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <polyline points="7 23 3 19 7 15" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+    </svg>
+  ),
+  // 停止图标
+  Stop: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
     </svg>
   ),
   // 消息图标
   MessageCircle: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-12 h-12">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-12 w-12">
       <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
     </svg>
   ),
   // 加载中
   Loader: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5 animate-spin">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5 animate-spin">
       <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
       <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
     </svg>
   ),
   // 检查/完成图标
   Check: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
       <polyline points="20 6 9 17 4 12" />
     </svg>
   ),
   // 错误图标
   AlertCircle: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="8" x2="12" y2="12" />
       <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -132,7 +159,7 @@ const STATE_CONFIG: Record<WorkflowState, { label: string; bgColor: string; dotC
 };
 
 // ============ Header组件 ============
-function Header({
+const Header = ({
   trainTaskId,
   workflowState,
   dialogueRound,
@@ -144,44 +171,40 @@ function Header({
   dialogueRound: number;
   onReset: () => void;
   onOpenSettings: () => void;
-}) {
+}) => {
   const config = STATE_CONFIG[workflowState];
   const isProcessing = ['FETCHING_STEPS', 'FETCHING_FIRST_STEP', 'RUNNING_CARD'].includes(workflowState);
 
   return (
     <div className="relative overflow-hidden">
       {/* 渐变背景 */}
-      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 via-blue-500 to-violet-500" />
+      <div className="absolute inset-0 bg-gradient-to-br from-teal-500 via-cyan-500 to-blue-500" />
       {/* 装饰性光晕 */}
-      <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
-      <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-white/10 rounded-full blur-xl" />
+      <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+      <div className="absolute -bottom-10 -left-10 h-24 w-24 rounded-full bg-white/10 blur-xl" />
 
       <div className="relative px-4 py-4">
         {/* 标题行 */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
+            <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-sm">
               <Icons.Logo />
             </div>
-            <h1 className="text-lg font-semibold text-white tracking-tight">
-              能力训练助手
-            </h1>
+            <h1 className="text-lg font-semibold tracking-tight text-white">能力训练助手</h1>
           </div>
           <div className="flex items-center gap-2">
             {/* 设置按钮 */}
             <button
               onClick={onOpenSettings}
-              className="flex items-center gap-1.5 text-xs bg-white/15 hover:bg-white/25 text-white/90 hover:text-white px-2.5 py-1.5 rounded-lg transition-all duration-200 backdrop-blur-sm cursor-pointer"
-              title="LLM 设置"
-            >
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs text-white/90 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 hover:text-white"
+              title="LLM 设置">
               <SettingsIcon />
               <span>设置</span>
             </button>
             {workflowState !== 'IDLE' && (
               <button
                 onClick={onReset}
-                className="flex items-center gap-1.5 text-xs bg-white/15 hover:bg-white/25 text-white/90 hover:text-white px-2.5 py-1.5 rounded-lg transition-all duration-200 backdrop-blur-sm cursor-pointer"
-              >
+                className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs text-white/90 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 hover:text-white">
                 <Icons.Refresh />
                 <span>重置</span>
               </button>
@@ -191,7 +214,7 @@ function Header({
 
         {/* 任务ID标签 */}
         {trainTaskId && (
-          <div className="inline-flex items-center gap-1.5 text-xs text-white/70 bg-white/10 px-2.5 py-1 rounded-md mb-3 backdrop-blur-sm">
+          <div className="mb-3 inline-flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1 text-xs text-white/70 backdrop-blur-sm">
             <span className="text-white/50">Task:</span>
             <span className="font-mono">{trainTaskId.substring(0, 16)}...</span>
           </div>
@@ -199,19 +222,19 @@ function Header({
 
         {/* 状态指示器 */}
         <div className={`flex items-center gap-2 text-xs ${config.bgColor} rounded-lg px-3 py-2`}>
-          <div className={`w-2 h-2 rounded-full ${config.dotColor} ${isProcessing ? 'animate-pulse' : ''}`} />
-          <span className="text-slate-700 font-medium">{config.label}</span>
+          <div className={`h-2 w-2 rounded-full ${config.dotColor} ${isProcessing ? 'animate-pulse' : ''}`} />
+          <span className="font-medium text-slate-700">{config.label}</span>
           {workflowState === 'CHATTING' && dialogueRound > 0 && (
-            <span className="text-slate-500 ml-auto">第 {dialogueRound} 轮对话</span>
+            <span className="ml-auto text-slate-500">第 {dialogueRound} 轮对话</span>
           )}
           {workflowState === 'COMPLETED' && (
-            <span className="text-emerald-600 ml-auto flex items-center gap-1">
+            <span className="ml-auto flex items-center gap-1 text-emerald-600">
               <Icons.Check />
               训练完成
             </span>
           )}
           {workflowState === 'ERROR' && (
-            <span className="text-red-600 ml-auto flex items-center gap-1">
+            <span className="ml-auto flex items-center gap-1 text-red-600">
               <Icons.AlertCircle />
               请重试
             </span>
@@ -220,22 +243,21 @@ function Header({
       </div>
     </div>
   );
-}
+};
 
 // ============ MessageBubble组件 ============
-function MessageBubble({ message }: { message: ChatMessage }) {
+const MessageBubble = ({ message }: { message: ChatMessage }) => {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
 
   return (
-    <div className={`flex w-full mb-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`mb-4 flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
       {/* 头像 - 非用户消息显示在左边 */}
       {!isUser && (
-        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mr-2 ${
-          isSystem
-            ? 'bg-slate-100 text-slate-500'
-            : 'bg-gradient-to-br from-cyan-400 to-blue-500 text-white'
-        }`}>
+        <div
+          className={`mr-2 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
+            isSystem ? 'bg-slate-100 text-slate-500' : 'bg-gradient-to-br from-cyan-400 to-blue-500 text-white'
+          }`}>
           {isSystem ? <Icons.Info /> : <Icons.Bot />}
         </div>
       )}
@@ -243,19 +265,19 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       <div
         className={`max-w-[80%] rounded-2xl px-4 py-3 ${
           isUser
-            ? 'bg-gradient-to-br from-blue-500 to-violet-500 text-white rounded-br-md shadow-lg shadow-blue-500/20'
+            ? 'rounded-br-md bg-gradient-to-br from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/20'
             : isSystem
-              ? 'bg-slate-100 text-slate-600 text-sm border border-slate-200'
-              : 'bg-white text-slate-800 border border-slate-200 rounded-bl-md shadow-sm'
-        }`}
-      >
-        {/* 角色标识 */}
-        <div className={`text-xs mb-1.5 font-medium flex items-center gap-1 ${
-          isUser ? 'text-white/70' : isSystem ? 'text-slate-400' : 'text-cyan-600'
+              ? 'border border-slate-200 bg-slate-100 text-sm text-slate-600'
+              : 'rounded-bl-md border border-slate-200 bg-white text-slate-800 shadow-sm'
         }`}>
+        {/* 角色标识 */}
+        <div
+          className={`mb-1.5 flex items-center gap-1 text-xs font-medium ${
+            isUser ? 'text-white/70' : isSystem ? 'text-slate-400' : 'text-cyan-600'
+          }`}>
           {isUser ? '你' : isSystem ? '系统提示' : 'AI 助手'}
           {message.isAutoGenerated && (
-            <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded text-[10px]">自动生成</span>
+            <span className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px]">自动生成</span>
           )}
         </div>
 
@@ -263,29 +285,23 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
 
         {/* 时间戳 */}
-        <div className={`text-[10px] mt-2 ${isUser ? 'text-white/50 text-right' : 'text-slate-400'}`}>
+        <div className={`mt-2 text-[10px] ${isUser ? 'text-right text-white/50' : 'text-slate-400'}`}>
           {new Date(message.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
 
       {/* 头像 - 用户消息显示在右边 */}
       {isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 text-white flex items-center justify-center ml-2">
+        <div className="ml-2 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-cyan-500 text-white">
           <Icons.User />
         </div>
       )}
     </div>
   );
-}
+};
 
 // ============ MessageList组件 ============
-function MessageList({
-  messages,
-  isLoading,
-}: {
-  messages: ChatMessage[];
-  isLoading: boolean;
-}) {
+const MessageList = ({ messages, isLoading }: { messages: ChatMessage[]; isLoading: boolean }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 自动滚动到底部
@@ -294,13 +310,13 @@ function MessageList({
   }, [messages, isLoading]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-slate-50 to-white">
+    <div className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-white p-4">
       {messages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full text-slate-400">
-          <div className="p-4 bg-gradient-to-br from-cyan-50 to-blue-50 rounded-full mb-4">
+        <div className="flex h-full flex-col items-center justify-center text-slate-400">
+          <div className="mb-4 rounded-full bg-gradient-to-br from-cyan-50 to-blue-50 p-4">
             <Icons.MessageCircle />
           </div>
-          <div className="text-base font-medium text-slate-500 mb-1">开始你的训练之旅</div>
+          <div className="mb-1 text-base font-medium text-slate-500">开始你的训练之旅</div>
           <div className="text-sm text-slate-400">点击下方按钮开始对话</div>
         </div>
       ) : (
@@ -311,14 +327,23 @@ function MessageList({
 
           {/* 加载指示器 */}
           {isLoading && (
-            <div className="flex justify-start mb-4">
-              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+            <div className="mb-4 flex justify-start">
+              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-gradient-to-r from-blue-400 to-violet-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-gradient-to-r from-violet-400 to-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <div
+                    className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-teal-400 to-cyan-400"
+                    style={{ animationDelay: '0ms' }}
+                  />
+                  <div
+                    className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-cyan-400 to-sky-400"
+                    style={{ animationDelay: '150ms' }}
+                  />
+                  <div
+                    className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-sky-400 to-blue-400"
+                    style={{ animationDelay: '300ms' }}
+                  />
                 </div>
-                <span className="text-sm text-slate-400 ml-1">AI 正在思考...</span>
+                <span className="ml-1 text-sm text-slate-400">AI 正在思考...</span>
               </div>
             </div>
           )}
@@ -327,24 +352,33 @@ function MessageList({
       )}
     </div>
   );
-}
+};
 
 // ============ ChatInput组件 ============
-function ChatInput({
+const ChatInput = ({
   onSend,
   onAutoGenerate,
+  onAutoRun,
+  onStopAutoRun,
+  isAutoRunning,
   disabled,
 }: {
   onSend: (content: string) => void;
   onAutoGenerate: () => void;
+  onAutoRun: () => void;
+  onStopAutoRun: () => void;
+  isAutoRunning: boolean;
   disabled: boolean;
-}) {
-  const [value, setValue] = React.useState('');
+}) => {
+  const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
     const trimmed = value.trim();
     if (trimmed) {
+      if (isAutoRunning) {
+        onStopAutoRun();
+      }
       onSend(trimmed);
       setValue('');
     }
@@ -357,6 +391,9 @@ function ChatInput({
         handleSend();
       } else if (!e.shiftKey && !value.trim()) {
         e.preventDefault();
+        if (isAutoRunning) {
+          onStopAutoRun();
+        }
         onAutoGenerate();
       } else if (!e.shiftKey && value.trim()) {
         e.preventDefault();
@@ -368,26 +405,42 @@ function ChatInput({
   return (
     <div className="border-t border-slate-200 bg-white p-4">
       <div className="flex items-end gap-3">
-        <div className="flex-1 relative">
+        <div className="relative flex-1">
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={e => setValue(e.target.value)}
+            onChange={e => {
+              if (isAutoRunning) {
+                onStopAutoRun();
+              }
+              setValue(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
             disabled={disabled}
             placeholder="输入你的回答..."
             rows={2}
-            className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 placeholder-slate-400 focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:bg-slate-100 disabled:cursor-not-allowed transition-all duration-200"
+            className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 placeholder-slate-400 transition-all duration-200 focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
           />
         </div>
 
         <div className="flex flex-col gap-2">
           <button
+            onClick={isAutoRunning ? onStopAutoRun : onAutoRun}
+            disabled={!isAutoRunning && disabled}
+            title={isAutoRunning ? '停止连续对话' : '连续 AI 对话'}
+            className={`cursor-pointer rounded-xl p-2.5 text-white transition-all duration-200 hover:shadow-lg disabled:cursor-not-allowed disabled:shadow-none ${
+              isAutoRunning
+                ? 'bg-gradient-to-br from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 hover:shadow-red-500/25'
+                : 'bg-gradient-to-br from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 hover:shadow-emerald-500/25'
+            }`}>
+            {isAutoRunning ? <Icons.Stop /> : <Icons.Repeat />}
+          </button>
+
+          <button
             onClick={onAutoGenerate}
-            disabled={disabled}
+            disabled={disabled || isAutoRunning}
             title="AI 自动回答"
-            className="p-2.5 rounded-xl transition-all duration-200 bg-gradient-to-br from-violet-500 to-purple-500 text-white hover:from-violet-600 hover:to-purple-600 hover:shadow-lg hover:shadow-purple-500/25 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer"
-          >
+            className="cursor-pointer rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 p-2.5 text-white transition-all duration-200 hover:from-amber-600 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
             <Icons.Sparkles />
           </button>
 
@@ -395,8 +448,7 @@ function ChatInput({
             onClick={handleSend}
             disabled={disabled || !value.trim()}
             title="发送消息"
-            className="p-2.5 rounded-xl transition-all duration-200 bg-gradient-to-br from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 hover:shadow-lg hover:shadow-blue-500/25 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer"
-          >
+            className="cursor-pointer rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 p-2.5 text-white transition-all duration-200 hover:from-cyan-600 hover:to-blue-600 hover:shadow-lg hover:shadow-blue-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
             <Icons.Send />
           </button>
         </div>
@@ -404,24 +456,24 @@ function ChatInput({
 
       <div className="mt-3 flex items-center justify-center gap-4 text-[11px] text-slate-400">
         <span className="flex items-center gap-1">
-          <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500">Enter</kbd>
+          <kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">Enter</kbd>
           发送
         </span>
         <span className="flex items-center gap-1">
-          <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500">空白+Enter</kbd>
+          <kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">空白+Enter</kbd>
           AI回答
         </span>
         <span className="flex items-center gap-1">
-          <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500">Shift+Enter</kbd>
+          <kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">Shift+Enter</kbd>
           换行
         </span>
       </div>
     </div>
   );
-}
+};
 
 // ============ StartButton组件 ============
-function StartButton({
+const StartButton = ({
   onClick,
   disabled,
   trainTaskId,
@@ -429,25 +481,22 @@ function StartButton({
   onClick: () => void;
   disabled: boolean;
   trainTaskId: string | null;
-}) {
-  return (
-    <div className="border-t border-slate-200 bg-white p-5">
-      <button
-        onClick={onClick}
-        disabled={disabled || !trainTaskId}
-        className="w-full py-3.5 rounded-xl font-medium transition-all duration-300 bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 text-white hover:from-cyan-600 hover:via-blue-600 hover:to-violet-600 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 disabled:from-slate-300 disabled:via-slate-400 disabled:to-slate-300 disabled:shadow-none disabled:translate-y-0 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
-      >
-        <Icons.Play />
-        <span>{!trainTaskId ? '请在训练页面打开' : '开始训练'}</span>
-      </button>
-      {!trainTaskId && (
-        <p className="text-xs text-slate-400 text-center mt-3">
-          请访问包含 <code className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500">trainTaskId</code> 参数的训练页面
-        </p>
-      )}
-    </div>
-  );
-}
+}) => (
+  <div className="border-t border-slate-200 bg-white p-5">
+    <button
+      onClick={onClick}
+      disabled={disabled || !trainTaskId}
+      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 py-3.5 font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:from-teal-600 hover:via-cyan-600 hover:to-blue-600 hover:shadow-xl hover:shadow-cyan-500/30 disabled:translate-y-0 disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-400 disabled:to-slate-300 disabled:shadow-none">
+      <Icons.Play />
+      <span>{!trainTaskId ? '请在训练页面打开' : '开始训练'}</span>
+    </button>
+    {!trainTaskId && (
+      <p className="mt-3 text-center text-xs text-slate-400">
+        请访问包含 <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">trainTaskId</code> 参数的训练页面
+      </p>
+    )}
+  </div>
+);
 
 // ============ 主组件 ============
 const SidePanel = () => {
@@ -460,6 +509,9 @@ const SidePanel = () => {
     startConversation,
     sendMessage,
     autoGenerate,
+    startAutoRun,
+    stopAutoRun,
+    isAutoRunning,
     reset,
   } = useAgentChat();
 
@@ -473,14 +525,28 @@ const SidePanel = () => {
 
   // 处理自动生成（检查是否需要配置）
   const handleAutoGenerate = async () => {
+    if (isAutoRunning) {
+      stopAutoRun();
+    }
     const result = await autoGenerate();
     if (result.needConfig) {
       setIsConfigPromptOpen(true);
     }
   };
 
+  const handleAutoRunToggle = async () => {
+    if (isAutoRunning) {
+      stopAutoRun();
+      return;
+    }
+    const result = await startAutoRun();
+    if (result.needConfig) {
+      setIsConfigPromptOpen(true);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
+    <div className="flex h-screen flex-col bg-slate-50">
       {/* 头部 */}
       <Header
         trainTaskId={trainTaskId}
@@ -495,29 +561,25 @@ const SidePanel = () => {
 
       {/* 底部操作区 */}
       {isIdle ? (
-        <StartButton
-          onClick={startConversation}
-          disabled={isLoading}
-          trainTaskId={trainTaskId}
-        />
+        <StartButton onClick={startConversation} disabled={isLoading} trainTaskId={trainTaskId} />
       ) : isChatting || isCompleted ? (
         <ChatInput
           onSend={sendMessage}
           onAutoGenerate={handleAutoGenerate}
+          onAutoRun={handleAutoRunToggle}
+          onStopAutoRun={stopAutoRun}
+          isAutoRunning={isAutoRunning}
           disabled={isLoading || isCompleted}
         />
       ) : (
-        <div className="border-t border-slate-200 bg-white p-5 flex items-center justify-center gap-3 text-slate-500">
+        <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-white p-5 text-slate-500">
           <Icons.Loader />
           <span className="text-sm">正在处理中...</span>
         </div>
       )}
 
       {/* 设置弹窗 */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
       {/* 配置提示弹窗 */}
       <ConfigPromptModal

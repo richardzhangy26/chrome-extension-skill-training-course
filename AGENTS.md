@@ -23,6 +23,56 @@
 - React components use PascalCase; hooks use `useX` naming (e.g., `useAgentChat`).
 - Linting/formatting: `eslint.config.ts` and Prettier via `pnpm lint` and `pnpm format`.
 
+## ESLint Rules (Strict)
+
+This project enforces strict ESLint rules. Pre-commit hooks will block commits with errors.
+
+### Function Style (`func-style`)
+- **Use arrow function expressions**, not function declarations
+```typescript
+// ❌ Wrong
+function MyComponent() { ... }
+
+// ✅ Correct
+const MyComponent = () => { ... };
+```
+
+### Export Position (`import-x/exports-last`)
+- **All exports must be at the end of the file**
+```typescript
+// ❌ Wrong - exports in the middle
+export const foo = 1;
+const bar = 2;
+
+// ✅ Correct - exports at the end
+const foo = 1;
+const bar = 2;
+export { foo };
+```
+
+### Accessibility (`jsx-a11y/*`)
+- Clickable non-interactive elements need keyboard support:
+```tsx
+// ✅ Required attributes for clickable divs
+<div
+  onClick={handleClick}
+  onKeyDown={e => e.key === 'Enter' && handleClick()}
+  role="button"
+  tabIndex={0}
+  aria-label="Description"
+/>
+```
+- Form labels must be associated with controls via `htmlFor` and `id`
+
+### Unused Variables (`@typescript-eslint/no-unused-vars`)
+```typescript
+// ❌ Wrong
+} catch (e) { console.log('error'); }
+
+// ✅ Correct
+} catch { console.log('error'); }
+```
+
 ## Testing Guidelines
 - E2E tests use WebdriverIO + Mocha (`tests/e2e/`).
 - Place specs in `tests/e2e/specs/*.ts`.

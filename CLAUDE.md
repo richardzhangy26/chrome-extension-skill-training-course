@@ -194,6 +194,85 @@ pnpm i axios -F @extension/shared
 6. **Background script**: Runs as service worker (no DOM access, use chrome APIs)
 7. **Windows users**: Must run `pnpm dev` as administrator
 
+## ESLint 规则 (重要)
+
+本项目使用严格的 ESLint 配置，提交时会自动运行检查。**必须遵守以下规则：**
+
+### 函数定义风格 (`func-style`)
+```typescript
+// ❌ 错误 - 不要使用函数声明
+function MyComponent() { ... }
+
+// ✅ 正确 - 使用箭头函数表达式
+const MyComponent = () => { ... };
+```
+
+### 导出语句位置 (`import-x/exports-last`)
+```typescript
+// ❌ 错误 - 不要在中间导出
+export const foo = 1;
+const bar = 2;
+export const baz = 3;
+
+// ✅ 正确 - 所有导出放在文件末尾
+const foo = 1;
+const bar = 2;
+const baz = 3;
+
+export { foo, baz };
+export type { SomeType };
+```
+
+### 无障碍访问 (`jsx-a11y/*`)
+
+**可点击的非交互元素必须支持键盘操作：**
+```tsx
+// ❌ 错误
+<div onClick={handleClick} />
+
+// ✅ 正确
+<div
+  onClick={handleClick}
+  onKeyDown={e => e.key === 'Enter' && handleClick()}
+  role="button"
+  tabIndex={0}
+  aria-label="描述性标签"
+/>
+```
+
+**表单 label 必须关联控件：**
+```tsx
+// ❌ 错误
+<label>用户名</label>
+<input type="text" />
+
+// ✅ 正确
+<label htmlFor="username">用户名</label>
+<input id="username" type="text" />
+```
+
+### 未使用变量 (`@typescript-eslint/no-unused-vars`)
+```typescript
+// ❌ 错误
+} catch (e) {
+  console.log('error');
+}
+
+// ✅ 正确 - 省略未使用的变量名
+} catch {
+  console.log('error');
+}
+```
+
+### 提交前检查
+
+```bash
+pnpm lint          # 检查所有 ESLint 错误
+pnpm lint:fix      # 自动修复可修复的错误
+```
+
+> ⚠️ **Pre-commit Hook**: 提交时会自动运行 ESLint，如果有错误会阻止提交。
+
 ## Loading Extension in Browser
 
 ### Chrome

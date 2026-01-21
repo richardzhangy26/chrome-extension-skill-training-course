@@ -82,6 +82,9 @@ const useAgentChat = () => {
   const messagesRef = useRef<ChatMessage[]>([]);
   const workflowStateRef = useRef<WorkflowState>('IDLE');
   const isLoadingRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+  const currentStepIdRef = useRef<string | null>(null);
+  const trainTaskIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -94,6 +97,18 @@ const useAgentChat = () => {
   useEffect(() => {
     isLoadingRef.current = isLoading;
   }, [isLoading]);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  useEffect(() => {
+    currentStepIdRef.current = currentStepId;
+  }, [currentStepId]);
+
+  useEffect(() => {
+    trainTaskIdRef.current = trainTaskId;
+  }, [trainTaskId]);
 
   // 生成消息ID
   const generateMessageId = useCallback(() => `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, []);
@@ -141,7 +156,9 @@ const useAgentChat = () => {
       }
 
       setSessionId(runCardResponse.data.sessionId);
+      sessionIdRef.current = runCardResponse.data.sessionId;
       setCurrentStepId(stepId);
+      currentStepIdRef.current = stepId;
       setWorkflowState('CHATTING');
 
       if (runCardResponse.data.text) {
@@ -150,6 +167,7 @@ const useAgentChat = () => {
 
       if (runCardResponse.data.needSkipStep && runCardResponse.data.nextStepId) {
         setCurrentStepId(runCardResponse.data.nextStepId);
+        currentStepIdRef.current = runCardResponse.data.nextStepId;
         return runCardForStep(runCardResponse.data.nextStepId, runCardResponse.data.sessionId);
       }
 
@@ -252,6 +270,7 @@ const useAgentChat = () => {
       }
 
       setCurrentStepId(firstStepId);
+      currentStepIdRef.current = firstStepId;
 
       // 步骤2: 启动卡片
       addMessage('system', `正在启动步骤: ${firstStepName}...`);
@@ -330,7 +349,12 @@ const useAgentChat = () => {
 
   // AI自动生成回答（使用豆包模型）
   const autoGenerate = useCallback(async (): Promise<{ needConfig: boolean }> => {
-    if (!sessionId || !trainTaskId || !currentStepId || workflowState !== 'CHATTING') {
+    const activeSessionId = sessionIdRef.current;
+    const activeTrainTaskId = trainTaskIdRef.current;
+    const activeStepId = currentStepIdRef.current;
+    const activeWorkflowState = workflowStateRef.current;
+
+    if (!activeSessionId || !activeTrainTaskId || !activeStepId || activeWorkflowState !== 'CHATTING') {
       return { needConfig: false };
     }
 
@@ -376,30 +400,30 @@ const useAgentChat = () => {
       console.log('🤖 LLM 生成的回答:', generatedAnswer);
 
       // 显示生成的用户回答
-      addMessage('user', generatedAnswer, true);
+      addMessage('user', generatedAnswer, true, activeStepId);
 
       // 发送回答到服务器
       const response = await apiRequest<ApiResponse<ChatResponse>>({
         endpoint: API_ENDPOINTS.CHAT,
         method: 'POST',
         body: {
-          taskId: trainTaskId,
-          stepId: currentStepId,
+          taskId: activeTrainTaskId,
+          stepId: activeStepId,
           text: generatedAnswer,
-          sessionId,
+          sessionId: activeSessionId,
         },
       });
 
       console.log('💬 Chat Response:', JSON.stringify(response, null, 2));
 
       if (response?.data?.text) {
-        addMessage('assistant', response.data.text);
+        addMessage('assistant', response.data.text, false, activeStepId);
         setDialogueRound(prev => prev + 1);
       }
 
       // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
       if (response?.data?.nextStepId) {
-        await runCardForStep(response.data.nextStepId, sessionId);
+        await runCardForStep(response.data.nextStepId, activeSessionId);
       }
 
       if (response?.data?.isCompleted) {
@@ -415,7 +439,7 @@ const useAgentChat = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId, trainTaskId, currentStepId, workflowState, addMessage, runCardForStep]);
+  }, [addMessage, runCardForStep]);
 
   const startAutoRun = useCallback(async (): Promise<{ needConfig: boolean }> => {
     if (autoRunActiveRef.current) {

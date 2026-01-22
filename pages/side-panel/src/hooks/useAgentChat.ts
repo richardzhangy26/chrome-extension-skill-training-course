@@ -139,14 +139,6 @@ const useAgentChat = () => {
 
   const getStepDisplayName = useCallback((stepId: string) => stepNameMappingRef.current[stepId] ?? stepId, []);
 
-  const appendLogEntry = useCallback(async (entry: AgentLogEntry) => {
-    const sessionId = activeLogSessionIdRef.current;
-    if (!sessionId) {
-      return;
-    }
-    await agentLogStorage.addEntry(sessionId, entry);
-  }, []);
-
   // 生成消息ID
   const generateMessageId = useCallback(() => `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, []);
 
@@ -166,6 +158,23 @@ const useAgentChat = () => {
     },
     [generateMessageId, currentStepId],
   );
+
+  const isTerminalStep = useCallback(
+    (stepId: string) => getStepDisplayName(stepId) === 'defaultStepName',
+    [getStepDisplayName],
+  );
+  const completeTraining = useCallback(() => {
+    setWorkflowState('COMPLETED');
+    addMessage('system', '✅ 恭喜！训练已完成！');
+  }, [addMessage]);
+
+  const appendLogEntry = useCallback(async (entry: AgentLogEntry) => {
+    const sessionId = activeLogSessionIdRef.current;
+    if (!sessionId) {
+      return;
+    }
+    await agentLogStorage.addEntry(sessionId, entry);
+  }, []);
 
   const announceNextStep = useCallback(
     (stepId: string) => {
@@ -224,12 +233,25 @@ const useAgentChat = () => {
         setCurrentStepId(nextStepId);
         currentStepIdRef.current = nextStepId;
         announceNextStep(nextStepId);
+        if (isTerminalStep(nextStepId)) {
+          completeTraining();
+          return runCardResponse;
+        }
         return runCardForStep(nextStepId, runCardResponse.data.sessionId);
       }
 
       return runCardResponse;
     },
-    [trainTaskId, sessionId, addMessage, appendLogEntry, getStepDisplayName, announceNextStep],
+    [
+      trainTaskId,
+      sessionId,
+      addMessage,
+      appendLogEntry,
+      getStepDisplayName,
+      announceNextStep,
+      isTerminalStep,
+      completeTraining,
+    ],
   );
 
   // 初始化 - 从URL提取trainTaskId
@@ -424,8 +446,7 @@ const useAgentChat = () => {
 
         // 检查返回结果，如果 text 为 null 且 nextStepId 为 null，代表输出结束
         if (data?.text == null && data?.nextStepId == null) {
-          setWorkflowState('COMPLETED');
-          addMessage('system', '✅ 恭喜！训练已完成！');
+          completeTraining();
         } else {
           if (data?.text) {
             addMessage('assistant', data.text);
@@ -434,7 +455,11 @@ const useAgentChat = () => {
           // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
           if (data?.nextStepId) {
             announceNextStep(data.nextStepId);
-            await runCardForStep(data.nextStepId, sessionId);
+            if (isTerminalStep(data.nextStepId)) {
+              completeTraining();
+            } else {
+              await runCardForStep(data.nextStepId, sessionId);
+            }
           }
         }
       } catch (err) {
@@ -455,6 +480,8 @@ const useAgentChat = () => {
       appendLogEntry,
       getStepDisplayName,
       announceNextStep,
+      isTerminalStep,
+      completeTraining,
     ],
   );
 
@@ -546,8 +573,7 @@ const useAgentChat = () => {
 
       // 检查返回结果，如果 text 为 null 且 nextStepId 为 null，代表输出结束
       if (data?.text == null && data?.nextStepId == null) {
-        setWorkflowState('COMPLETED');
-        addMessage('system', '✅ 恭喜！训练已完成！');
+        completeTraining();
       } else {
         if (data?.text) {
           addMessage('assistant', data.text, false, activeStepId);
@@ -556,7 +582,11 @@ const useAgentChat = () => {
         // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
         if (data?.nextStepId) {
           announceNextStep(data.nextStepId);
-          await runCardForStep(data.nextStepId, activeSessionId);
+          if (isTerminalStep(data.nextStepId)) {
+            completeTraining();
+          } else {
+            await runCardForStep(data.nextStepId, activeSessionId);
+          }
         }
       }
 
@@ -568,7 +598,15 @@ const useAgentChat = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [addMessage, runCardForStep, appendLogEntry, getStepDisplayName, announceNextStep]);
+  }, [
+    addMessage,
+    runCardForStep,
+    appendLogEntry,
+    getStepDisplayName,
+    announceNextStep,
+    isTerminalStep,
+    completeTraining,
+  ]);
 
   const startAutoRun = useCallback(async (): Promise<{ needConfig: boolean }> => {
     if (autoRunActiveRef.current) {

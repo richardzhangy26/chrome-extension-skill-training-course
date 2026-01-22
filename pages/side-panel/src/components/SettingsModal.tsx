@@ -5,13 +5,13 @@
 import { testLLMConfig } from '../services/llm-service';
 import {
   AVAILABLE_MODELS,
-  DEFAULT_PROFILE_KEY,
   DEFAULT_SYSTEM_PROMPT,
-  STUDENT_PROFILES,
+  DEFAULT_PROFILE_ID,
+  DEFAULT_STUDENT_PROFILES,
   llmConfigStorage,
 } from '@extension/storage';
 import { useState, useEffect } from 'react';
-import type { StudentProfileKey, LLMConfig } from '@extension/storage';
+import type { StudentProfile, LLMConfig } from '@extension/storage';
 
 // 关闭图标
 const CloseIcon = () => (
@@ -29,6 +29,14 @@ const SettingsIcon = () => (
   </svg>
 );
 
+const createProfileId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `profile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -43,7 +51,8 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     enabled: false,
     systemPromptMode: 'default',
     systemPrompt: '',
-    studentProfileKey: DEFAULT_PROFILE_KEY,
+    studentProfileId: DEFAULT_PROFILE_ID,
+    studentProfiles: DEFAULT_STUDENT_PROFILES,
   });
   const [activeTab, setActiveTab] = useState<'llm' | 'system' | 'role'>('llm');
   const [isTesting, setIsTesting] = useState(false);
@@ -91,10 +100,66 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
   if (!isOpen) return null;
 
-  const studentProfileEntries = Object.entries(STUDENT_PROFILES) as Array<
-    [StudentProfileKey, (typeof STUDENT_PROFILES)[StudentProfileKey]]
-  >;
+  const studentProfileEntries = config.studentProfiles ?? DEFAULT_STUDENT_PROFILES;
   const systemPromptValue = config.systemPromptMode === 'custom' ? config.systemPrompt : DEFAULT_SYSTEM_PROMPT;
+
+  const handleProfileChange = (id: string, patch: Partial<StudentProfile>) => {
+    setConfig(prev => ({
+      ...prev,
+      studentProfiles: prev.studentProfiles.map(profile =>
+        profile.id === id
+          ? {
+              ...profile,
+              ...patch,
+            }
+          : profile,
+      ),
+    }));
+  };
+
+  const handleAddProfile = () => {
+    const id = createProfileId();
+    setConfig(prev => ({
+      ...prev,
+      studentProfiles: [
+        ...prev.studentProfiles,
+        {
+          id,
+          label: '新学生档位',
+          description: '补充角色理解与回答习惯。',
+          style: '描述表达风格或语气。',
+          fallbackHint: '',
+        },
+      ],
+      studentProfileId: prev.studentProfileId || id,
+    }));
+  };
+
+  const handleDeleteProfile = (id: string) => {
+    setConfig(prev => {
+      if (prev.studentProfiles.length <= 1) {
+        return prev;
+      }
+
+      const nextProfiles = prev.studentProfiles.filter(profile => profile.id !== id);
+      const nextSelected =
+        prev.studentProfileId === id ? (nextProfiles[0]?.id ?? DEFAULT_PROFILE_ID) : prev.studentProfileId;
+
+      return {
+        ...prev,
+        studentProfiles: nextProfiles,
+        studentProfileId: nextSelected,
+      };
+    });
+  };
+
+  const handleResetProfiles = () => {
+    setConfig(prev => ({
+      ...prev,
+      studentProfiles: DEFAULT_STUDENT_PROFILES,
+      studentProfileId: DEFAULT_PROFILE_ID,
+    }));
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -291,36 +356,104 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-800">用户角色提示词配置</h3>
-                <p className="mt-1 text-xs text-slate-500">选择学生档位后，AI 将按对应角色特征生成回复。</p>
+                <p className="mt-1 text-xs text-slate-500">你可以自由新增、编辑学生档位，并选择默认使用的档位。</p>
+                <div className="mt-4 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleAddProfile}
+                    className="rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-cyan-600">
+                    添加档位
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetProfiles}
+                    className="text-xs font-medium text-cyan-600 hover:text-cyan-700">
+                    恢复默认档位
+                  </button>
+                </div>
                 <div className="mt-3 space-y-3">
-                  {studentProfileEntries.map(([key, profile]) => {
-                    const isSelected = config.studentProfileKey === key;
-                    const inputId = `studentProfile-${key}`;
+                  {studentProfileEntries.map(profile => {
+                    const isSelected = config.studentProfileId === profile.id;
+                    const labelId = `studentProfile-label-${profile.id}`;
+                    const descriptionId = `studentProfile-description-${profile.id}`;
+                    const styleId = `studentProfile-style-${profile.id}`;
+                    const fallbackId = `studentProfile-fallback-${profile.id}`;
                     return (
-                      <label
-                        key={key}
-                        htmlFor={inputId}
-                        aria-label={profile.label}
-                        className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm transition ${
+                      <div
+                        key={profile.id}
+                        className={`rounded-lg border p-3 text-sm transition ${
                           isSelected
                             ? 'border-cyan-400 bg-cyan-50/60'
                             : 'border-slate-200 bg-white hover:border-cyan-200'
                         }`}>
-                        <input
-                          id={inputId}
-                          type="radio"
-                          name="studentProfile"
-                          value={key}
-                          checked={isSelected}
-                          onChange={() => setConfig(prev => ({ ...prev, studentProfileKey: key }))}
-                          className="mt-1"
-                        />
-                        <div>
-                          <div className="text-sm font-medium text-slate-800">{profile.label}</div>
-                          <div className="mt-1 text-xs text-slate-500">{profile.description}</div>
-                          <div className="mt-1 text-xs text-slate-500">{profile.style}</div>
+                        <div className="flex items-center justify-between">
+                          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                            <input
+                              type="radio"
+                              name="studentProfile"
+                              value={profile.id}
+                              checked={isSelected}
+                              onChange={() => setConfig(prev => ({ ...prev, studentProfileId: profile.id }))}
+                            />
+                            <span>设为当前档位</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProfile(profile.id)}
+                            disabled={studentProfileEntries.length <= 1}
+                            className="text-xs font-medium text-rose-500 hover:text-rose-600 disabled:cursor-not-allowed disabled:text-slate-300">
+                            删除
+                          </button>
                         </div>
-                      </label>
+                        <div className="mt-3 space-y-2">
+                          <div>
+                            <label htmlFor={labelId} className="mb-1 block text-xs font-medium text-slate-600">
+                              档位名称
+                            </label>
+                            <input
+                              id={labelId}
+                              type="text"
+                              value={profile.label}
+                              onChange={event => handleProfileChange(profile.id, { label: event.target.value })}
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor={descriptionId} className="mb-1 block text-xs font-medium text-slate-600">
+                              角色特征
+                            </label>
+                            <textarea
+                              id={descriptionId}
+                              value={profile.description}
+                              onChange={event => handleProfileChange(profile.id, { description: event.target.value })}
+                              className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor={styleId} className="mb-1 block text-xs font-medium text-slate-600">
+                              表达风格
+                            </label>
+                            <textarea
+                              id={styleId}
+                              value={profile.style}
+                              onChange={event => handleProfileChange(profile.id, { style: event.target.value })}
+                              className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor={fallbackId} className="mb-1 block text-xs font-medium text-slate-600">
+                              补充提示（可选）
+                            </label>
+                            <input
+                              id={fallbackId}
+                              type="text"
+                              value={profile.fallbackHint}
+                              onChange={event => handleProfileChange(profile.id, { fallbackHint: event.target.value })}
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>

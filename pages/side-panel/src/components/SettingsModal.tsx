@@ -3,9 +3,15 @@
  */
 
 import { testLLMConfig } from '../services/llm-service';
-import { llmConfigStorage, AVAILABLE_MODELS } from '@extension/storage';
+import {
+  AVAILABLE_MODELS,
+  DEFAULT_PROFILE_KEY,
+  DEFAULT_SYSTEM_PROMPT,
+  STUDENT_PROFILES,
+  llmConfigStorage,
+} from '@extension/storage';
 import { useState, useEffect } from 'react';
-import type { LLMConfig } from '@extension/storage';
+import type { StudentProfileKey, LLMConfig } from '@extension/storage';
 
 // 关闭图标
 const CloseIcon = () => (
@@ -35,7 +41,11 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     model: 'Doubao-1.5-pro-32k',
     serviceCode: 'SI_Ability',
     enabled: false,
+    systemPromptMode: 'default',
+    systemPrompt: '',
+    studentProfileKey: DEFAULT_PROFILE_KEY,
   });
+  const [activeTab, setActiveTab] = useState<'llm' | 'system' | 'role'>('llm');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,6 +55,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     if (isOpen) {
       llmConfigStorage.get().then(setConfig);
       setTestResult(null);
+      setActiveTab('llm');
     }
   }, [isOpen]);
 
@@ -80,6 +91,11 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
   if (!isOpen) return null;
 
+  const studentProfileEntries = Object.entries(STUDENT_PROFILES) as Array<
+    [StudentProfileKey, (typeof STUDENT_PROFILES)[StudentProfileKey]]
+  >;
+  const systemPromptValue = config.systemPromptMode === 'custom' ? config.systemPrompt : DEFAULT_SYSTEM_PROMPT;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* 遮罩层 */}
@@ -96,7 +112,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
       <div className="relative max-h-[80vh] w-[90%] max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
         {/* 头部 */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-4">
-          <h2 className="text-lg font-semibold text-white">LLM 自动回复设置</h2>
+          <h2 className="text-lg font-semibold text-white">设置</h2>
           <button
             onClick={onClose}
             className="cursor-pointer rounded-lg p-1 text-white/80 transition-colors hover:bg-white/20 hover:text-white">
@@ -104,79 +120,211 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="border-b border-slate-200 bg-slate-50 px-5">
+          <div className="flex gap-2 pt-3">
+            {[
+              { id: 'llm', label: '大模型自动回复' },
+              { id: 'system', label: '系统提示词' },
+              { id: 'role', label: '用户角色' },
+            ].map(tab => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as 'llm' | 'system' | 'role')}
+                  className={`rounded-t-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'border-slate-200 border-b-white bg-white text-cyan-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}>
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* 内容 */}
-        <div className="max-h-[calc(80vh-140px)] space-y-4 overflow-y-auto p-5">
-          {/* API Key */}
-          <div>
-            <label htmlFor="apiKey" className="mb-1.5 block text-sm font-medium text-slate-700">
-              API Key <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="apiKey"
-              type="password"
-              value={config.apiKey}
-              onChange={e => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-              placeholder="请输入豆包 API Key"
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-            />
-            <p className="mt-1 text-xs text-slate-400">需要企业微信申请 llm-service 获取</p>
-          </div>
+        <div className="max-h-[calc(80vh-180px)] overflow-y-auto p-5">
+          {activeTab === 'llm' && (
+            <div className="space-y-4">
+              {/* API Key */}
+              <div>
+                <label htmlFor="apiKey" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  API Key <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="apiKey"
+                  type="password"
+                  value={config.apiKey}
+                  onChange={e => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                  placeholder="请输入豆包 API Key"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                />
+                <p className="mt-1 text-xs text-slate-400">需要企业微信申请 llm-service 获取</p>
+              </div>
 
-          {/* 模型选择 */}
-          <div>
-            <label htmlFor="model" className="mb-1.5 block text-sm font-medium text-slate-700">
-              模型
-            </label>
-            <select
-              id="model"
-              value={config.model}
-              onChange={e => setConfig(prev => ({ ...prev, model: e.target.value }))}
-              className="w-full cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100">
-              {AVAILABLE_MODELS.map(model => (
-                <option key={model.value} value={model.value}>
-                  {model.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              {/* 模型选择 */}
+              <div>
+                <label htmlFor="model" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  模型
+                </label>
+                <select
+                  id="model"
+                  value={config.model}
+                  onChange={e => setConfig(prev => ({ ...prev, model: e.target.value }))}
+                  className="w-full cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100">
+                  {AVAILABLE_MODELS.map(model => (
+                    <option key={model.value} value={model.value}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          {/* API URL */}
-          <div>
-            <label htmlFor="apiUrl" className="mb-1.5 block text-sm font-medium text-slate-700">
-              API URL
-            </label>
-            <input
-              id="apiUrl"
-              type="text"
-              value={config.apiUrl}
-              onChange={e => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
-              placeholder="API 地址"
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-xs transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-            />
-          </div>
+              {/* API URL */}
+              <div>
+                <label htmlFor="apiUrl" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  API URL
+                </label>
+                <input
+                  id="apiUrl"
+                  type="text"
+                  value={config.apiUrl}
+                  onChange={e => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
+                  placeholder="API 地址"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-xs transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                />
+              </div>
 
-          {/* Service Code */}
-          <div>
-            <label htmlFor="serviceCode" className="mb-1.5 block text-sm font-medium text-slate-700">
-              Service Code
-            </label>
-            <input
-              id="serviceCode"
-              type="text"
-              value={config.serviceCode}
-              onChange={e => setConfig(prev => ({ ...prev, serviceCode: e.target.value }))}
-              placeholder="服务代码"
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-            />
-          </div>
+              {/* Service Code */}
+              <div>
+                <label htmlFor="serviceCode" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Service Code
+                </label>
+                <input
+                  id="serviceCode"
+                  type="text"
+                  value={config.serviceCode}
+                  onChange={e => setConfig(prev => ({ ...prev, serviceCode: e.target.value }))}
+                  placeholder="服务代码"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                />
+              </div>
 
-          {/* 测试结果 */}
-          {testResult && (
-            <div
-              className={`rounded-lg p-3 text-sm ${
-                testResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-              }`}>
-              {testResult.message}
+              {/* 测试结果 */}
+              {testResult && (
+                <div
+                  className={`rounded-lg p-3 text-sm ${
+                    testResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                  }`}>
+                  {testResult.message}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'system' && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800">系统提示词设置</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  默认提示词来源于 auto_script_train.py，可切换为自定义提示词。
+                </p>
+                <div className="mt-3 space-y-2">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="radio"
+                      name="systemPromptMode"
+                      value="default"
+                      checked={config.systemPromptMode === 'default'}
+                      onChange={() =>
+                        setConfig(prev => ({
+                          ...prev,
+                          systemPromptMode: 'default',
+                        }))
+                      }
+                    />
+                    <span>使用默认提示词（auto_script_train.py）</span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="radio"
+                      name="systemPromptMode"
+                      value="custom"
+                      checked={config.systemPromptMode === 'custom'}
+                      onChange={() =>
+                        setConfig(prev => ({
+                          ...prev,
+                          systemPromptMode: 'custom',
+                          systemPrompt: prev.systemPrompt.trim() ? prev.systemPrompt : DEFAULT_SYSTEM_PROMPT,
+                        }))
+                      }
+                    />
+                    <span>自定义提示词</span>
+                  </label>
+                </div>
+
+                <div className="mt-3">
+                  <label htmlFor="systemPrompt" className="mb-1.5 block text-xs font-medium text-slate-600">
+                    提示词内容
+                  </label>
+                  <textarea
+                    id="systemPrompt"
+                    value={systemPromptValue}
+                    onChange={e => setConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
+                    disabled={config.systemPromptMode !== 'custom'}
+                    placeholder="输入自定义系统提示词"
+                    className="min-h-[140px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    使用自定义提示词时，系统会保留角色档位配置作为补充提示。
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'role' && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800">用户角色提示词配置</h3>
+                <p className="mt-1 text-xs text-slate-500">选择学生档位后，AI 将按对应角色特征生成回复。</p>
+                <div className="mt-3 space-y-3">
+                  {studentProfileEntries.map(([key, profile]) => {
+                    const isSelected = config.studentProfileKey === key;
+                    const inputId = `studentProfile-${key}`;
+                    return (
+                      <label
+                        key={key}
+                        htmlFor={inputId}
+                        aria-label={profile.label}
+                        className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm transition ${
+                          isSelected
+                            ? 'border-cyan-400 bg-cyan-50/60'
+                            : 'border-slate-200 bg-white hover:border-cyan-200'
+                        }`}>
+                        <input
+                          id={inputId}
+                          type="radio"
+                          name="studentProfile"
+                          value={key}
+                          checked={isSelected}
+                          onChange={() => setConfig(prev => ({ ...prev, studentProfileKey: key }))}
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">{profile.label}</div>
+                          <div className="mt-1 text-xs text-slate-500">{profile.description}</div>
+                          <div className="mt-1 text-xs text-slate-500">{profile.style}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </div>

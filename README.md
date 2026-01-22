@@ -2,10 +2,18 @@
 
 基于 React 19 + TypeScript + Vite 6 构建的浏览器扩展，用于 Polymas 教学平台的 AI 能力训练。
 
+## 🚀 快速下载
+
+**👉 [点击下载最新版本 v0.5.0](https://github.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.5.0)**
+
+下载 ZIP 文件后，按照下方安装步骤操作即可使用。
+
+---
+
 ## 目录
 
 - [安装使用](#安装使用)
-- [分享给他人](#分享给他人)
+- [使用指南](#使用指南)
 - [开发指南](#开发指南)
 - [项目结构](#项目结构)
 - [常见问题](#常见问题)
@@ -25,15 +33,16 @@
 
 ### Chrome / Edge / Brave 安装步骤
 
-1. 获取扩展文件（ZIP 包或文件夹）
-2. 解压 ZIP 文件（如果是压缩包）
+1. [下载 ZIP 文件](https://github.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.5.0)
+2. 解压 ZIP 文件到任意文件夹
 3. 打开浏览器扩展页面：
-   - Chrome: `chrome://extensions`
-   - Edge: `edge://extensions`
-   - Brave: `brave://extensions`
+   - Chrome: 地址栏输入 `chrome://extensions`
+   - Edge: 地址栏输入 `edge://extensions`
+   - Brave: 地址栏输入 `brave://extensions`
 4. 开启右上角的 **开发者模式**
 5. 点击 **加载已解压的扩展程序**
 6. 选择解压后的文件夹
+7. 安装成功后，工具栏会出现扩展图标
 
 ### Firefox 安装步骤
 
@@ -46,30 +55,55 @@
 
 ---
 
-## 分享给他人
+## 使用指南
 
-### 方式一：发送 ZIP 包（适合小范围分享）
+### 第一步：配置 LLM（必须）
 
-开发者打包：
-```bash
-# Chrome / Edge / Brave 版本
-pnpm zip
+1. 点击扩展图标，打开侧边栏
+2. 点击右上角的 **⚙️ 设置** 按钮
+3. 在「LLM 配置」标签页中填写：
+   - **API Key**：你的豆包 API 密钥
+   - **模型**：选择要使用的模型（推荐 Doubao Pro 32K）
+   - **Endpoint ID**：你的端点 ID
+   - **服务代码**：服务代码（可选）
+4. 点击「测试连接」确认配置正确
+5. 点击「保存配置」
 
-# Firefox 版本
-pnpm zip:firefox
-```
+### 第二步：开始训练
 
-打包后的文件在 `dist-zip/` 目录下，发送给需要的人即可。
+1. 访问 Polymas 教学平台的训练页面（URL 中需包含 `trainTaskId` 参数）
+2. 打开扩展侧边栏
+3. 扩展会自动识别训练任务 ID
+4. 点击 **「开始训练」** 按钮
+5. 系统会自动获取训练步骤并开始对话
 
-接收者按照上面的 [安装使用](#安装使用) 步骤安装。
+### 第三步：对话交互
 
-### 方式二：发布到应用商店（适合公开分发）
+训练开始后，你可以：
 
-| 商店 | 地址 | 费用 |
-|------|------|------|
-| Chrome Web Store | https://chrome.google.com/webstore/devconsole | $5 一次性 |
-| Firefox Add-ons | https://addons.mozilla.org/developers/ | 免费 |
-| Edge Add-ons | https://partner.microsoft.com/dashboard | 免费 |
+| 操作 | 说明 |
+|------|------|
+| **手动输入** | 在输入框中输入回复，点击发送 |
+| **AI 自动生成** | 点击 ✨ 按钮，AI 根据学生档位自动生成回复 |
+| **连续自动对话** | 点击 🔄 按钮，开启自动对话模式 |
+
+### 第四步：自定义学生档位（可选）
+
+1. 打开设置 → 「用户角色」标签页
+2. 可以选择预设的学生档位：
+   - **优秀学生**：理解透彻、表达清晰
+   - **需要引导的学生**：基本理解但不够全面
+   - **答非所问的学生**：理解偏差、容易跑题
+3. 也可以点击「添加档位」创建自定义角色
+4. 编辑档位的名称、角色特征、表达风格
+5. 点击「保存配置」
+
+### 第五步：自定义系统提示词（可选）
+
+1. 打开设置 → 「系统提示词」标签页
+2. 选择「自定义模式」
+3. 编辑系统提示词内容
+4. 点击「保存配置」
 
 ---
 

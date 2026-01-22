@@ -653,8 +653,11 @@ class WorkflowTesterBase:
                     print(f"\n📝 AI 说: {ai_text}")
                     self.question_text = ai_text
 
-                if need_skip and next_step_id:
-                    print(f"\n⏭️  需要跳转到下一步骤: {next_step_id}")
+                if next_step_id:
+                    if need_skip:
+                        print(f"\n⏭️  需要跳转到下一步骤: {next_step_id}")
+                    else:
+                        print(f"\n➡️  后台返回 nextStepId，切换到下一步骤: {next_step_id}")
                     print("自动调用 runCard...")
                     self.current_step_id = next_step_id
                     return self.run_card(self.task_id, next_step_id, self.session_id)

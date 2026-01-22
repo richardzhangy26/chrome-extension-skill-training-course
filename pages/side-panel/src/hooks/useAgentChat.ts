@@ -5,7 +5,9 @@
 
 import { apiRequest, extractTrainTaskId, onTabUrlChanged, API_ENDPOINTS } from '../services/background-bridge';
 import { generateStudentAnswer } from '../services/llm-service';
+import { agentLogStorage } from '@extension/storage';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import type { AgentLogEntry } from '@extension/storage';
 
 // ============ 类型定义 ============
 type WorkflowState =
@@ -48,6 +50,10 @@ interface ScriptStepFlow {
   scriptStepEndId: string; // 第一个真实步骤的ID
 }
 
+interface TrainConfigurationResponse {
+  trainTaskName?: string;
+}
+
 interface RunCardResponse {
   sessionId: string;
   text?: string; // Python 代码中用的是 text 而不是 content
@@ -56,10 +62,10 @@ interface RunCardResponse {
 }
 
 interface ChatResponse {
-  text?: string; // 修复：用 text 而不是 content
+  text?: string; // Python 代码中用的是 text 而不是 content
   needSkipStep?: boolean;
   nextStepId?: string;
-  isCompleted?: boolean;
+  // 结束判断：当 text 和 nextStepId 都为 null 时表示完成
 }
 
 // ============ Hook实现 ============
@@ -74,6 +80,7 @@ const useAgentChat = () => {
   const [error, setError] = useState<string | null>(null);
   const [dialogueRound, setDialogueRound] = useState(0);
   const [isAutoRunning, setIsAutoRunning] = useState(false);
+  const [activeLogSessionId, setActiveLogSessionId] = useState<string | null>(null);
 
   // 用于取消请求
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -85,6 +92,9 @@ const useAgentChat = () => {
   const sessionIdRef = useRef<string | null>(null);
   const currentStepIdRef = useRef<string | null>(null);
   const trainTaskIdRef = useRef<string | null>(null);
+  const dialogueRoundRef = useRef(0);
+  const activeLogSessionIdRef = useRef<string | null>(null);
+  const stepNameMappingRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -110,6 +120,33 @@ const useAgentChat = () => {
     trainTaskIdRef.current = trainTaskId;
   }, [trainTaskId]);
 
+  useEffect(() => {
+    dialogueRoundRef.current = dialogueRound;
+  }, [dialogueRound]);
+
+  useEffect(() => {
+    activeLogSessionIdRef.current = activeLogSessionId;
+  }, [activeLogSessionId]);
+
+  const fetchTrainTaskName = useCallback(async (taskId: string): Promise<string | undefined> => {
+    const configResponse = await apiRequest<ApiResponse<TrainConfigurationResponse>>({
+      endpoint: API_ENDPOINTS.QUERY_CONFIGURATION,
+      method: 'POST',
+      body: { trainTaskId: taskId },
+    });
+    return configResponse?.data?.trainTaskName;
+  }, []);
+
+  const getStepDisplayName = useCallback((stepId: string) => stepNameMappingRef.current[stepId] ?? stepId, []);
+
+  const appendLogEntry = useCallback(async (entry: AgentLogEntry) => {
+    const sessionId = activeLogSessionIdRef.current;
+    if (!sessionId) {
+      return;
+    }
+    await agentLogStorage.addEntry(sessionId, entry);
+  }, []);
+
   // 生成消息ID
   const generateMessageId = useCallback(() => `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, []);
 
@@ -128,6 +165,14 @@ const useAgentChat = () => {
       return message;
     },
     [generateMessageId, currentStepId],
+  );
+
+  const announceNextStep = useCallback(
+    (stepId: string) => {
+      const stepName = getStepDisplayName(stepId);
+      addMessage('system', `进入下一个阶段——${stepName}`, false, stepId);
+    },
+    [addMessage, getStepDisplayName],
   );
 
   const runCardForStep = useCallback(
@@ -163,27 +208,40 @@ const useAgentChat = () => {
 
       if (runCardResponse.data.text) {
         addMessage('assistant', runCardResponse.data.text, false, stepId);
+        await appendLogEntry({
+          type: 'chat',
+          timestamp: Date.now(),
+          stepId,
+          stepName: getStepDisplayName(stepId),
+          round: dialogueRoundRef.current,
+          source: 'runCard',
+          aiText: runCardResponse.data.text,
+        });
       }
 
       if (runCardResponse.data.needSkipStep && runCardResponse.data.nextStepId) {
-        setCurrentStepId(runCardResponse.data.nextStepId);
-        currentStepIdRef.current = runCardResponse.data.nextStepId;
-        return runCardForStep(runCardResponse.data.nextStepId, runCardResponse.data.sessionId);
+        const nextStepId = runCardResponse.data.nextStepId;
+        setCurrentStepId(nextStepId);
+        currentStepIdRef.current = nextStepId;
+        announceNextStep(nextStepId);
+        return runCardForStep(nextStepId, runCardResponse.data.sessionId);
       }
 
       return runCardResponse;
     },
-    [trainTaskId, sessionId, addMessage],
+    [trainTaskId, sessionId, addMessage, appendLogEntry, getStepDisplayName, announceNextStep],
   );
 
   // 初始化 - 从URL提取trainTaskId
   const initialize = useCallback(async () => {
     const taskId = await extractTrainTaskId();
     if (taskId) {
+      const taskName = await fetchTrainTaskName(taskId);
       setTrainTaskId(taskId);
-      addMessage('system', `已检测到训练任务: ${taskId.substring(0, 8)}...`);
+      const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
+      addMessage('system', `已检测到训练任务: ${displayName}`);
     }
-  }, [addMessage]);
+  }, [addMessage, fetchTrainTaskName]);
 
   // 监听URL变化
   useEffect(() => {
@@ -193,6 +251,7 @@ const useAgentChat = () => {
       if (url.includes('trainTaskId=')) {
         const taskId = await extractTrainTaskId(url);
         if (taskId && taskId !== trainTaskId) {
+          const taskName = await fetchTrainTaskName(taskId);
           setTrainTaskId(taskId);
           // 重置状态
           setSessionId(null);
@@ -200,13 +259,17 @@ const useAgentChat = () => {
           setWorkflowState('IDLE');
           setMessages([]);
           setDialogueRound(0);
-          addMessage('system', `已切换到新任务: ${taskId.substring(0, 8)}...`);
+          setActiveLogSessionId(null);
+          activeLogSessionIdRef.current = null;
+          stepNameMappingRef.current = {};
+          const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
+          addMessage('system', `已切换到新任务: ${displayName}`);
         }
       }
     });
 
     return unsubscribe;
-  }, [initialize, trainTaskId, addMessage]);
+  }, [initialize, trainTaskId, addMessage, fetchTrainTaskName]);
 
   // 开始对话流程
   const startConversation = useCallback(async () => {
@@ -219,7 +282,10 @@ const useAgentChat = () => {
     setIsLoading(true);
 
     try {
-      // 步骤1: 获取步骤列表
+      // 步骤1: 获取任务配置（用于日志命名）
+      const taskName = await fetchTrainTaskName(trainTaskId);
+
+      // 步骤2: 获取步骤列表
       setWorkflowState('FETCHING_STEPS');
       addMessage('system', '正在获取训练步骤...');
 
@@ -237,6 +303,22 @@ const useAgentChat = () => {
 
       const steps = stepsResponse.data;
       console.log('📋 First Step:', JSON.stringify(steps[0], null, 2));
+
+      const stepNameMapping: Record<string, string> = {};
+      steps.forEach(step => {
+        if (step.stepDetailDTO?.stepName) {
+          stepNameMapping[step.stepId] = step.stepDetailDTO.stepName;
+        }
+      });
+      stepNameMappingRef.current = stepNameMapping;
+
+      try {
+        const newSession = await agentLogStorage.createSession({ taskId: trainTaskId, taskName, stepNameMapping });
+        setActiveLogSessionId(newSession.id);
+        activeLogSessionIdRef.current = newSession.id;
+      } catch (logError) {
+        console.warn('⚠️ 日志初始化失败:', logError);
+      }
 
       // 优先通过 flowList 获取第一个真实步骤（参考 Python: _query_first_step_from_flow）
       let firstStepId: string | null = null;
@@ -286,7 +368,7 @@ const useAgentChat = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [trainTaskId, addMessage, runCardForStep]);
+  }, [trainTaskId, addMessage, runCardForStep, fetchTrainTaskName]);
 
   const stopAutoRun = useCallback(() => {
     if (!autoRunActiveRef.current) {
@@ -323,19 +405,37 @@ const useAgentChat = () => {
 
         console.log('💬 Chat Response:', JSON.stringify(response, null, 2));
 
-        if (response?.data?.text) {
-          addMessage('assistant', response.data.text);
+        const data = response?.data;
+
+        if (data) {
+          const nextRound = dialogueRoundRef.current + 1;
           setDialogueRound(prev => prev + 1);
+          await appendLogEntry({
+            type: 'chat',
+            timestamp: Date.now(),
+            stepId: currentStepId,
+            stepName: getStepDisplayName(currentStepId),
+            round: nextRound,
+            source: 'chat',
+            userText: content,
+            aiText: data.text ?? undefined,
+          });
         }
 
-        // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
-        if (response?.data?.nextStepId) {
-          await runCardForStep(response.data.nextStepId, sessionId);
-        }
-
-        if (response?.data?.isCompleted) {
+        // 检查返回结果，如果 text 为 null 且 nextStepId 为 null，代表输出结束
+        if (data?.text == null && data?.nextStepId == null) {
           setWorkflowState('COMPLETED');
-          addMessage('system', '恭喜！训练已完成！');
+          addMessage('system', '✅ 恭喜！训练已完成！');
+        } else {
+          if (data?.text) {
+            addMessage('assistant', data.text);
+          }
+
+          // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
+          if (data?.nextStepId) {
+            announceNextStep(data.nextStepId);
+            await runCardForStep(data.nextStepId, sessionId);
+          }
         }
       } catch (err) {
         setError((err as Error).message);
@@ -344,7 +444,18 @@ const useAgentChat = () => {
         setIsLoading(false);
       }
     },
-    [sessionId, trainTaskId, currentStepId, workflowState, addMessage, runCardForStep, stopAutoRun],
+    [
+      sessionId,
+      trainTaskId,
+      currentStepId,
+      workflowState,
+      addMessage,
+      runCardForStep,
+      stopAutoRun,
+      appendLogEntry,
+      getStepDisplayName,
+      announceNextStep,
+    ],
   );
 
   // AI自动生成回答（使用豆包模型）
@@ -416,19 +527,37 @@ const useAgentChat = () => {
 
       console.log('💬 Chat Response:', JSON.stringify(response, null, 2));
 
-      if (response?.data?.text) {
-        addMessage('assistant', response.data.text, false, activeStepId);
+      const data = response?.data;
+
+      if (data) {
+        const nextRound = dialogueRoundRef.current + 1;
         setDialogueRound(prev => prev + 1);
+        await appendLogEntry({
+          type: 'chat',
+          timestamp: Date.now(),
+          stepId: activeStepId,
+          stepName: getStepDisplayName(activeStepId),
+          round: nextRound,
+          source: 'chat',
+          userText: generatedAnswer,
+          aiText: data.text ?? undefined,
+        });
       }
 
-      // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
-      if (response?.data?.nextStepId) {
-        await runCardForStep(response.data.nextStepId, activeSessionId);
-      }
-
-      if (response?.data?.isCompleted) {
+      // 检查返回结果，如果 text 为 null 且 nextStepId 为 null，代表输出结束
+      if (data?.text == null && data?.nextStepId == null) {
         setWorkflowState('COMPLETED');
-        addMessage('system', '🎉 恭喜！训练已完成！');
+        addMessage('system', '✅ 恭喜！训练已完成！');
+      } else {
+        if (data?.text) {
+          addMessage('assistant', data.text, false, activeStepId);
+        }
+
+        // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
+        if (data?.nextStepId) {
+          announceNextStep(data.nextStepId);
+          await runCardForStep(data.nextStepId, activeSessionId);
+        }
       }
 
       return { needConfig: false };
@@ -439,7 +568,7 @@ const useAgentChat = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [addMessage, runCardForStep]);
+  }, [addMessage, runCardForStep, appendLogEntry, getStepDisplayName, announceNextStep]);
 
   const startAutoRun = useCallback(async (): Promise<{ needConfig: boolean }> => {
     if (autoRunActiveRef.current) {
@@ -498,6 +627,10 @@ const useAgentChat = () => {
     setDialogueRound(0);
     setError(null);
     setIsLoading(false);
+    setActiveLogSessionId(null);
+    activeLogSessionIdRef.current = null;
+    stepNameMappingRef.current = {};
+    dialogueRoundRef.current = 0;
   }, [stopAutoRun]);
 
   return {

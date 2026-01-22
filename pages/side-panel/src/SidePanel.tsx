@@ -1,4 +1,5 @@
 import '@src/SidePanel.css';
+import { HistoryModal, HistoryIcon } from './components/HistoryModal';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useRef, useEffect, useState } from 'react';
@@ -165,12 +166,14 @@ const Header = ({
   dialogueRound,
   onReset,
   onOpenSettings,
+  onOpenHistory,
 }: {
   trainTaskId: string | null;
   workflowState: WorkflowState;
   dialogueRound: number;
   onReset: () => void;
   onOpenSettings: () => void;
+  onOpenHistory: () => void;
 }) => {
   const config = STATE_CONFIG[workflowState];
   const isProcessing = ['FETCHING_STEPS', 'FETCHING_FIRST_STEP', 'RUNNING_CARD'].includes(workflowState);
@@ -200,6 +203,13 @@ const Header = ({
               title="LLM 设置">
               <SettingsIcon />
               <span>设置</span>
+            </button>
+            <button
+              onClick={onOpenHistory}
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs text-white/90 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 hover:text-white"
+              title="历史记录">
+              <HistoryIcon />
+              <span>历史</span>
             </button>
             {workflowState !== 'IDLE' && (
               <button
@@ -518,6 +528,7 @@ const SidePanel = () => {
   // 弹窗状态
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConfigPromptOpen, setIsConfigPromptOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const isIdle = workflowState === 'IDLE';
   const isChatting = workflowState === 'CHATTING';
@@ -554,6 +565,7 @@ const SidePanel = () => {
         dialogueRound={dialogueRound}
         onReset={reset}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
       />
 
       {/* 消息列表 */}
@@ -587,6 +599,8 @@ const SidePanel = () => {
         onClose={() => setIsConfigPromptOpen(false)}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
+
+      <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
     </div>
   );
 };

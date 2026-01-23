@@ -4,7 +4,7 @@
 
 ## 🚀 快速下载
 
-**👉 [点击下载最新版本 v0.5.0](https://github.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.5.0)**
+**👉 [点击下载最新版本 v0.6.0](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.6.0)**
 
 下载 ZIP 文件后，按照下方安装步骤操作即可使用。
 
@@ -33,7 +33,9 @@
 
 ### Chrome / Edge / Brave 安装步骤
 
-1. [下载 ZIP 文件](https://github.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.5.0)
+1. [下载 ZIP 文件](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.6.0)
+
+![step1](./README/step1.png)
 2. 解压 ZIP 文件到任意文件夹
 3. 打开浏览器扩展页面：
    - Chrome: 地址栏输入 `chrome://extensions`
@@ -41,8 +43,11 @@
    - Brave: 地址栏输入 `brave://extensions`
 4. 开启右上角的 **开发者模式**
 5. 点击 **加载已解压的扩展程序**
+![step2](./README/step2.png)
 6. 选择解压后的文件夹
+![step3](./README/step3.png)
 7. 安装成功后，工具栏会出现扩展图标
+![step4](./README/step4.png)
 
 ### Firefox 安装步骤
 
@@ -62,12 +67,13 @@
 1. 点击扩展图标，打开侧边栏
 2. 点击右上角的 **⚙️ 设置** 按钮
 3. 在「LLM 配置」标签页中填写：
-   - **API Key**：你的豆包 API 密钥
+   - **API Key**：你的API密钥(需要去企业微信llm-service上申请)
    - **模型**：选择要使用的模型（推荐 Doubao Pro 32K）
    - **Endpoint ID**：你的端点 ID
    - **服务代码**：服务代码（可选）
 4. 点击「测试连接」确认配置正确
 5. 点击「保存配置」
+![](./README/usage1.png)
 
 ### 第二步：开始训练
 
@@ -87,7 +93,24 @@
 | **AI 自动生成** | 点击 ✨ 按钮，AI 根据学生档位自动生成回复 |
 | **连续自动对话** | 点击 🔄 按钮，开启自动对话模式 |
 
-### 第四步：自定义学生档位（可选）
+![](./README/usage5.png)
+
+### 第四步：查看历史记录
+
+1. 点击侧边栏右上角的 **📜 历史** 按钮
+2. 左侧列表显示所有训练会话，按时间倒序排列
+3. 点击任意会话可查看详情
+4. 支持的操作：
+   - **编辑名称**：点击「编辑名称」按钮，可自定义会话名称（支持 Enter 保存，Escape 取消）
+   - **下载 TXT**：将对话记录导出为文本文件
+   - **删除**：删除单条记录
+   - **清空全部**：清空所有历史记录
+
+> ⚠️ **注意**：历史记录存储在浏览器本地，清除浏览器数据会导致记录丢失，请及时下载备份。
+
+![](./README/usage4.png)
+
+### 第五步：自定义学生档位（可选）
 
 1. 打开设置 → 「用户角色」标签页
 2. 可以选择预设的学生档位：
@@ -98,12 +121,16 @@
 4. 编辑档位的名称、角色特征、表达风格
 5. 点击「保存配置」
 
-### 第五步：自定义系统提示词（可选）
+![](./README/usage3.png)
+
+### 第六步：自定义系统提示词（可选）
 
 1. 打开设置 → 「系统提示词」标签页
 2. 选择「自定义模式」
 3. 编辑系统提示词内容
 4. 点击「保存配置」
+
+![](./README/usage2.png)
 
 ---
 
@@ -245,3 +272,27 @@ pnpm update-version <version>    # 更新扩展版本号
 - [Chrome Extensions 文档](https://developer.chrome.com/docs/extensions)
 - [Vite 文档](https://vitejs.dev/)
 - [Turborepo 文档](https://turbo.build/repo/docs)
+
+---
+
+## 更新日志 (Changelog)
+
+### v0.6.0 (最新版)
+
+#### 新功能
+- **模型列表扩展**：新增 GPT-4o、GPT-4o-mini、Gemini 2.5 Flash、Claude 3.5 Haiku、Grok 4 等主流模型支持
+- **会话名称编辑**：历史记录中可直接编辑会话名称，支持键盘快捷键（Enter 保存，Escape 取消）
+- **训练任务缓存**：支持从浏览器存储恢复训练任务 ID，刷新页面后无需重新识别
+
+#### 优化
+- **首步骤识别逻辑重构**：基于 `SCRIPT_START` 节点类型匹配 flowList，优先匹配 `isDefault=1` 的流程
+- **会话命名优化**：自动包含学生档位标签，便于识别不同配置的训练记录
+- **新标签页行为**：移除新标签页覆盖配置，不再影响用户默认新标签页
+
+### v0.5.0
+
+- 重构学生档位为动态数组，支持自定义编辑
+- 添加 LLM 配置功能
+- 优化 side-panel UI 配色
+- 添加连续对话功能
+- 集成 AI 智能体聊天系统与 Polymas 教学平台

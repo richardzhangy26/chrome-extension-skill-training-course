@@ -3,9 +3,15 @@
  * 管理对话状态和工作流
  */
 
-import { apiRequest, extractTrainTaskId, onTabUrlChanged, API_ENDPOINTS } from '../services/background-bridge';
+import {
+  apiRequest,
+  extractTrainTaskId,
+  getCurrentTabUrl,
+  onTabUrlChanged,
+  API_ENDPOINTS,
+} from '../services/background-bridge';
 import { generateStudentAnswer } from '../services/llm-service';
-import { agentLogStorage } from '@extension/storage';
+import { agentLogStorage, agentSessionStorage, llmConfigStorage } from '@extension/storage';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { AgentLogEntry } from '@extension/storage';
 
@@ -67,6 +73,8 @@ interface ChatResponse {
   nextStepId?: string;
   // 结束判断：当 text 和 nextStepId 都为 null 时表示完成
 }
+
+const TRAINING_DOMAIN = 'hike-teaching-center.polymas.com';
 
 // ============ Hook实现 ============
 const useAgentChat = () => {
@@ -136,8 +144,27 @@ const useAgentChat = () => {
     });
     return configResponse?.data?.trainTaskName;
   }, []);
+  const updateStoredTrainTaskId = useCallback(async (taskId: string) => {
+    try {
+      await agentSessionStorage.updateTrainTaskId(taskId);
+    } catch (storageError) {
+      console.warn('⚠️ 训练任务ID缓存失败:', storageError);
+    }
+  }, []);
 
   const getStepDisplayName = useCallback((stepId: string) => stepNameMappingRef.current[stepId] ?? stepId, []);
+  const resolveCurrentProfileLabel = useCallback(async () => {
+    const config = await llmConfigStorage.get();
+    const selected = config.studentProfiles.find(profile => profile.id === config.studentProfileId);
+    const fallback = config.studentProfiles[0];
+    const label = (selected ?? fallback)?.label?.trim();
+    return label && label.length > 0 ? label : '学生';
+  }, []);
+
+  const buildLogSessionName = useCallback((baseName: string, profileLabel: string) => {
+    const parts = [baseName, profileLabel, '剧本'].filter(Boolean);
+    return `${parts.join('-')}`;
+  }, []);
 
   // 生成消息ID
   const generateMessageId = useCallback(() => `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, []);
@@ -260,10 +287,30 @@ const useAgentChat = () => {
     if (taskId) {
       const taskName = await fetchTrainTaskName(taskId);
       setTrainTaskId(taskId);
+      await updateStoredTrainTaskId(taskId);
       const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
       addMessage('system', `已检测到训练任务: ${displayName}`);
+      return;
     }
-  }, [addMessage, fetchTrainTaskName]);
+
+    const currentUrl = await getCurrentTabUrl();
+    if (!currentUrl?.includes(TRAINING_DOMAIN)) {
+      return;
+    }
+
+    try {
+      const storedSession = await agentSessionStorage.get();
+      const storedTaskId = storedSession.trainTaskId?.trim();
+      if (storedTaskId) {
+        const taskName = await fetchTrainTaskName(storedTaskId);
+        setTrainTaskId(storedTaskId);
+        const displayName = taskName?.trim() || `${storedTaskId.substring(0, 8)}...`;
+        addMessage('system', `已从缓存恢复训练任务: ${displayName}`);
+      }
+    } catch (storageError) {
+      console.warn('⚠️ 读取训练任务缓存失败:', storageError);
+    }
+  }, [addMessage, fetchTrainTaskName, updateStoredTrainTaskId]);
 
   // 监听URL变化
   useEffect(() => {
@@ -275,6 +322,7 @@ const useAgentChat = () => {
         if (taskId && taskId !== trainTaskId) {
           const taskName = await fetchTrainTaskName(taskId);
           setTrainTaskId(taskId);
+          await updateStoredTrainTaskId(taskId);
           // 重置状态
           setSessionId(null);
           setCurrentStepId(null);
@@ -291,7 +339,7 @@ const useAgentChat = () => {
     });
 
     return unsubscribe;
-  }, [initialize, trainTaskId, addMessage, fetchTrainTaskName]);
+  }, [initialize, trainTaskId, addMessage, fetchTrainTaskName, updateStoredTrainTaskId]);
 
   // 开始对话流程
   const startConversation = useCallback(async () => {
@@ -305,7 +353,12 @@ const useAgentChat = () => {
 
     try {
       // 步骤1: 获取任务配置（用于日志命名）
-      const taskName = await fetchTrainTaskName(trainTaskId);
+      const [taskName, profileLabel] = await Promise.all([
+        fetchTrainTaskName(trainTaskId),
+        resolveCurrentProfileLabel(),
+      ]);
+      const displayName = taskName?.trim() || `${trainTaskId.substring(0, 8)}...`;
+      const logSessionName = buildLogSessionName(displayName, profileLabel);
 
       // 步骤2: 获取步骤列表
       setWorkflowState('FETCHING_STEPS');
@@ -335,7 +388,11 @@ const useAgentChat = () => {
       stepNameMappingRef.current = stepNameMapping;
 
       try {
-        const newSession = await agentLogStorage.createSession({ taskId: trainTaskId, taskName, stepNameMapping });
+        const newSession = await agentLogStorage.createSession({
+          taskId: trainTaskId,
+          taskName: logSessionName,
+          stepNameMapping,
+        });
         setActiveLogSessionId(newSession.id);
         activeLogSessionIdRef.current = newSession.id;
       } catch (logError) {
@@ -390,7 +447,7 @@ const useAgentChat = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [trainTaskId, addMessage, runCardForStep, fetchTrainTaskName]);
+  }, [trainTaskId, addMessage, runCardForStep, fetchTrainTaskName, resolveCurrentProfileLabel, buildLogSessionName]);
 
   const stopAutoRun = useCallback(() => {
     if (!autoRunActiveRef.current) {

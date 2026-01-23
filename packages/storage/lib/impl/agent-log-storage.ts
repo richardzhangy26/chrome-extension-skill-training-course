@@ -48,6 +48,7 @@ interface AgentLogStorageType extends BaseStorageType<AgentLogSession[]> {
   }) => Promise<AgentLogSession>;
   addEntry: (sessionId: string, entry: AgentLogEntry) => Promise<void>;
   updateStepNameMapping: (sessionId: string, mapping: Record<string, string>) => Promise<void>;
+  updateSessionName: (sessionId: string, taskName?: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   clearSessions: () => Promise<void>;
   getSessionById: (sessionId: string) => Promise<AgentLogSession | null>;
@@ -100,6 +101,21 @@ const agentLogStorage: AgentLogStorageType = {
           ? {
               ...session,
               stepNameMapping: mergeStepNameMapping(session.stepNameMapping, mapping),
+              updatedAt: Date.now(),
+            }
+          : session,
+      ),
+    );
+  },
+
+  updateSessionName: async (sessionId, taskName) => {
+    const normalizedName = taskName?.trim();
+    await storage.set(current =>
+      current.map(session =>
+        session.id === sessionId
+          ? {
+              ...session,
+              taskName: normalizedName?.length ? normalizedName : undefined,
               updatedAt: Date.now(),
             }
           : session,

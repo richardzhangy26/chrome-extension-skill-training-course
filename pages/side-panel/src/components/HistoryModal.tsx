@@ -96,6 +96,8 @@ const downloadLogText = (session: AgentLogSession) => {
 const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
   const [sessions, setSessions] = useState<AgentLogSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   useEffect(() => {
     if (!isOpen) {
@@ -134,6 +136,18 @@ const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
       prev && sortedSessions.some(session => session.id === prev) ? prev : sortedSessions[0].id,
     );
   }, [isOpen, sortedSessions]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setEditingSessionId(null);
+      setEditingName('');
+      return;
+    }
+    if (editingSessionId && !sortedSessions.some(session => session.id === editingSessionId)) {
+      setEditingSessionId(null);
+      setEditingName('');
+    }
+  }, [editingSessionId, isOpen, sortedSessions]);
 
   const activeSession = sortedSessions.find(session => session.id === activeSessionId) ?? null;
 
@@ -185,30 +199,105 @@ const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {sortedSessions.map(session => (
-                    <button
-                      key={session.id}
-                      onClick={() => setActiveSessionId(session.id)}
-                      className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                        activeSessionId === session.id
-                          ? 'border-cyan-300 bg-cyan-50 text-cyan-700'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-cyan-200'
-                      }`}>
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">任务: {getSessionDisplayName(session)}</span>
-                        <span>
-                          {new Date(session.updatedAt).toLocaleTimeString('zh-CN', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
+                  {sortedSessions.map(session => {
+                    const isActive = activeSessionId === session.id;
+                    const isEditing = editingSessionId === session.id;
+                    const sessionName = getSessionDisplayName(session);
+
+                    return (
+                      <div
+                        key={session.id}
+                        onClick={() => setActiveSessionId(session.id)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setActiveSessionId(session.id);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                          isActive
+                            ? 'border-cyan-300 bg-cyan-50 text-cyan-700'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-cyan-200'
+                        }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">任务: {sessionName}</span>
+                          <span>
+                            {new Date(session.updatedAt).toLocaleTimeString('zh-CN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[11px] text-slate-400">{formatTimestamp(session.createdAt)}</div>
+                        <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+                          <span>记录数: {session.entries.filter(entry => entry.type === 'chat').length}</span>
+                          {!isEditing && (
+                            <button
+                              type="button"
+                              onClick={event => {
+                                event.stopPropagation();
+                                setActiveSessionId(session.id);
+                                setEditingSessionId(session.id);
+                                setEditingName(sessionName);
+                              }}
+                              className="cursor-pointer text-cyan-600 transition-colors hover:text-cyan-700">
+                              编辑名称
+                            </button>
+                          )}
+                        </div>
+                        {isEditing && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              ref={el => el?.focus()}
+                              value={editingName}
+                              onChange={event => setEditingName(event.target.value)}
+                              onKeyDown={event => {
+                                event.stopPropagation();
+                                if (event.key === 'Enter') {
+                                  event.preventDefault();
+                                  void agentLogStorage.updateSessionName(session.id, editingName);
+                                  setEditingSessionId(null);
+                                  setEditingName('');
+                                }
+                                if (event.key === 'Escape') {
+                                  event.preventDefault();
+                                  setEditingSessionId(null);
+                                  setEditingName('');
+                                }
+                              }}
+                              onClick={event => event.stopPropagation()}
+                              className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-cyan-300 focus:outline-none"
+                              placeholder="输入任务名称"
+                              aria-label="编辑任务名称"
+                            />
+                            <button
+                              type="button"
+                              onClick={event => {
+                                event.stopPropagation();
+                                void agentLogStorage.updateSessionName(session.id, editingName);
+                                setEditingSessionId(null);
+                                setEditingName('');
+                              }}
+                              className="cursor-pointer rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-[11px] text-cyan-700 transition-colors hover:border-cyan-300 hover:text-cyan-800">
+                              保存
+                            </button>
+                            <button
+                              type="button"
+                              onClick={event => {
+                                event.stopPropagation();
+                                setEditingSessionId(null);
+                                setEditingName('');
+                              }}
+                              className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-600">
+                              取消
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <div className="mt-1 text-[11px] text-slate-400">{formatTimestamp(session.createdAt)}</div>
-                      <div className="mt-1 text-[11px] text-slate-400">
-                        记录数: {session.entries.filter(entry => entry.type === 'chat').length}
-                      </div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

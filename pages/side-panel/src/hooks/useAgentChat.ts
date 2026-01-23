@@ -48,12 +48,15 @@ interface ScriptStepItem {
   stepDetailDTO?: {
     stepName?: string;
     stepOrder?: number;
+    nodeType?: 'SCRIPT_START' | 'SCRIPT_END' | 'SCRIPT_NODE';
   };
 }
 
 // 用于 queryScriptStepFlowList 的结构
 interface ScriptStepFlow {
+  scriptStepStartId: string;
   scriptStepEndId: string; // 第一个真实步骤的ID
+  isDefault?: number;
 }
 
 interface TrainConfigurationResponse {
@@ -399,9 +402,13 @@ const useAgentChat = () => {
         console.warn('⚠️ 日志初始化失败:', logError);
       }
 
-      // 优先通过 flowList 获取第一个真实步骤（参考 Python: _query_first_step_from_flow）
+      // 优先通过 SCRIPT_START + flowList 获取第一个真实步骤
       let firstStepId: string | null = null;
       let firstStepName = '未知步骤';
+      const trainingStartStep =
+        steps.slice(0, 2).find(step => step.stepDetailDTO?.nodeType === 'SCRIPT_START') ??
+        steps.find(step => step.stepDetailDTO?.nodeType === 'SCRIPT_START');
+      const trainingStartStepId = trainingStartStep?.stepId ?? null;
 
       try {
         const flowResponse = await apiRequest<ApiResponse<ScriptStepFlow[]>>({
@@ -411,18 +418,28 @@ const useAgentChat = () => {
         });
         console.log('🔗 Flow Response:', JSON.stringify(flowResponse, null, 2));
 
-        if (flowResponse?.data?.length) {
-          firstStepId = flowResponse.data[0].scriptStepEndId;
+        if (flowResponse?.data?.length && trainingStartStepId) {
+          const matchedFlow =
+            flowResponse.data.find(flow => flow.scriptStepStartId === trainingStartStepId && flow.isDefault === 1) ??
+            flowResponse.data.find(flow => flow.scriptStepStartId === trainingStartStepId);
+          firstStepId = matchedFlow?.scriptStepEndId ?? null;
         }
       } catch {
         console.warn('⚠️ flowList 获取失败，使用回退逻辑');
       }
 
-      // 回退逻辑：如果 flowList 失败，使用 stepOrder 排序（参考 Python 第 557-559 行）
+      // 回退逻辑：如果 flowList 失败，优先取非 SCRIPT_START/SCRIPT_END 的步骤
       if (!firstStepId) {
-        // Python 代码: first_idx = 2 if len(data) > 2 else 0
-        const firstIdx = steps.length > 2 ? 2 : 0;
-        firstStepId = steps[firstIdx].stepId;
+        const fallbackStep =
+          steps.find(step => {
+            const nodeType = step.stepDetailDTO?.nodeType;
+            return nodeType && nodeType !== 'SCRIPT_START' && nodeType !== 'SCRIPT_END';
+          }) ?? steps[steps.length > 2 ? 2 : 0];
+        firstStepId = fallbackStep?.stepId ?? null;
+      }
+
+      if (!firstStepId) {
+        throw new Error('无法确定首个训练步骤');
       }
 
       const matchedStep = steps.find(s => s.stepId === firstStepId);

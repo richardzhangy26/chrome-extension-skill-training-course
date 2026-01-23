@@ -83,11 +83,13 @@ const defaultConfig: LLMConfig = {
 
 // 可用的模型列表
 const AVAILABLE_MODELS = [
-  { value: 'Doubao-1.5-pro-32k', label: 'Doubao 1.5 Pro 32K' },
+  { value: 'Doubao-1.5-pro-32k', label: 'Doubao 1.5 Pro 32K（推荐）' },
   { value: 'Doubao-1.5-pro-256k', label: 'Doubao 1.5 Pro 256K' },
-  { value: 'Doubao-pro-32k', label: 'Doubao Pro 32K' },
-  { value: 'Doubao-pro-128k', label: 'Doubao Pro 128K' },
-  { value: 'Doubao-lite-32k', label: 'Doubao Lite 32K' },
+  { value: 'gpt-4o', label: 'GPT-4o' },
+  { value: 'gpt-4o-mini', label: 'GPT-4o-mini' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { value: 'Claude 3.5 HaiKu', label: 'Claude 3.5 HaiKu' },
+  { value: 'grok-4', label: 'Grok 4' },
 ] as const;
 
 const DEFAULT_SYSTEM_PROMPT = [

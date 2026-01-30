@@ -4,7 +4,7 @@
 
 ## 🚀 快速下载
 
-**👉 [点击下载最新版本 v0.6.0](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.6.0)**
+**👉 [点击下载最新版本 v0.7.0](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.7.0)**
 
 下载 ZIP 文件后，按照下方安装步骤操作即可使用。
 
@@ -33,7 +33,7 @@
 
 ### Chrome / Edge / Brave 安装步骤
 
-1. [下载 ZIP 文件](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.6.0)
+1. [下载 ZIP 文件](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v0.7.0)
 
 ![step1](./README/step1.png)
 2. 解压 ZIP 文件到任意文件夹
@@ -92,6 +92,7 @@
 | **手动输入** | 在输入框中输入回复，点击发送 |
 | **AI 自动生成** | 点击 ✨ 按钮，AI 根据学生档位自动生成回复 |
 | **连续自动对话** | 点击 🔄 按钮，开启自动对话模式 |
+| **调试模式** | 点击 **调试模式** 按钮，开启调试模式 |
 
 ![](./README/usage5.png)
 
@@ -110,7 +111,9 @@
 
 ![](./README/usage4.png)
 
-### 第五步：自定义学生档位（可选）
+## 高级功能（可选）
+
+### 自定义学生档位（可选）
 
 1. 打开设置 → 「用户角色」标签页
 2. 可以选择预设的学生档位：
@@ -121,9 +124,10 @@
 4. 编辑档位的名称、角色特征、表达风格
 5. 点击「保存配置」
 
+
 ![](./README/usage3.png)
 
-### 第六步：自定义系统提示词（可选）
+### 自定义系统提示词（可选）
 
 1. 打开设置 → 「系统提示词」标签页
 2. 选择「自定义模式」
@@ -132,9 +136,16 @@
 
 ![](./README/usage2.png)
 
+### 调试模式（可选）
+
+1. 点击调试模式按钮
+2. 选择或者搜索想要跳转的步骤
+
+![](./README/usage6.png)
+
 ---
 
-## 开发指南
+## 开发指南(非开发人员请忽略)
 
 ### 环境要求
 
@@ -277,7 +288,17 @@ pnpm update-version <version>    # 更新扩展版本号
 
 ## 更新日志 (Changelog)
 
-### v0.6.0 (最新版)
+### v0.7.0 (最新版)
+
+#### 新功能
+- **历史记录清空确认弹窗**：点击"清空全部"时弹出美观的确认对话框，防止误操作
+- **对话详情预览**：在历史记录的"最近记录"中点击对话项可展开查看用户消息和 AI 回复内容
+- **按钮悬停提示优化**：右侧三个操作按钮添加了美观的 Tooltip 提示（发送消息 / AI 回复下一轮 / AI 全自动回复）
+
+#### 优化
+- **调试模式布局调整**：将"选择步骤快速跳转"提示移至调试模式按钮下方，布局更清晰
+
+### v0.6.0
 
 #### 新功能
 - **模型列表扩展**：新增 GPT-4o、GPT-4o-mini、Gemini 2.5 Flash、Claude 3.5 Haiku、Grok 4 等主流模型支持

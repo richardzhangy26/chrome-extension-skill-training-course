@@ -1,4 +1,5 @@
 import '@src/SidePanel.css';
+import { DebugStepsModal } from './components/DebugStepsModal';
 import { HistoryModal, HistoryIcon } from './components/HistoryModal';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
 import { useAgentChat } from './hooks/useAgentChat';
@@ -71,6 +72,20 @@ const Icons = {
       <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
       <path d="M5 19l1 3 1-3 3-1-3-1-1-3-1 3-3 1 3 1z" />
       <path d="M19 12l1 2 1-2 2-1-2-1-1-2-1 2-2 1 2 1z" />
+    </svg>
+  ),
+  // 调试图标
+  Bug: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+      <path d="M8 6h8" />
+      <path d="M6 12h12" />
+      <path d="M8 18h8" />
+      <path d="M9 6V4a3 3 0 0 1 6 0v2" />
+      <rect x="7" y="6" width="10" height="12" rx="4" />
+      <path d="M4 9h3" />
+      <path d="M17 9h3" />
+      <path d="M4 15h3" />
+      <path d="M17 15h3" />
     </svg>
   ),
   // 重置图标
@@ -371,6 +386,8 @@ const ChatInput = ({
   onAutoRun,
   onStopAutoRun,
   isAutoRunning,
+  onOpenDebug,
+  debugDisabled,
   disabled,
 }: {
   onSend: (content: string) => void;
@@ -378,6 +395,8 @@ const ChatInput = ({
   onAutoRun: () => void;
   onStopAutoRun: () => void;
   isAutoRunning: boolean;
+  onOpenDebug: () => void;
+  debugDisabled: boolean;
   disabled: boolean;
 }) => {
   const [value, setValue] = useState('');
@@ -414,6 +433,17 @@ const ChatInput = ({
 
   return (
     <div className="border-t border-slate-200 bg-white p-4">
+      <div className="mb-2 flex flex-col items-start gap-1">
+        <button
+          onClick={onOpenDebug}
+          disabled={debugDisabled}
+          className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 transition-all duration-200 hover:border-cyan-300 hover:text-cyan-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+          title="选择步骤调试运行">
+          <Icons.Bug />
+          <span>调试模式</span>
+        </button>
+        <span className="text-[11px] text-slate-400">选择步骤快速跳转</span>
+      </div>
       <div className="flex items-end gap-3">
         <div className="relative flex-1">
           <textarea
@@ -434,33 +464,48 @@ const ChatInput = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <button
-            onClick={isAutoRunning ? onStopAutoRun : onAutoRun}
-            disabled={!isAutoRunning && disabled}
-            title={isAutoRunning ? '停止连续对话' : '连续 AI 对话'}
-            className={`cursor-pointer rounded-xl p-2.5 text-white transition-all duration-200 hover:shadow-lg disabled:cursor-not-allowed disabled:shadow-none ${
-              isAutoRunning
-                ? 'bg-gradient-to-br from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 hover:shadow-red-500/25'
-                : 'bg-gradient-to-br from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 hover:shadow-emerald-500/25'
-            }`}>
-            {isAutoRunning ? <Icons.Stop /> : <Icons.Repeat />}
-          </button>
+          <div className="group relative">
+            <button
+              onClick={isAutoRunning ? onStopAutoRun : onAutoRun}
+              disabled={!isAutoRunning && disabled}
+              className={`cursor-pointer rounded-xl p-2.5 text-white transition-all duration-200 hover:shadow-lg disabled:cursor-not-allowed disabled:shadow-none ${
+                isAutoRunning
+                  ? 'bg-gradient-to-br from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 hover:shadow-red-500/25'
+                  : 'bg-gradient-to-br from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 hover:shadow-emerald-500/25'
+              }`}>
+              {isAutoRunning ? <Icons.Stop /> : <Icons.Repeat />}
+            </button>
+            <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+              {isAutoRunning ? '停止连续对话' : 'AI 全自动回复'}
+              <div className="absolute -right-1 top-1/2 -translate-y-1/2 border-4 border-transparent border-l-slate-800" />
+            </div>
+          </div>
 
-          <button
-            onClick={onAutoGenerate}
-            disabled={disabled || isAutoRunning}
-            title="AI 自动回答"
-            className="cursor-pointer rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 p-2.5 text-white transition-all duration-200 hover:from-amber-600 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
-            <Icons.Sparkles />
-          </button>
+          <div className="group relative">
+            <button
+              onClick={onAutoGenerate}
+              disabled={disabled || isAutoRunning}
+              className="cursor-pointer rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 p-2.5 text-white transition-all duration-200 hover:from-amber-600 hover:to-orange-600 hover:shadow-lg hover:shadow-orange-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
+              <Icons.Sparkles />
+            </button>
+            <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+              AI 回复下一轮
+              <div className="absolute -right-1 top-1/2 -translate-y-1/2 border-4 border-transparent border-l-slate-800" />
+            </div>
+          </div>
 
-          <button
-            onClick={handleSend}
-            disabled={disabled || !value.trim()}
-            title="发送消息"
-            className="cursor-pointer rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 p-2.5 text-white transition-all duration-200 hover:from-cyan-600 hover:to-blue-600 hover:shadow-lg hover:shadow-blue-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
-            <Icons.Send />
-          </button>
+          <div className="group relative">
+            <button
+              onClick={handleSend}
+              disabled={disabled || !value.trim()}
+              className="cursor-pointer rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 p-2.5 text-white transition-all duration-200 hover:from-cyan-600 hover:to-blue-600 hover:shadow-lg hover:shadow-blue-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
+              <Icons.Send />
+            </button>
+            <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+              发送消息
+              <div className="absolute -right-1 top-1/2 -translate-y-1/2 border-4 border-transparent border-l-slate-800" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -522,6 +567,11 @@ const SidePanel = () => {
     startAutoRun,
     stopAutoRun,
     isAutoRunning,
+    scriptSteps,
+    isStepListLoading,
+    stepListError,
+    fetchScriptSteps,
+    runDebugStep,
     reset,
   } = useAgentChat();
 
@@ -529,6 +579,7 @@ const SidePanel = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConfigPromptOpen, setIsConfigPromptOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isDebugOpen, setIsDebugOpen] = useState(false);
 
   const isIdle = workflowState === 'IDLE';
   const isChatting = workflowState === 'CHATTING';
@@ -556,6 +607,18 @@ const SidePanel = () => {
     }
   };
 
+  useEffect(() => {
+    if (!isDebugOpen) {
+      return;
+    }
+    fetchScriptSteps();
+  }, [fetchScriptSteps, isDebugOpen]);
+
+  const handleSelectDebugStep = async (stepId: string) => {
+    setIsDebugOpen(false);
+    await runDebugStep(stepId);
+  };
+
   return (
     <div className="flex h-screen flex-col bg-slate-50">
       {/* 头部 */}
@@ -581,6 +644,8 @@ const SidePanel = () => {
           onAutoRun={handleAutoRunToggle}
           onStopAutoRun={stopAutoRun}
           isAutoRunning={isAutoRunning}
+          onOpenDebug={() => setIsDebugOpen(true)}
+          debugDisabled={isLoading}
           disabled={isLoading || isCompleted}
         />
       ) : (
@@ -598,6 +663,16 @@ const SidePanel = () => {
         isOpen={isConfigPromptOpen}
         onClose={() => setIsConfigPromptOpen(false)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+      />
+
+      <DebugStepsModal
+        isOpen={isDebugOpen}
+        steps={scriptSteps}
+        isLoading={isStepListLoading}
+        error={stepListError}
+        onClose={() => setIsDebugOpen(false)}
+        onRefresh={() => fetchScriptSteps({ force: true })}
+        onSelectStep={handleSelectDebugStep}
       />
 
       <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />

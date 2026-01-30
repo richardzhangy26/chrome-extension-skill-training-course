@@ -98,6 +98,8 @@ const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [expandedEntryIndex, setExpandedEntryIndex] = useState<number | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -187,7 +189,7 @@ const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
               <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
                 <span>日志列表</span>
                 <button
-                  onClick={() => agentLogStorage.clearSessions()}
+                  onClick={() => setShowClearConfirm(true)}
                   className="cursor-pointer text-red-500 transition-colors hover:text-red-600">
                   清空全部
                 </button>
@@ -340,22 +342,59 @@ const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
                     <div className="rounded-lg border border-slate-200 bg-white p-3">
                       <div className="text-sm font-medium text-slate-700">最近记录</div>
                       <div className="mt-2 space-y-2 text-[11px] text-slate-500">
-                        {activeSession.entries.slice(-6).map((entry, index) => (
-                          <div key={`${entry.timestamp}_${index}`} className="rounded-md bg-slate-50 px-2 py-1.5">
-                            <div className="flex items-center justify-between">
-                              <span>{entry.type === 'runCard' ? 'RunCard' : '对话'}</span>
-                              <span>
-                                {new Date(entry.timestamp).toLocaleTimeString('zh-CN', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </span>
+                        {activeSession.entries.slice(-6).map((entry, index) => {
+                          const isExpanded = expandedEntryIndex === index;
+                          return (
+                            <div
+                              key={`${entry.timestamp}_${index}`}
+                              onClick={() => setExpandedEntryIndex(isExpanded ? null : index)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setExpandedEntryIndex(isExpanded ? null : index);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              className="cursor-pointer rounded-md bg-slate-50 px-2 py-1.5 transition-colors hover:bg-slate-100">
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                  {entry.type === 'runCard' ? 'RunCard' : '对话'}
+                                  <span className="text-[10px] text-slate-400">{isExpanded ? '▼' : '▶'}</span>
+                                </span>
+                                <span>
+                                  {new Date(entry.timestamp).toLocaleTimeString('zh-CN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-[10px] text-slate-400">
+                                Step: {getStepDisplayName(activeSession, entry)}
+                              </div>
+
+                              {isExpanded && entry.type === 'chat' && (
+                                <div className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
+                                  {entry.userText && (
+                                    <div className="rounded bg-white p-2">
+                                      <span className="font-medium text-cyan-600">用户:</span>
+                                      <p className="mt-0.5 whitespace-pre-wrap text-slate-600">{entry.userText}</p>
+                                    </div>
+                                  )}
+                                  {entry.aiText && (
+                                    <div className="rounded bg-white p-2">
+                                      <span className="font-medium text-emerald-600">AI:</span>
+                                      <p className="mt-0.5 whitespace-pre-wrap text-slate-600">{entry.aiText}</p>
+                                    </div>
+                                  )}
+                                  {!entry.userText && !entry.aiText && (
+                                    <div className="text-slate-400">暂无对话内容</div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <div className="mt-1 text-[10px] text-slate-400">
-                              Step: {getStepDisplayName(activeSession, entry)}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -365,6 +404,53 @@ const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
           </div>
         </div>
       </div>
+
+      {/* 清空确认弹窗 */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowClearConfirm(false)}
+            onKeyDown={e => e.key === 'Escape' && setShowClearConfirm(false)}
+            role="button"
+            tabIndex={0}
+            aria-label="取消"
+          />
+          <div className="relative w-[85%] max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-red-100 to-rose-100">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="h-8 w-8 text-red-500">
+                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </div>
+
+            <h3 className="mb-2 text-lg font-semibold text-slate-800">确认清空全部？</h3>
+            <p className="mb-5 text-sm text-slate-500">此操作将删除所有历史记录，且不可撤销。</p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100">
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  agentLogStorage.clearSessions();
+                  setShowClearConfirm(false);
+                }}
+                className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-red-500 to-rose-500 py-2.5 text-sm font-medium text-white transition-all hover:from-red-600 hover:to-rose-600">
+                确认清空
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

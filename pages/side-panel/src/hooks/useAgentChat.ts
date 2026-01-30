@@ -92,6 +92,9 @@ const useAgentChat = () => {
   const [dialogueRound, setDialogueRound] = useState(0);
   const [isAutoRunning, setIsAutoRunning] = useState(false);
   const [activeLogSessionId, setActiveLogSessionId] = useState<string | null>(null);
+  const [scriptSteps, setScriptSteps] = useState<ScriptStepItem[]>([]);
+  const [isStepListLoading, setIsStepListLoading] = useState(false);
+  const [stepListError, setStepListError] = useState<string | null>(null);
 
   // 用于取消请求
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -106,6 +109,7 @@ const useAgentChat = () => {
   const dialogueRoundRef = useRef(0);
   const activeLogSessionIdRef = useRef<string | null>(null);
   const stepNameMappingRef = useRef<Record<string, string>>({});
+  const scriptStepsRef = useRef<ScriptStepItem[]>([]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -139,6 +143,10 @@ const useAgentChat = () => {
     activeLogSessionIdRef.current = activeLogSessionId;
   }, [activeLogSessionId]);
 
+  useEffect(() => {
+    scriptStepsRef.current = scriptSteps;
+  }, [scriptSteps]);
+
   const fetchTrainTaskName = useCallback(async (taskId: string): Promise<string | undefined> => {
     const configResponse = await apiRequest<ApiResponse<TrainConfigurationResponse>>({
       endpoint: API_ENDPOINTS.QUERY_CONFIGURATION,
@@ -167,6 +175,17 @@ const useAgentChat = () => {
   const buildLogSessionName = useCallback((baseName: string, profileLabel: string) => {
     const parts = [baseName, profileLabel, '剧本'].filter(Boolean);
     return `${parts.join('-')}`;
+  }, []);
+
+  const buildStepNameMapping = useCallback((steps: ScriptStepItem[]) => {
+    const stepNameMapping: Record<string, string> = {};
+    steps.forEach(step => {
+      if (step.stepDetailDTO?.stepName) {
+        stepNameMapping[step.stepId] = step.stepDetailDTO.stepName;
+      }
+    });
+    stepNameMappingRef.current = stepNameMapping;
+    return stepNameMapping;
   }, []);
 
   // 生成消息ID
@@ -315,6 +334,60 @@ const useAgentChat = () => {
     }
   }, [addMessage, fetchTrainTaskName, updateStoredTrainTaskId]);
 
+  const fetchScriptSteps = useCallback(
+    async ({
+      force = false,
+      announce = false,
+    }: {
+      force?: boolean;
+      announce?: boolean;
+    } = {}): Promise<ScriptStepItem[]> => {
+      if (!trainTaskId) {
+        const message = '未找到训练任务ID';
+        setStepListError(message);
+        if (announce) {
+          addMessage('system', message);
+        }
+        return [];
+      }
+
+      if (!force && scriptStepsRef.current.length > 0) {
+        return scriptStepsRef.current;
+      }
+
+      setStepListError(null);
+      setIsStepListLoading(true);
+
+      try {
+        const stepsResponse = await apiRequest<ApiResponse<ScriptStepItem[]>>({
+          endpoint: API_ENDPOINTS.QUERY_SCRIPT_STEP_LIST,
+          method: 'POST',
+          body: { trainTaskId, trainSubType: 'ability' },
+        });
+
+        if (!stepsResponse?.data?.length) {
+          throw new Error('获取步骤列表失败');
+        }
+
+        const steps = stepsResponse.data;
+        setScriptSteps(steps);
+        scriptStepsRef.current = steps;
+        buildStepNameMapping(steps);
+        return steps;
+      } catch (err) {
+        const message = (err as Error).message || '获取步骤列表失败';
+        setStepListError(message);
+        if (announce) {
+          addMessage('system', `错误: ${message}`);
+        }
+        return [];
+      } finally {
+        setIsStepListLoading(false);
+      }
+    },
+    [addMessage, buildStepNameMapping, trainTaskId],
+  );
+
   // 监听URL变化
   useEffect(() => {
     initialize();
@@ -335,6 +408,10 @@ const useAgentChat = () => {
           setActiveLogSessionId(null);
           activeLogSessionIdRef.current = null;
           stepNameMappingRef.current = {};
+          setScriptSteps([]);
+          scriptStepsRef.current = [];
+          setStepListError(null);
+          setIsStepListLoading(false);
           const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
           addMessage('system', `已切换到新任务: ${displayName}`);
         }
@@ -367,34 +444,18 @@ const useAgentChat = () => {
       setWorkflowState('FETCHING_STEPS');
       addMessage('system', '正在获取训练步骤...');
 
-      const stepsResponse = await apiRequest<ApiResponse<ScriptStepItem[]>>({
-        endpoint: API_ENDPOINTS.QUERY_SCRIPT_STEP_LIST,
-        method: 'POST',
-        body: { trainTaskId, trainSubType: 'ability' }, // 添加 trainSubType 参数
-      });
-
-      console.log('🔍 Steps Response:', JSON.stringify(stepsResponse, null, 2));
-
-      if (!stepsResponse?.data?.length) {
+      const steps = await fetchScriptSteps({ force: true });
+      if (!steps.length) {
         throw new Error('获取步骤列表失败');
       }
 
-      const steps = stepsResponse.data;
       console.log('📋 First Step:', JSON.stringify(steps[0], null, 2));
-
-      const stepNameMapping: Record<string, string> = {};
-      steps.forEach(step => {
-        if (step.stepDetailDTO?.stepName) {
-          stepNameMapping[step.stepId] = step.stepDetailDTO.stepName;
-        }
-      });
-      stepNameMappingRef.current = stepNameMapping;
 
       try {
         const newSession = await agentLogStorage.createSession({
           taskId: trainTaskId,
           taskName: logSessionName,
-          stepNameMapping,
+          stepNameMapping: stepNameMappingRef.current,
         });
         setActiveLogSessionId(newSession.id);
         activeLogSessionIdRef.current = newSession.id;
@@ -464,7 +525,15 @@ const useAgentChat = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [trainTaskId, addMessage, runCardForStep, fetchTrainTaskName, resolveCurrentProfileLabel, buildLogSessionName]);
+  }, [
+    trainTaskId,
+    addMessage,
+    runCardForStep,
+    fetchTrainTaskName,
+    resolveCurrentProfileLabel,
+    buildLogSessionName,
+    fetchScriptSteps,
+  ]);
 
   const stopAutoRun = useCallback(() => {
     if (!autoRunActiveRef.current) {
@@ -474,6 +543,70 @@ const useAgentChat = () => {
     autoRunTokenRef.current += 1;
     setIsAutoRunning(false);
   }, []);
+
+  const runDebugStep = useCallback(
+    async (stepId: string) => {
+      if (!trainTaskId) {
+        addMessage('system', '未找到训练任务ID');
+        return;
+      }
+
+      stopAutoRun();
+      setError(null);
+      setIsLoading(true);
+
+      try {
+        const steps =
+          scriptStepsRef.current.length > 0 ? scriptStepsRef.current : await fetchScriptSteps({ force: true });
+        if (!steps.length) {
+          throw new Error('获取步骤列表失败');
+        }
+
+        if (!activeLogSessionIdRef.current) {
+          const [taskName, profileLabel] = await Promise.all([
+            fetchTrainTaskName(trainTaskId),
+            resolveCurrentProfileLabel(),
+          ]);
+          const displayName = taskName?.trim() || `${trainTaskId.substring(0, 8)}...`;
+          const logSessionName = buildLogSessionName(displayName, profileLabel);
+
+          try {
+            const newSession = await agentLogStorage.createSession({
+              taskId: trainTaskId,
+              taskName: logSessionName,
+              stepNameMapping: stepNameMappingRef.current,
+            });
+            setActiveLogSessionId(newSession.id);
+            activeLogSessionIdRef.current = newSession.id;
+          } catch (logError) {
+            console.warn('⚠️ 日志初始化失败:', logError);
+          }
+        }
+
+        const stepName = getStepDisplayName(stepId);
+        addMessage('system', `调试模式：切换到步骤 ${stepName}`);
+        await runCardForStep(stepId, sessionIdRef.current);
+        setDialogueRound(prev => (prev === 0 ? 1 : prev));
+      } catch (err) {
+        setWorkflowState('ERROR');
+        setError((err as Error).message);
+        addMessage('system', `调试失败: ${(err as Error).message}`);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [
+      trainTaskId,
+      addMessage,
+      stopAutoRun,
+      fetchScriptSteps,
+      fetchTrainTaskName,
+      resolveCurrentProfileLabel,
+      buildLogSessionName,
+      getStepDisplayName,
+      runCardForStep,
+    ],
+  );
 
   // 发送用户消息
   const sendMessage = useCallback(
@@ -743,6 +876,10 @@ const useAgentChat = () => {
     activeLogSessionIdRef.current = null;
     stepNameMappingRef.current = {};
     dialogueRoundRef.current = 0;
+    setScriptSteps([]);
+    scriptStepsRef.current = [];
+    setStepListError(null);
+    setIsStepListLoading(false);
   }, [stopAutoRun]);
 
   return {
@@ -755,6 +892,9 @@ const useAgentChat = () => {
     error,
     dialogueRound,
     isAutoRunning,
+    scriptSteps,
+    isStepListLoading,
+    stepListError,
 
     // 操作
     startConversation,
@@ -762,6 +902,8 @@ const useAgentChat = () => {
     autoGenerate,
     startAutoRun,
     stopAutoRun,
+    fetchScriptSteps,
+    runDebugStep,
     reset,
     initialize,
   };

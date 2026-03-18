@@ -25,19 +25,25 @@ interface LLMConfig {
   temperature: number;
   topK: number;
   maxTokens: number;
+  maxHistoryRounds: number;
   serviceCode: string;
   enabled: boolean;
   systemPromptMode: SystemPromptMode;
   systemPrompt: string;
   studentProfileId: StudentProfileId;
   studentProfiles: StudentProfile[];
+  dialogueSimulationEnabled: boolean;
+  dialogueSimulationContent: string;
+  knowledgeBaseEnabled: boolean;
+  knowledgeBaseContent: string;
 }
 
-type LLMConfigInput = Partial<Omit<LLMConfig, 'model' | 'temperature' | 'topK' | 'maxTokens'>> & {
+type LLMConfigInput = Partial<Omit<LLMConfig, 'model' | 'temperature' | 'topK' | 'maxTokens' | 'maxHistoryRounds'>> & {
   model?: unknown;
   temperature?: unknown;
   topK?: unknown;
   maxTokens?: unknown;
+  maxHistoryRounds?: unknown;
 };
 
 interface LegacyStudentProfile {
@@ -57,6 +63,7 @@ const DEFAULT_LLM_MODEL = 'Doubao-1.5-pro-32k';
 const DEFAULT_LLM_TEMPERATURE = 0.7;
 const DEFAULT_LLM_TOP_K = 50;
 const DEFAULT_LLM_MAX_TOKENS = 200;
+const DEFAULT_LLM_MAX_HISTORY_ROUNDS = 5;
 
 const DEFAULT_STUDENT_PROFILES: StudentProfile[] = [
   {
@@ -90,12 +97,17 @@ const defaultConfig: LLMConfig = {
   temperature: DEFAULT_LLM_TEMPERATURE,
   topK: DEFAULT_LLM_TOP_K,
   maxTokens: DEFAULT_LLM_MAX_TOKENS,
+  maxHistoryRounds: DEFAULT_LLM_MAX_HISTORY_ROUNDS,
   serviceCode: 'SI_Ability',
   enabled: false,
   systemPromptMode: 'default',
   systemPrompt: '',
   studentProfileId: DEFAULT_PROFILE_ID,
   studentProfiles: DEFAULT_STUDENT_PROFILES,
+  dialogueSimulationEnabled: false,
+  dialogueSimulationContent: '',
+  knowledgeBaseEnabled: false,
+  knowledgeBaseContent: '',
 };
 
 // 可用的模型列表
@@ -221,6 +233,10 @@ const normalizePositiveInteger = (value: unknown, fallback: number) => {
   return parsed !== null && Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 };
 
+const normalizeBoolean = (value: unknown, fallback = false) => (typeof value === 'boolean' ? value : fallback);
+
+const normalizeOptionalText = (value: unknown) => (typeof value === 'string' ? value : '');
+
 const resolveLegacyProfiles = (legacy: LegacyLLMConfigV1): StudentProfile[] => {
   if (!legacy.studentProfiles || typeof legacy.studentProfiles !== 'object') {
     return DEFAULT_STUDENT_PROFILES;
@@ -253,9 +269,14 @@ const normalizeLLMConfig = (config: LLMConfigInput): LLMConfig => {
     temperature: normalizeTemperature(config.temperature),
     topK: normalizePositiveInteger(config.topK, DEFAULT_LLM_TOP_K),
     maxTokens: normalizePositiveInteger(config.maxTokens, DEFAULT_LLM_MAX_TOKENS),
+    maxHistoryRounds: normalizePositiveInteger(config.maxHistoryRounds, DEFAULT_LLM_MAX_HISTORY_ROUNDS),
     studentProfiles,
     studentProfileId:
       selectedId && studentProfiles.some(profile => profile.id === selectedId) ? selectedId : fallbackId,
+    dialogueSimulationEnabled: normalizeBoolean(config.dialogueSimulationEnabled),
+    dialogueSimulationContent: normalizeOptionalText(config.dialogueSimulationContent),
+    knowledgeBaseEnabled: normalizeBoolean(config.knowledgeBaseEnabled),
+    knowledgeBaseContent: normalizeOptionalText(config.knowledgeBaseContent),
   };
 };
 
@@ -314,6 +335,7 @@ const llmConfigStorage = {
 export type { LLMConfig, LLMConfigInput, StudentProfile, StudentProfileId, SystemPromptMode };
 export {
   AVAILABLE_MODELS,
+  DEFAULT_LLM_MAX_HISTORY_ROUNDS,
   DEFAULT_LLM_MAX_TOKENS,
   DEFAULT_LLM_MODEL,
   DEFAULT_LLM_TEMPERATURE,

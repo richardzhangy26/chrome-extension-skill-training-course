@@ -79,7 +79,14 @@ const resolveStudentProfile = (config: LLMConfig) => {
   );
 };
 
-const buildUserMessage = (aiQuestion: string, profile: { label: string; description: string; style: string }) => {
+const buildUserMessage = (
+  aiQuestion: string,
+  profile: { label: string; description: string; style: string },
+  config: Pick<
+    LLMConfig,
+    'dialogueSimulationEnabled' | 'dialogueSimulationContent' | 'knowledgeBaseEnabled' | 'knowledgeBaseContent'
+  >,
+) => {
   const sections = [
     '## 角色设定',
     `学生档位: ${profile.label}`,
@@ -87,6 +94,16 @@ const buildUserMessage = (aiQuestion: string, profile: { label: string; descript
     `表达风格: ${profile.style}`,
     '',
   ];
+
+  const dialogueSimulationContent = config.dialogueSimulationEnabled ? config.dialogueSimulationContent.trim() : '';
+  if (dialogueSimulationContent) {
+    sections.push('## 档位示例对话 (如有匹配请优先引用或改写，优先级最高)', dialogueSimulationContent, '');
+  }
+
+  const knowledgeBaseContent = config.knowledgeBaseEnabled ? config.knowledgeBaseContent.trim() : '';
+  if (knowledgeBaseContent) {
+    sections.push('## 参考知识库 (可结合使用)', knowledgeBaseContent, '');
+  }
 
   sections.push('## 当前问题', aiQuestion, '');
 
@@ -139,9 +156,8 @@ const extractModelIds = (data: unknown) => {
   }
 
   if (data && typeof data === 'object' && Array.isArray((data as OpenAIModelsResponse).data)) {
-    return (data as OpenAIModelsResponse).data
-      .map(item => (typeof item?.id === 'string' ? item.id : ''))
-      .filter(Boolean);
+    const modelItems = (data as OpenAIModelsResponse).data ?? [];
+    return modelItems.map(item => (typeof item?.id === 'string' ? item.id : '')).filter(Boolean);
   }
 
   return [];
@@ -208,10 +224,10 @@ const generateStudentAnswer = async (
   try {
     const systemPrompt = resolveSystemPrompt(config);
     const profile = resolveStudentProfile(config);
-    const userMessage = buildUserMessage(aiQuestion, profile);
+    const userMessage = buildUserMessage(aiQuestion, profile, config);
 
     const historyMessages: ChatMessage[] = [];
-    for (const turn of conversationHistory.slice(-5)) {
+    for (const turn of conversationHistory.slice(-config.maxHistoryRounds)) {
       historyMessages.push({ role: 'assistant', content: turn.ai });
       historyMessages.push({ role: 'user', content: turn.student });
     }

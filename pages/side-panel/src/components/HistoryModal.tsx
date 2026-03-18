@@ -359,7 +359,7 @@ const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
                               className="cursor-pointer rounded-md bg-slate-50 px-2 py-1.5 transition-colors hover:bg-slate-100">
                               <div className="flex items-center justify-between">
                                 <span className="flex items-center gap-1">
-                                  {entry.type === 'runCard' ? 'RunCard' : '对话'}
+                                  {entry.source === 'runCard' ? 'RunCard' : '对话'}
                                   <span className="text-[10px] text-slate-400">{isExpanded ? '▼' : '▶'}</span>
                                 </span>
                                 <span>

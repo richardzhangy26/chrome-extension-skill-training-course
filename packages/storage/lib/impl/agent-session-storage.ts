@@ -5,7 +5,7 @@
 import { createStorage, StorageEnum } from '../base/index.js';
 import type { BaseStorageType } from '../base/index.js';
 // 类型定义 - 避免循环依赖，在此处内联定义
-export type WorkflowState =
+type WorkflowState =
   | 'IDLE'
   | 'FETCHING_STEPS'
   | 'FETCHING_FIRST_STEP'
@@ -14,7 +14,7 @@ export type WorkflowState =
   | 'COMPLETED'
   | 'ERROR';
 
-export interface AgentSession {
+interface AgentSession {
   trainTaskId: string;
   sessionId: string | null;
   currentStepId: string | null;
@@ -39,7 +39,7 @@ const storage = createStorage<AgentSession>(STORAGE_KEY_AGENT_SESSION, DEFAULT_S
   liveUpdate: true,
 });
 
-export interface AgentSessionStorageType extends BaseStorageType<AgentSession> {
+interface AgentSessionStorageType extends BaseStorageType<AgentSession> {
   updateTrainTaskId: (trainTaskId: string) => Promise<void>;
   updateSessionId: (sessionId: string) => Promise<void>;
   updateCurrentStepId: (stepId: string) => Promise<void>;
@@ -48,7 +48,7 @@ export interface AgentSessionStorageType extends BaseStorageType<AgentSession> {
   reset: () => Promise<void>;
 }
 
-export const agentSessionStorage: AgentSessionStorageType = {
+const agentSessionStorage: AgentSessionStorageType = {
   ...storage,
 
   updateTrainTaskId: async (trainTaskId: string) => {
@@ -98,3 +98,6 @@ export const agentSessionStorage: AgentSessionStorageType = {
     });
   },
 };
+
+export { agentSessionStorage };
+export type { WorkflowState, AgentSession, AgentSessionStorageType };

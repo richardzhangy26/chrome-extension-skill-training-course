@@ -5,6 +5,7 @@
 import { fetchAvailableTextModels, testLLMConfig } from '../services/llm-service';
 import {
   AVAILABLE_MODELS,
+  DEFAULT_LLM_MAX_HISTORY_ROUNDS,
   DEFAULT_LLM_MAX_TOKENS,
   DEFAULT_LLM_MODEL,
   DEFAULT_LLM_TEMPERATURE,
@@ -47,10 +48,11 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-interface LLMConfigDraft extends Omit<LLMConfig, 'temperature' | 'topK' | 'maxTokens'> {
+interface LLMConfigDraft extends Omit<LLMConfig, 'temperature' | 'topK' | 'maxTokens' | 'maxHistoryRounds'> {
   temperature: string;
   topK: string;
   maxTokens: string;
+  maxHistoryRounds: string;
 }
 
 interface ModelOption {
@@ -67,12 +69,17 @@ const createDefaultConfig = (): LLMConfig => ({
   temperature: DEFAULT_LLM_TEMPERATURE,
   topK: DEFAULT_LLM_TOP_K,
   maxTokens: DEFAULT_LLM_MAX_TOKENS,
+  maxHistoryRounds: DEFAULT_LLM_MAX_HISTORY_ROUNDS,
   serviceCode: 'SI_Ability',
   enabled: false,
   systemPromptMode: 'default',
   systemPrompt: '',
   studentProfileId: DEFAULT_PROFILE_ID,
   studentProfiles: DEFAULT_STUDENT_PROFILES,
+  dialogueSimulationEnabled: false,
+  dialogueSimulationContent: '',
+  knowledgeBaseEnabled: false,
+  knowledgeBaseContent: '',
 });
 
 const createConfigDraft = (config: LLMConfig): LLMConfigDraft => ({
@@ -80,6 +87,7 @@ const createConfigDraft = (config: LLMConfig): LLMConfigDraft => ({
   temperature: String(config.temperature),
   topK: String(config.topK),
   maxTokens: String(config.maxTokens),
+  maxHistoryRounds: String(config.maxHistoryRounds),
 });
 
 const normalizeDraftConfig = (config: LLMConfigDraft) =>
@@ -88,6 +96,7 @@ const normalizeDraftConfig = (config: LLMConfigDraft) =>
     temperature: config.temperature,
     topK: config.topK,
     maxTokens: config.maxTokens,
+    maxHistoryRounds: config.maxHistoryRounds,
   });
 
 const createConnectionSignature = (config: LLMConfig) =>
@@ -437,6 +446,27 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 控制本次最多生成多少内容，越大回答越长。数值留空或非法时会自动恢复默认值：temperature{' '}
                 {DEFAULT_LLM_TEMPERATURE}、topK {DEFAULT_LLM_TOP_K}、maxToken {DEFAULT_LLM_MAX_TOKENS}。
               </p>
+
+              {/* 最大历史轮数 */}
+              <div>
+                <label htmlFor="maxHistoryRounds" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  最大历史轮数
+                </label>
+                <input
+                  id="maxHistoryRounds"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  step="1"
+                  value={config.maxHistoryRounds}
+                  onChange={e => setConfig(prev => ({ ...prev, maxHistoryRounds: e.target.value }))}
+                  placeholder={String(DEFAULT_LLM_MAX_HISTORY_ROUNDS)}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  发送给大模型的最大对话历史轮数，留空或非法时默认 {DEFAULT_LLM_MAX_HISTORY_ROUNDS} 轮。
+                </p>
+              </div>
 
               {/* API URL */}
               <div>

@@ -5,9 +5,9 @@
 import { createStorage, StorageEnum } from '../base/index.js';
 import type { BaseStorageType } from '../base/index.js';
 // 类型定义 - 避免循环依赖，在此处内联定义
-export type MessageRole = 'user' | 'assistant' | 'system';
+type MessageRole = 'user' | 'assistant' | 'system';
 
-export interface ChatMessage {
+interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
@@ -25,7 +25,7 @@ const storage = createStorage<ChatMessage[]>(STORAGE_KEY_AGENT_CHAT, DEFAULT_MES
   liveUpdate: true,
 });
 
-export interface AgentChatStorageType extends BaseStorageType<ChatMessage[]> {
+interface AgentChatStorageType extends BaseStorageType<ChatMessage[]> {
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => Promise<ChatMessage>;
   clearMessages: () => Promise<void>;
   getMessagesByStepId: (stepId: string) => Promise<ChatMessage[]>;
@@ -33,11 +33,9 @@ export interface AgentChatStorageType extends BaseStorageType<ChatMessage[]> {
 }
 
 // 生成唯一ID
-const generateId = (): string => {
-  return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-};
+const generateId = (): string => `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-export const agentChatStorage: AgentChatStorageType = {
+const agentChatStorage: AgentChatStorageType = {
   ...storage,
 
   addMessage: async (message: Omit<ChatMessage, 'id' | 'timestamp'>): Promise<ChatMessage> => {
@@ -65,3 +63,6 @@ export const agentChatStorage: AgentChatStorageType = {
     return messages.length > 0 ? messages[messages.length - 1] : null;
   },
 };
+
+export { agentChatStorage };
+export type { MessageRole, ChatMessage, AgentChatStorageType };

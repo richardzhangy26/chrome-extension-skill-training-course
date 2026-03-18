@@ -4,6 +4,7 @@ import { HistoryModal, HistoryIcon } from './components/HistoryModal';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
 import { SimulationConfigModal } from './components/SimulationConfigModal';
 import { useAgentChat } from './hooks/useAgentChat';
+import { normalizeDialogueSimulationContent } from './services/llm-service';
 import { llmConfigStorage } from '@extension/storage';
 import { useRef, useEffect, useState } from 'react';
 import type { LLMConfig } from '@extension/storage';
@@ -194,9 +195,6 @@ const createSimulationModeState = (): SimulationModeState => ({
   knowledgeBaseEnabled: false,
   knowledgeBaseContent: '',
 });
-
-const getSimulationModeSummary = (config: SimulationModeState) =>
-  `模拟对话：${config.dialogueSimulationEnabled ? '开' : '关'} · 知识库：${config.knowledgeBaseEnabled ? '开' : '关'}`;
 
 // ============ Header组件 ============
 const Header = ({
@@ -412,7 +410,10 @@ const ChatInput = ({
   isAutoRunning,
   onOpenDebug,
   onOpenSimulationConfig,
-  simulationSummary,
+  simulationConfig,
+  onToggleDialogueSimulation,
+  onToggleKnowledgeBase,
+  toggleDisabled,
   debugDisabled,
   disabled,
 }: {
@@ -423,12 +424,19 @@ const ChatInput = ({
   isAutoRunning: boolean;
   onOpenDebug: () => void;
   onOpenSimulationConfig: () => void;
-  simulationSummary: string;
+  simulationConfig: SimulationModeState;
+  onToggleDialogueSimulation: (enabled: boolean) => void;
+  onToggleKnowledgeBase: (enabled: boolean) => void;
+  toggleDisabled: boolean;
   debugDisabled: boolean;
   disabled: boolean;
 }) => {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hasDialogueSimulationContent = Boolean(
+    normalizeDialogueSimulationContent(simulationConfig.dialogueSimulationContent),
+  );
+  const hasKnowledgeBaseContent = Boolean(simulationConfig.knowledgeBaseContent.trim());
 
   const handleSend = () => {
     const trimmed = value.trim();
@@ -483,7 +491,34 @@ const ChatInput = ({
             <Icons.Book />
             <span>对话模拟 / 知识库</span>
           </button>
-          <span className="text-[11px] text-slate-400">{simulationSummary}</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={simulationConfig.dialogueSimulationEnabled}
+                disabled={toggleDisabled}
+                onChange={event => onToggleDialogueSimulation(event.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 disabled:cursor-not-allowed"
+              />
+              <span>模拟对话</span>
+              {simulationConfig.dialogueSimulationEnabled && !hasDialogueSimulationContent && (
+                <span className="text-amber-600">未识别内容</span>
+              )}
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={simulationConfig.knowledgeBaseEnabled}
+                disabled={toggleDisabled}
+                onChange={event => onToggleKnowledgeBase(event.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 disabled:cursor-not-allowed"
+              />
+              <span>知识库</span>
+              {simulationConfig.knowledgeBaseEnabled && !hasKnowledgeBaseContent && (
+                <span className="text-amber-600">未配置内容</span>
+              )}
+            </label>
+          </div>
         </div>
       </div>
       <div className="flex items-end gap-3">
@@ -691,6 +726,22 @@ const SidePanel = () => {
     await runDebugStep(stepId);
   };
 
+  const handleToggleDialogueSimulation = async (enabled: boolean) => {
+    setSimulationConfig(prev => ({
+      ...prev,
+      dialogueSimulationEnabled: enabled,
+    }));
+    await llmConfigStorage.setConfig({ dialogueSimulationEnabled: enabled });
+  };
+
+  const handleToggleKnowledgeBase = async (enabled: boolean) => {
+    setSimulationConfig(prev => ({
+      ...prev,
+      knowledgeBaseEnabled: enabled,
+    }));
+    await llmConfigStorage.setConfig({ knowledgeBaseEnabled: enabled });
+  };
+
   return (
     <div className="flex h-screen flex-col bg-slate-50">
       {/* 头部 */}
@@ -718,7 +769,14 @@ const SidePanel = () => {
           isAutoRunning={isAutoRunning}
           onOpenDebug={() => setIsDebugOpen(true)}
           onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
-          simulationSummary={getSimulationModeSummary(simulationConfig)}
+          simulationConfig={simulationConfig}
+          onToggleDialogueSimulation={enabled => {
+            void handleToggleDialogueSimulation(enabled);
+          }}
+          onToggleKnowledgeBase={enabled => {
+            void handleToggleKnowledgeBase(enabled);
+          }}
+          toggleDisabled={isLoading}
           debugDisabled={isLoading}
           disabled={isLoading || isCompleted}
         />

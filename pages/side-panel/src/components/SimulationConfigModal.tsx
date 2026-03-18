@@ -2,6 +2,7 @@
  * 对话模拟 / 知识库配置弹窗
  */
 
+import { normalizeDialogueSimulationContent } from '../services/llm-service';
 import { llmConfigStorage } from '@extension/storage';
 import { useEffect, useState } from 'react';
 import type { LLMConfig } from '@extension/storage';
@@ -66,7 +67,12 @@ const SimulationConfigModal = ({ isOpen, onClose }: SimulationConfigModalProps) 
     onClose();
   };
 
+  const normalizedDialogueSimulationContent = normalizeDialogueSimulationContent(draft.dialogueSimulationContent);
   const showDialogueEmptyHint = draft.dialogueSimulationEnabled && !draft.dialogueSimulationContent.trim();
+  const showDialogueFormatHint =
+    draft.dialogueSimulationEnabled &&
+    Boolean(draft.dialogueSimulationContent.trim()) &&
+    !normalizedDialogueSimulationContent;
   const showKnowledgeBaseEmptyHint = draft.knowledgeBaseEnabled && !draft.knowledgeBaseContent.trim();
 
   return (
@@ -99,7 +105,9 @@ const SimulationConfigModal = ({ isOpen, onClose }: SimulationConfigModalProps) 
               <div>
                 <h3 className="text-sm font-semibold text-slate-800">模拟对话</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  请粘贴学生档位的参考对话。自动回复时会优先引用或改写高相关示例。
+                  请粘贴历史对话日志，或按 <code className="rounded bg-slate-100 px-1 py-0.5">AI:</code> /{' '}
+                  <code className="rounded bg-slate-100 px-1 py-0.5">用户:</code> 一问一答整理的内容。系统会自动忽略{' '}
+                  <code className="rounded bg-slate-100 px-1 py-0.5">Step:</code> 和分隔线等元信息。
                 </p>
               </div>
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">
@@ -119,7 +127,7 @@ const SimulationConfigModal = ({ isOpen, onClose }: SimulationConfigModalProps) 
 
             <div className="mt-3">
               <label htmlFor="dialogueSimulationContent" className="mb-1.5 block text-xs font-medium text-slate-600">
-                请粘贴模拟对话的内容
+                请粘贴历史日志或模拟对话内容
               </label>
               <textarea
                 id="dialogueSimulationContent"
@@ -131,11 +139,18 @@ const SimulationConfigModal = ({ isOpen, onClose }: SimulationConfigModalProps) 
                   }))
                 }
                 rows={10}
-                placeholder="例如：\n老师：你准备好了吗？\n学生：准备好了。\n..."
+                placeholder={
+                  '例如：\nStep: 开场确认 | step_id: demo-step | 第 1 轮 | 来源: chat\nAI: 你准备好了吗？\n用户: 准备好了。\n----------------------------------------'
+                }
                 className="min-h-[220px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
               />
               {showDialogueEmptyHint && (
                 <p className="mt-2 text-xs text-amber-600">当前已启用，但内容为空，运行时不会注入模拟对话片段。</p>
+              )}
+              {showDialogueFormatHint && (
+                <p className="mt-2 text-xs text-amber-600">
+                  未识别到有效的一问一答记录，请按历史日志中的 <code>AI:</code> / <code>用户:</code> 格式粘贴。
+                </p>
               )}
             </div>
           </section>

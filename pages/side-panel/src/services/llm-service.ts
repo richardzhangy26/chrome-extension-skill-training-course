@@ -31,6 +31,8 @@ interface OpenAIModelsResponse {
   }>;
 }
 
+const DIALOGUE_SIMULATION_LINE_PATTERN = /^(AI|用户)\s*[：:]\s*(.+)$/;
+
 const NON_TEXT_MODEL_PATTERNS = [
   /embedding/i,
   /image/i,
@@ -79,6 +81,23 @@ const resolveStudentProfile = (config: LLMConfig) => {
   );
 };
 
+const normalizeDialogueSimulationContent = (content: string) =>
+  content
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .map(line => {
+      const matched = line.match(DIALOGUE_SIMULATION_LINE_PATTERN);
+      if (!matched) {
+        return '';
+      }
+
+      const [, role, text] = matched;
+      return text.trim() ? `${role}: ${text.trim()}` : '';
+    })
+    .filter(Boolean)
+    .join('\n');
+
 const buildUserMessage = (
   aiQuestion: string,
   profile: { label: string; description: string; style: string },
@@ -95,7 +114,9 @@ const buildUserMessage = (
     '',
   ];
 
-  const dialogueSimulationContent = config.dialogueSimulationEnabled ? config.dialogueSimulationContent.trim() : '';
+  const dialogueSimulationContent = config.dialogueSimulationEnabled
+    ? normalizeDialogueSimulationContent(config.dialogueSimulationContent)
+    : '';
   if (dialogueSimulationContent) {
     sections.push('## 档位示例对话 (如有匹配请优先引用或改写，优先级最高)', dialogueSimulationContent, '');
   }
@@ -306,4 +327,4 @@ const testLLMConfig = async (config: LLMConfig): Promise<LLMResponse> => {
   }
 };
 
-export { fetchAvailableTextModels, generateStudentAnswer, testLLMConfig };
+export { fetchAvailableTextModels, generateStudentAnswer, normalizeDialogueSimulationContent, testLLMConfig };

@@ -3,7 +3,7 @@
  * 参考 Python: auto_script_train.py 中的 _call_doubao_post 方法
  */
 
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_PROFILE_ID, llmConfigStorage } from '@extension/storage';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_PROFILE_ID, llmConfigStorage, normalizeLLMConfig } from '@extension/storage';
 import type { LLMConfig } from '@extension/storage';
 
 interface ChatMessage {
@@ -15,6 +15,14 @@ interface LLMResponse {
   success: boolean;
   content?: string;
   error?: string;
+}
+
+interface LLMApiResponse {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
 }
 
 const resolveSystemPrompt = (config: LLMConfig) => {
@@ -48,6 +56,16 @@ const buildUserMessage = (aiQuestion: string, profile: { label: string; descript
   return sections.join('\n');
 };
 
+const buildRequestPayload = (config: LLMConfig, messages: ChatMessage[]) => ({
+  model: config.model,
+  messages,
+  temperature: config.temperature,
+  max_tokens: config.maxTokens,
+  top_k: config.topK,
+});
+
+const extractResponseContent = (data: LLMApiResponse) => data.choices?.[0]?.message?.content?.trim();
+
 /**
  * 调用豆包模型生成学生回答
  */
@@ -56,7 +74,7 @@ const generateStudentAnswer = async (
   conversationHistory: Array<{ ai: string; student: string }> = [],
 ): Promise<LLMResponse> => {
   // 获取配置
-  const config = await llmConfigStorage.get();
+  const config = normalizeLLMConfig(await llmConfigStorage.get());
 
   if (!config.apiKey) {
     return { success: false, error: '请先配置 LLM API Key' };
@@ -87,13 +105,7 @@ const generateStudentAnswer = async (
         'api-key': config.apiKey,
         'service-code': config.serviceCode,
       },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 200,
-        top_p: 0.9,
-      }),
+      body: JSON.stringify(buildRequestPayload(config, messages)),
     });
 
     if (!response.ok) {
@@ -102,8 +114,8 @@ const generateStudentAnswer = async (
       return { success: false, error: `API 请求失败: ${response.status}` };
     }
 
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content?.trim();
+    const data = (await response.json()) as LLMApiResponse;
+    const content = extractResponseContent(data);
 
     if (!content) {
       return { success: false, error: '模型未返回有效内容' };
@@ -122,25 +134,32 @@ const generateStudentAnswer = async (
  */
 const testLLMConfig = async (config: LLMConfig): Promise<LLMResponse> => {
   try {
-    const response = await fetch(config.apiUrl, {
+    const normalizedConfig = normalizeLLMConfig(config);
+    const response = await fetch(normalizedConfig.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'api-key': config.apiKey,
-        'service-code': config.serviceCode,
+        'api-key': normalizedConfig.apiKey,
+        'service-code': normalizedConfig.serviceCode,
       },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [{ role: 'user', content: '你好' }],
-        max_tokens: 10,
-      }),
+      body: JSON.stringify(
+        buildRequestPayload(normalizedConfig, [{ role: 'user', content: '你好，请回复“测试成功”。' }]),
+      ),
     });
 
     if (!response.ok) {
-      return { success: false, error: `API 连接失败: ${response.status}` };
+      const errorText = await response.text();
+      return { success: false, error: `API 连接失败: ${response.status}${errorText ? ` - ${errorText}` : ''}` };
     }
 
-    return { success: true, content: '配置有效' };
+    const data = (await response.json()) as LLMApiResponse;
+    const content = extractResponseContent(data);
+
+    if (!content) {
+      return { success: false, error: '模型未返回有效内容' };
+    }
+
+    return { success: true, content };
   } catch (error) {
     return { success: false, error: `连接失败: ${(error as Error).message}` };
   }

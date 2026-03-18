@@ -30,6 +30,10 @@ interface ApiRequestPayload {
 const AUTH_COOKIE_URL = 'https://hike-teaching-center.polymas.com/';
 const AUTH_COOKIE_NAME = 'ai-poly';
 const API_BASE_URL = 'https://cloudapi.polymas.com';
+const RETRYABLE_HTTP_STATUS = new Set([502, 503, 504]);
+const MAX_RETRY_COUNT = 2;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ============ 初始化 ============
 exampleThemeStorage.get().then(theme => {
@@ -59,7 +63,7 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
-async function handleMessage(message: BackgroundMessage): Promise<BackgroundResponse> {
+const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResponse> => {
   switch (message.type) {
     case 'GET_CURRENT_TAB_URL':
       return handleGetCurrentTabUrl();
@@ -76,10 +80,10 @@ async function handleMessage(message: BackgroundMessage): Promise<BackgroundResp
     default:
       return { success: false, error: `Unknown message type: ${message.type}` };
   }
-}
+};
 
 // ============ 获取当前标签页URL ============
-async function handleGetCurrentTabUrl(): Promise<BackgroundResponse<string>> {
+const handleGetCurrentTabUrl = async (): Promise<BackgroundResponse<string>> => {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -91,10 +95,10 @@ async function handleGetCurrentTabUrl(): Promise<BackgroundResponse<string>> {
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
-}
+};
 
 // ============ 获取认证信息 ============
-async function handleGetAuth(): Promise<BackgroundResponse<AuthInfo>> {
+const handleGetAuth = async (): Promise<BackgroundResponse<AuthInfo>> => {
   try {
     // 从指定域读取授权 Cookie
     const authCookie = await chrome.cookies.get({
@@ -111,10 +115,10 @@ async function handleGetAuth(): Promise<BackgroundResponse<AuthInfo>> {
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
-}
+};
 
 // ============ 从URL提取trainTaskId ============
-async function handleExtractTrainTaskId(url?: string): Promise<BackgroundResponse<string>> {
+const handleExtractTrainTaskId = async (url?: string): Promise<BackgroundResponse<string>> => {
   try {
     let targetUrl = url;
 
@@ -139,10 +143,10 @@ async function handleExtractTrainTaskId(url?: string): Promise<BackgroundRespons
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
-}
+};
 
 // ============ API请求代理 ============
-async function handleApiRequest(payload: ApiRequestPayload): Promise<BackgroundResponse<unknown>> {
+const handleApiRequest = async (payload: ApiRequestPayload): Promise<BackgroundResponse<unknown>> => {
   try {
     const { endpoint, method, body, headers = {} } = payload;
 
@@ -169,35 +173,52 @@ async function handleApiRequest(payload: ApiRequestPayload): Promise<BackgroundR
     // 注意：在Background Script中无法设置Cookie头，但credentials: 'include'会自动携带Cookie
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-    const response = await fetch(url, {
-      method,
-      headers: requestHeaders,
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'include',
-    });
+    for (let attempt = 0; attempt <= MAX_RETRY_COUNT; attempt += 1) {
+      const response = await fetch(url, {
+        method,
+        headers: requestHeaders,
+        body: body ? JSON.stringify(body) : undefined,
+        credentials: 'include',
+      });
 
-    if (!response.ok) {
-      return { success: false, error: `HTTP error: ${response.status}` };
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🔍 API Response:', endpoint, JSON.stringify(data, null, 2));
+        return { success: true, data };
+      }
+
+      if (RETRYABLE_HTTP_STATUS.has(response.status) && attempt < MAX_RETRY_COUNT) {
+        const delayMs = 300 * 2 ** attempt;
+        console.warn(
+          `⚠️ API 请求异常(${response.status})，${delayMs}ms 后重试（${attempt + 1}/${MAX_RETRY_COUNT}）：${endpoint}`,
+        );
+        await sleep(delayMs);
+        continue;
+      }
+
+      const responseText = await response.text();
+      const errorSuffix = responseText ? ` - ${responseText.slice(0, 200)}` : '';
+      return { success: false, error: `HTTP error: ${response.status}${errorSuffix}` };
     }
 
-    const data = await response.json();
-    console.log('🔍 API Response:', endpoint, JSON.stringify(data, null, 2));
-    return { success: true, data };
+    return { success: false, error: 'API request failed after retries' };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
-}
+};
 
 // ============ 监听标签页URL变化 ============
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url && tab.url?.includes('hike-teaching-center.polymas.com')) {
     // 通知Side Panel URL已变化
-    chrome.runtime.sendMessage({
-      type: 'TAB_URL_CHANGED',
-      payload: { tabId, url: changeInfo.url },
-    }).catch(() => {
-      // Side Panel可能未打开，忽略错误
-    });
+    chrome.runtime
+      .sendMessage({
+        type: 'TAB_URL_CHANGED',
+        payload: { tabId, url: changeInfo.url },
+      })
+      .catch(() => {
+        // Side Panel可能未打开，忽略错误
+      });
   }
 });
 chrome.runtime.onInstalled.addListener(() => {

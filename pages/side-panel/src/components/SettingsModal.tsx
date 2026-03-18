@@ -5,10 +5,15 @@
 import { testLLMConfig } from '../services/llm-service';
 import {
   AVAILABLE_MODELS,
+  DEFAULT_LLM_MAX_TOKENS,
+  DEFAULT_LLM_MODEL,
+  DEFAULT_LLM_TEMPERATURE,
+  DEFAULT_LLM_TOP_K,
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_PROFILE_ID,
   DEFAULT_STUDENT_PROFILES,
   llmConfigStorage,
+  normalizeLLMConfig,
 } from '@extension/storage';
 import { useState, useEffect } from 'react';
 import type { StudentProfile, LLMConfig } from '@extension/storage';
@@ -42,35 +47,92 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
-  const [config, setConfig] = useState<LLMConfig>({
-    apiKey: '',
-    apiUrl: 'http://llm-service.polymas.com/api/openai/v1/chat/completions',
-    model: 'Doubao-1.5-pro-32k',
-    serviceCode: 'SI_Ability',
-    enabled: false,
-    systemPromptMode: 'default',
-    systemPrompt: '',
-    studentProfileId: DEFAULT_PROFILE_ID,
-    studentProfiles: DEFAULT_STUDENT_PROFILES,
+interface LLMConfigDraft extends Omit<LLMConfig, 'temperature' | 'topK' | 'maxTokens'> {
+  temperature: string;
+  topK: string;
+  maxTokens: string;
+}
+
+const createDefaultConfig = (): LLMConfig => ({
+  apiKey: '',
+  apiUrl: 'http://llm-service.polymas.com/api/openai/v1/chat/completions',
+  model: DEFAULT_LLM_MODEL,
+  temperature: DEFAULT_LLM_TEMPERATURE,
+  topK: DEFAULT_LLM_TOP_K,
+  maxTokens: DEFAULT_LLM_MAX_TOKENS,
+  serviceCode: 'SI_Ability',
+  enabled: false,
+  systemPromptMode: 'default',
+  systemPrompt: '',
+  studentProfileId: DEFAULT_PROFILE_ID,
+  studentProfiles: DEFAULT_STUDENT_PROFILES,
+});
+
+const createConfigDraft = (config: LLMConfig): LLMConfigDraft => ({
+  ...config,
+  temperature: String(config.temperature),
+  topK: String(config.topK),
+  maxTokens: String(config.maxTokens),
+});
+
+const normalizeDraftConfig = (config: LLMConfigDraft) =>
+  normalizeLLMConfig({
+    ...config,
+    temperature: config.temperature,
+    topK: config.topK,
+    maxTokens: config.maxTokens,
   });
+
+const createConnectionSignature = (config: LLMConfig) =>
+  JSON.stringify({
+    apiKey: config.apiKey,
+    apiUrl: config.apiUrl,
+    serviceCode: config.serviceCode,
+    model: config.model,
+    temperature: config.temperature,
+    topK: config.topK,
+    maxTokens: config.maxTokens,
+  });
+
+const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
+  const [config, setConfig] = useState<LLMConfigDraft>(() => createConfigDraft(createDefaultConfig()));
   const [activeTab, setActiveTab] = useState<'llm' | 'system' | 'role'>('llm');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [testedConnectionSignature, setTestedConnectionSignature] = useState<string | null>(null);
 
   // 加载配置
   useEffect(() => {
     if (isOpen) {
-      llmConfigStorage.get().then(setConfig);
-      setTestResult(null);
-      setActiveTab('llm');
+      llmConfigStorage.get().then(loadedConfig => {
+        const normalizedConfig = normalizeLLMConfig(loadedConfig);
+        setConfig(createConfigDraft(normalizedConfig));
+        setTestedConnectionSignature(createConnectionSignature(normalizedConfig));
+        setTestResult(null);
+        setActiveTab('llm');
+      });
     }
   }, [isOpen]);
 
+  const normalizedConfig = normalizeDraftConfig(config);
+  const currentConnectionSignature = createConnectionSignature(normalizedConfig);
+  const requiresRetest = currentConnectionSignature !== testedConnectionSignature;
+  const canSave = !requiresRetest;
+
+  useEffect(() => {
+    if (testResult && requiresRetest) {
+      setTestResult(null);
+    }
+  }, [requiresRetest, testResult]);
+
   // 测试配置
   const handleTest = async () => {
-    if (!config.apiKey.trim()) {
+    const nextConfig = normalizeDraftConfig(config);
+
+    setConfig(createConfigDraft(nextConfig));
+
+    if (!nextConfig.apiKey.trim()) {
       setTestResult({ success: false, message: '请先输入 API Key' });
       return;
     }
@@ -78,22 +140,34 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
     setIsTesting(true);
     setTestResult(null);
 
-    const result = await testLLMConfig(config);
+    const result = await testLLMConfig(nextConfig);
     setTestResult({
       success: result.success,
       message: result.success ? '✅ 连接成功！' : `❌ ${result.error}`,
     });
+
+    if (result.success) {
+      setTestedConnectionSignature(createConnectionSignature(nextConfig));
+    }
 
     setIsTesting(false);
   };
 
   // 保存配置
   const handleSave = async () => {
+    const nextConfig = normalizeDraftConfig(config);
+
+    if (createConnectionSignature(nextConfig) !== testedConnectionSignature) {
+      setTestResult({ success: false, message: '❌ 连接参数已变更，请先测试连接并通过后再保存' });
+      return;
+    }
+
     setIsSaving(true);
     await llmConfigStorage.setConfig({
-      ...config,
-      enabled: config.apiKey.trim().length > 0,
+      ...nextConfig,
+      enabled: nextConfig.apiKey.trim().length > 0,
     });
+    setConfig(createConfigDraft(nextConfig));
     setIsSaving(false);
     onClose();
   };
@@ -231,23 +305,82 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 <p className="mt-1 text-xs text-slate-400">需要企业微信申请 llm-service 获取</p>
               </div>
 
-              {/* 模型选择 */}
+              {/* 模型设置 */}
               <div>
                 <label htmlFor="model" className="mb-1.5 block text-sm font-medium text-slate-700">
                   模型
                 </label>
-                <select
+                <input
                   id="model"
+                  list="available-models"
+                  type="text"
                   value={config.model}
                   onChange={e => setConfig(prev => ({ ...prev, model: e.target.value }))}
-                  className="w-full cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100">
+                  placeholder={DEFAULT_LLM_MODEL}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                />
+                <datalist id="available-models">
                   {AVAILABLE_MODELS.map(model => (
-                    <option key={model.value} value={model.value}>
-                      {model.label}
-                    </option>
+                    <option key={model.value} value={model.value} label={model.label} />
                   ))}
-                </select>
+                </datalist>
+                <p className="mt-1 text-xs text-slate-400">支持输入任意模型名；留空时默认使用 {DEFAULT_LLM_MODEL}</p>
               </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="temperature" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Temperature
+                  </label>
+                  <input
+                    id="temperature"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.1"
+                    value={config.temperature}
+                    onChange={e => setConfig(prev => ({ ...prev, temperature: e.target.value }))}
+                    placeholder={String(DEFAULT_LLM_TEMPERATURE)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="topK" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Top K
+                  </label>
+                  <input
+                    id="topK"
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    step="1"
+                    value={config.topK}
+                    onChange={e => setConfig(prev => ({ ...prev, topK: e.target.value }))}
+                    placeholder={String(DEFAULT_LLM_TOP_K)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="maxTokens" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Max Token
+                  </label>
+                  <input
+                    id="maxTokens"
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    step="1"
+                    value={config.maxTokens}
+                    onChange={e => setConfig(prev => ({ ...prev, maxTokens: e.target.value }))}
+                    placeholder={String(DEFAULT_LLM_MAX_TOKENS)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-slate-400">
+                数值留空或非法时会自动恢复默认值：temperature {DEFAULT_LLM_TEMPERATURE}、topK {DEFAULT_LLM_TOP_K}、
+                maxToken {DEFAULT_LLM_MAX_TOKENS}。
+              </p>
 
               {/* API URL */}
               <div>
@@ -286,6 +419,12 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                     testResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
                   }`}>
                   {testResult.message}
+                </div>
+              )}
+
+              {requiresRetest && (
+                <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+                  当前连接参数已变更，请先测试连接通过后再保存配置。
                 </div>
               )}
             </div>
@@ -472,7 +611,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
           </button>
           <button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !canSave}
             className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
             {isSaving ? '保存中...' : '保存配置'}
           </button>

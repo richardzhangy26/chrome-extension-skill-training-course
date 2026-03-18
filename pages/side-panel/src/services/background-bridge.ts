@@ -52,13 +52,16 @@ const extractTrainTaskId = async (url?: string): Promise<string | null> => {
 };
 
 // API请求代理
-const apiRequest = async <T>(payload: ApiRequestPayload): Promise<T | null> => {
+const apiRequest = async <T>(payload: ApiRequestPayload): Promise<T> => {
   const response = await sendMessage<T>('API_REQUEST', payload);
   if (!response.success) {
     console.error('API request failed:', response.error);
-    return null;
+    throw new Error(response.error || 'API request failed');
   }
-  return response.data ?? null;
+  if (response.data === undefined || response.data === null) {
+    throw new Error('API request returned empty response');
+  }
+  return response.data;
 };
 
 // 监听URL变化

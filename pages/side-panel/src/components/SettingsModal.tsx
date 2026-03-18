@@ -168,6 +168,8 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const currentConnectionSignature = createConnectionSignature(normalizedConfig);
   const requiresRetest = currentConnectionSignature !== testedConnectionSignature;
   const canSave = !requiresRetest;
+  const hasCurrentModelInOptions = availableModels.some(model => model.value === normalizedConfig.model);
+  const selectedModelOptionValue = hasCurrentModelInOptions ? normalizedConfig.model : '__custom__';
 
   useEffect(() => {
     if (testResult && requiresRetest) {
@@ -371,21 +373,41 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 </div>
                 <input
                   id="model"
-                  list="available-models"
                   type="text"
                   value={config.model}
                   onChange={e => setConfig(prev => ({ ...prev, model: e.target.value }))}
                   placeholder={DEFAULT_LLM_MODEL}
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
                 />
-                <datalist id="available-models">
-                  {availableModels.map(model => (
-                    <option key={model.value} value={model.value} label={model.label} />
-                  ))}
-                </datalist>
+                <div className="mt-2">
+                  <label htmlFor="modelPreset" className="mb-1 block text-xs font-medium text-slate-600">
+                    从动态文本模型列表中选择
+                  </label>
+                  <select
+                    id="modelPreset"
+                    value={selectedModelOptionValue}
+                    onChange={e => {
+                      const nextValue = e.target.value;
+                      if (nextValue === '__custom__') {
+                        return;
+                      }
+
+                      setConfig(prev => ({ ...prev, model: nextValue }));
+                    }}
+                    className="w-full cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100">
+                    <option value="__custom__">
+                      {hasCurrentModelInOptions ? '请选择一个文本模型' : `当前为自定义模型：${normalizedConfig.model}`}
+                    </option>
+                    {availableModels.map(model => (
+                      <option key={model.value} value={model.value}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <p className="mt-1 text-xs text-slate-400">
-                  支持输入任意模型名；下拉候选会从当前 API 动态拉取，仅显示 text 模型。留空时默认使用{' '}
-                  {DEFAULT_LLM_MODEL}。
+                  支持输入任意模型名；下拉框会从当前 API 动态拉取，仅显示 text 模型，当前共 {availableModels.length}
+                  个候选。留空时默认使用 {DEFAULT_LLM_MODEL}。
                 </p>
                 {modelsError && <p className="mt-1 text-xs text-amber-600">{modelsError}</p>}
               </div>

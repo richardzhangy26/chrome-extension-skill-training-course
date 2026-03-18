@@ -2,7 +2,7 @@
  * LLM 设置弹窗组件
  */
 
-import { testLLMConfig } from '../services/llm-service';
+import { fetchAvailableTextModels, testLLMConfig } from '../services/llm-service';
 import {
   AVAILABLE_MODELS,
   DEFAULT_LLM_MAX_TOKENS,
@@ -15,7 +15,7 @@ import {
   llmConfigStorage,
   normalizeLLMConfig,
 } from '@extension/storage';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { StudentProfile, LLMConfig } from '@extension/storage';
 
 // 关闭图标
@@ -52,6 +52,13 @@ interface LLMConfigDraft extends Omit<LLMConfig, 'temperature' | 'topK' | 'maxTo
   topK: string;
   maxTokens: string;
 }
+
+interface ModelOption {
+  value: string;
+  label: string;
+}
+
+const DEFAULT_MODEL_OPTIONS: ModelOption[] = AVAILABLE_MODELS.map(model => ({ ...model }));
 
 const createDefaultConfig = (): LLMConfig => ({
   apiKey: '',
@@ -94,6 +101,11 @@ const createConnectionSignature = (config: LLMConfig) =>
     maxTokens: config.maxTokens,
   });
 
+const createModelOption = (value: string): ModelOption => ({
+  value,
+  label: AVAILABLE_MODELS.find(model => model.value === value)?.label ?? value,
+});
+
 const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [config, setConfig] = useState<LLMConfigDraft>(() => createConfigDraft(createDefaultConfig()));
   const [activeTab, setActiveTab] = useState<'llm' | 'system' | 'role'>('llm');
@@ -101,6 +113,31 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [testedConnectionSignature, setTestedConnectionSignature] = useState<string | null>(null);
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>(DEFAULT_MODEL_OPTIONS);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+
+  const loadAvailableModels = useCallback(async (nextConfig: LLMConfig) => {
+    setIsLoadingModels(true);
+    setModelsError(null);
+
+    try {
+      const models = await fetchAvailableTextModels(nextConfig);
+
+      if (models.length === 0) {
+        setAvailableModels(DEFAULT_MODEL_OPTIONS);
+        setModelsError('当前接口没有返回可用的文本模型，已回退到默认候选。');
+        return;
+      }
+
+      setAvailableModels(models.map(createModelOption));
+    } catch (error) {
+      setAvailableModels(DEFAULT_MODEL_OPTIONS);
+      setModelsError((error as Error).message);
+    } finally {
+      setIsLoadingModels(false);
+    }
+  }, []);
 
   // 加载配置
   useEffect(() => {
@@ -109,11 +146,14 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
         const normalizedConfig = normalizeLLMConfig(loadedConfig);
         setConfig(createConfigDraft(normalizedConfig));
         setTestedConnectionSignature(createConnectionSignature(normalizedConfig));
+        setAvailableModels(DEFAULT_MODEL_OPTIONS);
+        setModelsError(null);
         setTestResult(null);
         setActiveTab('llm');
+        void loadAvailableModels(normalizedConfig);
       });
     }
-  }, [isOpen]);
+  }, [isOpen, loadAvailableModels]);
 
   const normalizedConfig = normalizeDraftConfig(config);
   const currentConnectionSignature = createConnectionSignature(normalizedConfig);
@@ -148,6 +188,7 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
     if (result.success) {
       setTestedConnectionSignature(createConnectionSignature(nextConfig));
+      void loadAvailableModels(nextConfig);
     }
 
     setIsTesting(false);
@@ -307,9 +348,18 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
               {/* 模型设置 */}
               <div>
-                <label htmlFor="model" className="mb-1.5 block text-sm font-medium text-slate-700">
-                  模型
-                </label>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label htmlFor="model" className="block text-sm font-medium text-slate-700">
+                    模型
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void loadAvailableModels(normalizedConfig)}
+                    disabled={isLoadingModels}
+                    className="text-xs font-medium text-cyan-600 transition-colors hover:text-cyan-700 disabled:cursor-not-allowed disabled:text-slate-300">
+                    {isLoadingModels ? '刷新中...' : '刷新模型列表'}
+                  </button>
+                </div>
                 <input
                   id="model"
                   list="available-models"
@@ -320,11 +370,15 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
                 />
                 <datalist id="available-models">
-                  {AVAILABLE_MODELS.map(model => (
+                  {availableModels.map(model => (
                     <option key={model.value} value={model.value} label={model.label} />
                   ))}
                 </datalist>
-                <p className="mt-1 text-xs text-slate-400">支持输入任意模型名；留空时默认使用 {DEFAULT_LLM_MODEL}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  支持输入任意模型名；下拉候选会从当前 API 动态拉取，仅显示 text 模型。留空时默认使用{' '}
+                  {DEFAULT_LLM_MODEL}。
+                </p>
+                {modelsError && <p className="mt-1 text-xs text-amber-600">{modelsError}</p>}
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -378,8 +432,10 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                 </div>
               </div>
               <p className="text-xs text-slate-400">
-                数值留空或非法时会自动恢复默认值：temperature {DEFAULT_LLM_TEMPERATURE}、topK {DEFAULT_LLM_TOP_K}、
-                maxToken {DEFAULT_LLM_MAX_TOKENS}。
+                Temperature 控制回答随机性，越低越稳定，越高越发散；Top K 控制每次采样时参与候选的 token
+                数量，越小越保守，越大越灵活；Max Token
+                控制本次最多生成多少内容，越大回答越长。数值留空或非法时会自动恢复默认值：temperature{' '}
+                {DEFAULT_LLM_TEMPERATURE}、topK {DEFAULT_LLM_TOP_K}、maxToken {DEFAULT_LLM_MAX_TOKENS}。
               </p>
 
               {/* API URL */}

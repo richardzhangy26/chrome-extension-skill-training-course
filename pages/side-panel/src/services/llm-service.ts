@@ -25,6 +25,43 @@ interface LLMApiResponse {
   }>;
 }
 
+interface OpenAIModelsResponse {
+  data?: Array<{
+    id?: string;
+  }>;
+}
+
+const NON_TEXT_MODEL_PATTERNS = [
+  /embedding/i,
+  /image/i,
+  /vision/i,
+  /(^|[-_.])vl([-.]|$)/i,
+  /omni/i,
+  /seedream/i,
+  /stable-diffusion/i,
+  /translate/i,
+  /ocr/i,
+  /speech/i,
+  /voice/i,
+  /audio/i,
+  /tts/i,
+  /paraformer/i,
+  /cosyvoice/i,
+  /rerank/i,
+  /markdown/i,
+  /pdf/i,
+  /compress/i,
+  /research/i,
+  /(^|[-_.])kb([-.]|$)/i,
+  /t2i/i,
+  /i2i/i,
+  /t2v/i,
+  /i2v/i,
+  /cogview/i,
+  /^wan/i,
+  /jimeng/i,
+] as const;
+
 const resolveSystemPrompt = (config: LLMConfig) => {
   if (config.systemPromptMode === 'custom' && config.systemPrompt.trim()) {
     return config.systemPrompt.trim();
@@ -65,6 +102,94 @@ const buildRequestPayload = (config: LLMConfig, messages: ChatMessage[]) => ({
 });
 
 const extractResponseContent = (data: LLMApiResponse) => data.choices?.[0]?.message?.content?.trim();
+
+const resolveModelsUrl = (apiUrl: string) => {
+  const trimmed = apiUrl.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const pathname = url.pathname.replace(/\/+$/, '');
+
+    if (/\/models$/i.test(pathname)) {
+      url.search = '';
+      return url.toString();
+    }
+
+    let nextPathname = pathname.replace(/\/chat\/completions$/i, '/models').replace(/\/completions$/i, '/models');
+
+    if (nextPathname === pathname) {
+      const versionMatch = pathname.match(/^(.*\/v\d+)(?:\/.*)?$/i);
+      nextPathname = versionMatch ? `${versionMatch[1]}/models` : `${pathname}/models`;
+    }
+
+    url.pathname = nextPathname;
+    url.search = '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+};
+
+const extractModelIds = (data: unknown) => {
+  if (Array.isArray(data)) {
+    return data.filter((item): item is string => typeof item === 'string');
+  }
+
+  if (data && typeof data === 'object' && Array.isArray((data as OpenAIModelsResponse).data)) {
+    return (data as OpenAIModelsResponse).data
+      .map(item => (typeof item?.id === 'string' ? item.id : ''))
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const isTextModel = (model: string) => !NON_TEXT_MODEL_PATTERNS.some(pattern => pattern.test(model));
+
+const dedupeModels = (models: string[]) => {
+  const seen = new Set<string>();
+
+  return models.filter(model => {
+    const trimmed = model.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      return false;
+    }
+
+    seen.add(trimmed);
+    return true;
+  });
+};
+
+const fetchAvailableTextModels = async (
+  config: Pick<LLMConfig, 'apiUrl' | 'apiKey' | 'serviceCode'>,
+): Promise<string[]> => {
+  const modelsUrl = resolveModelsUrl(config.apiUrl);
+
+  if (!modelsUrl) {
+    throw new Error('API URL 无法解析出 models 接口地址');
+  }
+
+  const response = await fetch(modelsUrl, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(config.apiKey.trim() ? { 'api-key': config.apiKey } : {}),
+      ...(config.serviceCode.trim() ? { 'service-code': config.serviceCode } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`模型列表获取失败: ${response.status}${errorText ? ` - ${errorText}` : ''}`);
+  }
+
+  const data = (await response.json()) as unknown;
+
+  return dedupeModels(extractModelIds(data).filter(isTextModel));
+};
 
 /**
  * 调用豆包模型生成学生回答
@@ -165,4 +290,4 @@ const testLLMConfig = async (config: LLMConfig): Promise<LLMResponse> => {
   }
 };
 
-export { generateStudentAnswer, testLLMConfig };
+export { fetchAvailableTextModels, generateStudentAnswer, testLLMConfig };

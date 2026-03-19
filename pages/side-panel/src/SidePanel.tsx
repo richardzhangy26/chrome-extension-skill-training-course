@@ -807,7 +807,11 @@ const SidePanel = () => {
         onSelectStep={handleSelectDebugStep}
       />
 
-      <SimulationConfigModal isOpen={isSimulationConfigOpen} onClose={() => setIsSimulationConfigOpen(false)} />
+      <SimulationConfigModal
+        isOpen={isSimulationConfigOpen}
+        onClose={() => setIsSimulationConfigOpen(false)}
+        trainTaskId={trainTaskId}
+      />
 
       <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
     </div>

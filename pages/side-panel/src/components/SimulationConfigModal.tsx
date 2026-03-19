@@ -2,9 +2,10 @@
  * 对话模拟 / 知识库配置弹窗
  */
 
-import { normalizeDialogueSimulationContent } from '../services/llm-service';
+import { generateSimulationDialogueRecord, normalizeDialogueSimulationContent } from '../services/llm-service';
 import { llmConfigStorage } from '@extension/storage';
 import { useEffect, useState } from 'react';
+import type { GeneratorProfile } from '../services/llm-service';
 import type { LLMConfig } from '@extension/storage';
 
 type SimulationConfigDraft = Pick<
@@ -15,6 +16,7 @@ type SimulationConfigDraft = Pick<
 interface SimulationConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
+  trainTaskId: string | null;
 }
 
 const createEmptyDraft = (): SimulationConfigDraft => ({
@@ -24,9 +26,34 @@ const createEmptyDraft = (): SimulationConfigDraft => ({
   knowledgeBaseContent: '',
 });
 
-const SimulationConfigModal = ({ isOpen, onClose }: SimulationConfigModalProps) => {
+const GENERATOR_PROFILE_OPTIONS: Array<{
+  value: GeneratorProfile;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'good',
+    label: '好学生',
+    description: '基本回答正确，尽量按最佳路径快速通关。',
+  },
+  {
+    value: 'medium',
+    label: '一般学生',
+    description: '保留 2-3 轮引导过程，最终达标。',
+  },
+  {
+    value: 'poor',
+    label: '差学生',
+    description: '故意偏离，用于测试边界情况，不强制通关。',
+  },
+];
+
+const SimulationConfigModal = ({ isOpen, onClose, trainTaskId }: SimulationConfigModalProps) => {
   const [draft, setDraft] = useState<SimulationConfigDraft>(createEmptyDraft);
   const [isSaving, setIsSaving] = useState(false);
+  const [generatorProfile, setGeneratorProfile] = useState<GeneratorProfile>('good');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -47,6 +74,7 @@ const SimulationConfigModal = ({ isOpen, onClose }: SimulationConfigModalProps) 
         knowledgeBaseEnabled: config.knowledgeBaseEnabled,
         knowledgeBaseContent: config.knowledgeBaseContent,
       });
+      setGenerateError(null);
     };
 
     void loadConfig();
@@ -65,6 +93,34 @@ const SimulationConfigModal = ({ isOpen, onClose }: SimulationConfigModalProps) 
     await llmConfigStorage.setConfig(draft);
     setIsSaving(false);
     onClose();
+  };
+
+  const handleGenerate = async () => {
+    if (!trainTaskId) {
+      setGenerateError('当前未识别到训练任务，无法根据剧本生成模拟对话。');
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerateError(null);
+
+    const result = await generateSimulationDialogueRecord({
+      trainTaskId,
+      profile: generatorProfile,
+    });
+
+    if (!result.success || !result.content) {
+      setGenerateError(result.error || '生成失败，请稍后重试。');
+      setIsGenerating(false);
+      return;
+    }
+
+    setDraft(prev => ({
+      ...prev,
+      dialogueSimulationEnabled: true,
+      dialogueSimulationContent: result.content || '',
+    }));
+    setIsGenerating(false);
   };
 
   const normalizedDialogueSimulationContent = normalizeDialogueSimulationContent(draft.dialogueSimulationContent);
@@ -151,6 +207,57 @@ const SimulationConfigModal = ({ isOpen, onClose }: SimulationConfigModalProps) 
                 <p className="mt-2 text-xs text-amber-600">
                   未识别到有效的一问一答记录，请按历史日志中的 <code>AI:</code> / <code>用户:</code> 格式粘贴。
                 </p>
+              )}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-dashed border-sky-200 bg-sky-50/60 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-sky-900">根据剧本生成模拟对话</h4>
+                  <p className="mt-1 text-xs text-sky-700">
+                    自动读取当前训练任务的 script list 与默认 flow，生成可直接回填的历史日志格式对话记录。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !trainTaskId}
+                  className="cursor-pointer rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 px-3 py-2 text-xs font-medium text-white transition-all hover:from-sky-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
+                  {isGenerating ? '生成中...' : '根据剧本生成'}
+                </button>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {GENERATOR_PROFILE_OPTIONS.map(option => {
+                  const isSelected = generatorProfile === option.value;
+                  return (
+                    <label
+                      key={option.value}
+                      className={`cursor-pointer rounded-lg border px-3 py-2 text-xs transition ${
+                        isSelected
+                          ? 'border-sky-400 bg-white text-sky-900'
+                          : 'border-sky-100 bg-white/80 text-slate-600'
+                      }`}>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="generatorProfile"
+                          value={option.value}
+                          checked={isSelected}
+                          onChange={() => setGeneratorProfile(option.value)}
+                          disabled={isGenerating}
+                        />
+                        <span className="font-medium">{option.label}</span>
+                      </div>
+                      <p className="mt-1 leading-5">{option.description}</p>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {generateError && <p className="mt-3 text-xs text-rose-600">{generateError}</p>}
+              {!trainTaskId && (
+                <p className="mt-3 text-xs text-amber-600">未检测到 trainTaskId，暂时不能根据剧本自动生成。</p>
               )}
             </div>
           </section>

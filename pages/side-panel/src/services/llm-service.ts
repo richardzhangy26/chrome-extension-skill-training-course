@@ -3,6 +3,7 @@
  * 参考 Python: auto_script_train.py 中的 _call_doubao_post 方法
  */
 
+import { apiRequest, API_ENDPOINTS } from './background-bridge';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_PROFILE_ID, llmConfigStorage, normalizeLLMConfig } from '@extension/storage';
 import type { LLMConfig } from '@extension/storage';
 
@@ -31,7 +32,88 @@ interface OpenAIModelsResponse {
   }>;
 }
 
+interface ApiResponse<T> {
+  code: number;
+  message?: string | null;
+  msg?: string | null;
+  success?: boolean;
+  data: T;
+}
+
+interface ScriptStepItem {
+  stepId: string;
+  stepDetailDTO?: {
+    stepName?: string;
+    stepOrder?: number;
+    nodeType?: 'SCRIPT_START' | 'SCRIPT_END' | 'SCRIPT_NODE';
+    prologue?: string;
+    interactiveRounds?: number | null;
+    description?: string;
+    llmPrompt?: string;
+    trainerName?: string;
+  };
+}
+
+interface ScriptStepFlow {
+  scriptStepStartId: string;
+  scriptStepEndId: string;
+  isDefault?: number;
+}
+
+type GeneratorProfile = 'good' | 'medium' | 'poor';
+
+interface DialogueGeneratorStage {
+  stepId: string;
+  stepName: string;
+  interactiveRounds: number;
+  prologue: string;
+  description: string;
+  llmPrompt: string;
+  trainerName: string;
+}
+
+interface SimulationDialogueGenerationParams {
+  trainTaskId: string;
+  profile: GeneratorProfile;
+}
+
 const DIALOGUE_SIMULATION_LINE_PATTERN = /^(AI|用户)\s*[：:]\s*(.+)$/;
+const DIALOGUE_LOG_SEPARATOR = '-'.repeat(40);
+
+const GENERATOR_MODEL_PREFERENCES = [
+  {
+    label: 'Claude Sonnet 4.6',
+    patterns: [/claude.*sonnet.*4\.6/i, /sonnet.*4\.6/i],
+    fallbacks: ['claude-4.6-sonnet', 'Claude Sonnet 4.6'],
+  },
+  {
+    label: 'Claude Opus 4.5',
+    patterns: [/claude.*opus.*4\.5/i, /opus.*4\.5/i],
+    fallbacks: ['claude-opus-4.5', 'Claude Opus 4.5'],
+  },
+  {
+    label: 'Claude Sonnet 4.5',
+    patterns: [/claude.*sonnet.*4\.5/i, /sonnet.*4\.5/i],
+    fallbacks: ['claude-4.5-sonnet', 'Claude Sonnet 4.5'],
+  },
+  {
+    label: 'GPT-5.4',
+    patterns: [/gpt[-\s]?5(?:\.4)?(?!.*mini)/i],
+    fallbacks: ['gpt-5.4', 'gpt-5'],
+  },
+] as const;
+
+const GENERATOR_PROFILE_LABELS: Record<GeneratorProfile, string> = {
+  good: '好学生',
+  medium: '一般学生',
+  poor: '差学生',
+};
+
+const GENERATOR_PROFILE_GUIDANCE: Record<GeneratorProfile, string> = {
+  good: '目标是最佳通关路线。学生基本回答正确，尽量用最少轮次满足阶段目标并触发进入下一阶段，不要故意绕路。',
+  medium: '目标是可通关的真实引导过程。学生首轮通常只答对 60%-70%，需要 2-3 轮逐步补全，在阶段可用轮次内达标。',
+  poor: '目标是边界测试。学生可偏题、误解或回答不完整，重点体现智能体如何把学生往回拉；如果轮次不足，允许该阶段仍未达标。',
+};
 
 const NON_TEXT_MODEL_PATTERNS = [
   /embedding/i,
@@ -97,6 +179,200 @@ const normalizeDialogueSimulationContent = (content: string) =>
     })
     .filter(Boolean)
     .join('\n');
+
+const dedupeStrings = (items: string[]) => {
+  const seen = new Set<string>();
+
+  return items.filter(item => {
+    const normalized = item.trim();
+    if (!normalized || seen.has(normalized)) {
+      return false;
+    }
+
+    seen.add(normalized);
+    return true;
+  });
+};
+
+const buildTextModelHeaders = (config: Pick<LLMConfig, 'apiKey' | 'serviceCode'>) => ({
+  'Content-Type': 'application/json',
+  ...(config.apiKey.trim() ? { 'api-key': config.apiKey } : {}),
+  ...(config.serviceCode.trim() ? { 'service-code': config.serviceCode } : {}),
+});
+
+const callChatCompletion = async (
+  config: Pick<LLMConfig, 'apiUrl' | 'apiKey' | 'serviceCode' | 'temperature' | 'topK' | 'maxTokens'>,
+  model: string,
+  messages: ChatMessage[],
+  options?: {
+    temperature?: number;
+    maxTokens?: number;
+  },
+): Promise<LLMResponse> => {
+  try {
+    const response = await fetch(config.apiUrl, {
+      method: 'POST',
+      headers: buildTextModelHeaders(config),
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: options?.temperature ?? config.temperature,
+        max_tokens: options?.maxTokens ?? config.maxTokens,
+        top_k: config.topK,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `API 请求失败: ${response.status}${errorText ? ` - ${errorText}` : ''}` };
+    }
+
+    const data = (await response.json()) as LLMApiResponse;
+    const content = extractResponseContent(data);
+
+    if (!content) {
+      return { success: false, error: '模型未返回有效内容' };
+    }
+
+    return { success: true, content };
+  } catch (error) {
+    return { success: false, error: `调用失败: ${(error as Error).message}` };
+  }
+};
+
+const resolveGeneratorModelCandidates = async (
+  config: Pick<LLMConfig, 'apiUrl' | 'apiKey' | 'serviceCode' | 'model'>,
+): Promise<string[]> => {
+  const availableModels = await fetchAvailableTextModels(config).catch(() => []);
+  const preferredModels = GENERATOR_MODEL_PREFERENCES.flatMap(preference => {
+    const matchedModel = availableModels.find(model => preference.patterns.some(pattern => pattern.test(model)));
+    return matchedModel ? [matchedModel] : preference.fallbacks;
+  });
+
+  return dedupeStrings([...preferredModels, config.model]);
+};
+
+const resolveOrderedScriptStages = (steps: ScriptStepItem[], flows: ScriptStepFlow[]): DialogueGeneratorStage[] => {
+  const stepMap = new Map(steps.map(step => [step.stepId, step]));
+  const nodeStages: DialogueGeneratorStage[] = [];
+  const visitedNodeIds = new Set<string>();
+  const trainingStartStepId = steps.find(step => step.stepDetailDTO?.nodeType === 'SCRIPT_START')?.stepId;
+
+  if (trainingStartStepId) {
+    let currentStepId: string | null = trainingStartStepId;
+    const visitedFlowStarts = new Set<string>();
+
+    while (currentStepId && !visitedFlowStarts.has(currentStepId)) {
+      visitedFlowStarts.add(currentStepId);
+      const outgoingFlows = flows.filter(flow => flow.scriptStepStartId === currentStepId);
+      if (!outgoingFlows.length) {
+        break;
+      }
+
+      const selectedFlow = outgoingFlows.find(flow => flow.isDefault === 1) ?? outgoingFlows[0];
+      currentStepId = selectedFlow?.scriptStepEndId ?? null;
+
+      if (!currentStepId || visitedNodeIds.has(currentStepId)) {
+        break;
+      }
+
+      const nextStep = stepMap.get(currentStepId);
+      const nodeType = nextStep?.stepDetailDTO?.nodeType;
+      if (!nextStep || nodeType === 'SCRIPT_END') {
+        break;
+      }
+
+      if (nodeType === 'SCRIPT_NODE') {
+        visitedNodeIds.add(currentStepId);
+        nodeStages.push({
+          stepId: nextStep.stepId,
+          stepName: nextStep.stepDetailDTO?.stepName?.trim() || nextStep.stepId,
+          interactiveRounds: Math.max(0, nextStep.stepDetailDTO?.interactiveRounds ?? 0),
+          prologue: nextStep.stepDetailDTO?.prologue?.trim() || '',
+          description: nextStep.stepDetailDTO?.description?.trim() || '',
+          llmPrompt: nextStep.stepDetailDTO?.llmPrompt?.trim() || '',
+          trainerName: nextStep.stepDetailDTO?.trainerName?.trim() || '',
+        });
+      }
+    }
+  }
+
+  if (nodeStages.length > 0) {
+    return nodeStages;
+  }
+
+  return steps
+    .filter(step => step.stepDetailDTO?.nodeType === 'SCRIPT_NODE')
+    .sort(
+      (left, right) =>
+        (left.stepDetailDTO?.stepOrder ?? Number.MAX_SAFE_INTEGER) -
+        (right.stepDetailDTO?.stepOrder ?? Number.MAX_SAFE_INTEGER),
+    )
+    .map(step => ({
+      stepId: step.stepId,
+      stepName: step.stepDetailDTO?.stepName?.trim() || step.stepId,
+      interactiveRounds: Math.max(0, step.stepDetailDTO?.interactiveRounds ?? 0),
+      prologue: step.stepDetailDTO?.prologue?.trim() || '',
+      description: step.stepDetailDTO?.description?.trim() || '',
+      llmPrompt: step.stepDetailDTO?.llmPrompt?.trim() || '',
+      trainerName: step.stepDetailDTO?.trainerName?.trim() || '',
+    }));
+};
+
+const buildSimulationDialogueMessages = (
+  profile: GeneratorProfile,
+  stages: DialogueGeneratorStage[],
+): ChatMessage[] => {
+  const stageBlocks = stages.map((stage, index) =>
+    [
+      `### 阶段 ${index + 1}`,
+      `stepId: ${stage.stepId}`,
+      `stepName: ${stage.stepName}`,
+      `trainerName: ${stage.trainerName || '未提供'}`,
+      `interactiveRounds: ${stage.interactiveRounds}`,
+      `prologue:`,
+      stage.prologue || '(无)',
+      `description:`,
+      stage.description || '(无)',
+      `llmPrompt:`,
+      stage.llmPrompt || '(无)',
+    ].join('\n'),
+  );
+
+  return [
+    {
+      role: 'system',
+      content: [
+        '你是训练剧本模拟对话生成器。',
+        '你的唯一任务是根据剧本配置生成“历史对话日志风格”的纯净文本。',
+        '只允许输出日志内容，不要输出解释、标题、代码块、分析或额外说明。',
+        '每条对话块必须严格使用以下格式：',
+        'Step: <stepName> | step_id: <stepId> | 第 <n> 轮 | 来源: chat',
+        'AI: <智能体话术>',
+        '用户: <学生回答>',
+        `${DIALOGUE_LOG_SEPARATOR}`,
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        `当前要生成的学生档位：${GENERATOR_PROFILE_LABELS[profile]} (${profile})`,
+        GENERATOR_PROFILE_GUIDANCE[profile],
+        '',
+        '全局生成约束：',
+        '1. 好学生走最佳通关路线，尽量用最少轮次达标；一般学生保留2-3轮被引导过程；差学生可用于边界测试，不强制通关。',
+        '2. interactiveRounds 是该阶段可用轮次上限，不要超过；可以少于这个数字，但必须体现该档位的典型表现。',
+        '3. AI 话术必须贴合每个阶段的 llmPrompt、角色设定和开场白。',
+        '4. 用户回答必须符合档位特点，且围绕阶段目标推进。',
+        '5. 输出中不要省略任何默认流程中的真实阶段。',
+        '6. 输出中不要使用 Markdown 标题、列表、代码块或解释性文字。',
+        '',
+        '阶段配置如下：',
+        stageBlocks.join('\n\n'),
+      ].join('\n'),
+    },
+  ];
+};
 
 const buildUserMessage = (
   aiQuestion: string,
@@ -259,35 +535,80 @@ const generateStudentAnswer = async (
       { role: 'user', content: userMessage },
     ];
 
-    // 调用 API
-    const response = await fetch(config.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': config.apiKey,
-        'service-code': config.serviceCode,
-      },
-      body: JSON.stringify(buildRequestPayload(config, messages)),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('LLM API Error:', response.status, errorText);
-      return { success: false, error: `API 请求失败: ${response.status}` };
+    const result = await callChatCompletion(config, config.model, messages);
+    if (!result.success) {
+      console.error('LLM API Error:', result.error);
+      return result;
     }
 
-    const data = (await response.json()) as LLMApiResponse;
-    const content = extractResponseContent(data);
-
-    if (!content) {
-      return { success: false, error: '模型未返回有效内容' };
-    }
-
-    console.log('🤖 LLM 生成回答:', content);
-    return { success: true, content };
+    console.log('🤖 LLM 生成回答:', result.content);
+    return result;
   } catch (error) {
     console.error('LLM Service Error:', error);
     return { success: false, error: `调用失败: ${(error as Error).message}` };
+  }
+};
+
+const generateSimulationDialogueRecord = async ({
+  trainTaskId,
+  profile,
+}: SimulationDialogueGenerationParams): Promise<LLMResponse> => {
+  const config = normalizeLLMConfig(await llmConfigStorage.get());
+
+  if (!config.apiKey.trim()) {
+    return { success: false, error: '请先配置 LLM API Key' };
+  }
+
+  try {
+    const [stepsResponse, flowResponse] = await Promise.all([
+      apiRequest<ApiResponse<ScriptStepItem[]>>({
+        endpoint: API_ENDPOINTS.QUERY_SCRIPT_STEP_LIST,
+        method: 'POST',
+        body: { trainTaskId, trainSubType: 'ability' },
+      }),
+      apiRequest<ApiResponse<ScriptStepFlow[]>>({
+        endpoint: API_ENDPOINTS.QUERY_SCRIPT_STEP_FLOW_LIST,
+        method: 'POST',
+        body: { trainTaskId },
+      }).catch(
+        () =>
+          ({
+            code: 200,
+            data: [],
+          }) as ApiResponse<ScriptStepFlow[]>,
+      ),
+    ]);
+
+    const steps = stepsResponse?.data ?? [];
+    if (!steps.length) {
+      return { success: false, error: '未获取到剧本步骤，无法生成模拟对话' };
+    }
+
+    const orderedStages = resolveOrderedScriptStages(steps, flowResponse?.data ?? []);
+    if (!orderedStages.length) {
+      return { success: false, error: '未识别到默认通关路径上的有效阶段' };
+    }
+
+    const messages = buildSimulationDialogueMessages(profile, orderedStages);
+    const modelsToTry = await resolveGeneratorModelCandidates(config);
+    let lastError = '未找到可用模型';
+
+    for (const model of modelsToTry) {
+      const result = await callChatCompletion(config, model, messages, {
+        temperature: 0.3,
+        maxTokens: Math.max(config.maxTokens, 4096),
+      });
+
+      if (result.success) {
+        return result;
+      }
+
+      lastError = result.error || lastError;
+    }
+
+    return { success: false, error: lastError };
+  } catch (error) {
+    return { success: false, error: `生成失败: ${(error as Error).message}` };
   }
 };
 
@@ -327,4 +648,11 @@ const testLLMConfig = async (config: LLMConfig): Promise<LLMResponse> => {
   }
 };
 
-export { fetchAvailableTextModels, generateStudentAnswer, normalizeDialogueSimulationContent, testLLMConfig };
+export {
+  fetchAvailableTextModels,
+  generateSimulationDialogueRecord,
+  generateStudentAnswer,
+  normalizeDialogueSimulationContent,
+  testLLMConfig,
+};
+export type { GeneratorProfile };

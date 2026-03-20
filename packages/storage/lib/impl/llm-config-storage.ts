@@ -22,13 +22,29 @@ interface LLMConfig {
   apiKey: string;
   apiUrl: string;
   model: string;
+  temperature: number;
+  topK: number;
+  maxTokens: number;
+  maxHistoryRounds: number;
   serviceCode: string;
   enabled: boolean;
   systemPromptMode: SystemPromptMode;
   systemPrompt: string;
   studentProfileId: StudentProfileId;
   studentProfiles: StudentProfile[];
+  dialogueSimulationEnabled: boolean;
+  dialogueSimulationContent: string;
+  knowledgeBaseEnabled: boolean;
+  knowledgeBaseContent: string;
 }
+
+type LLMConfigInput = Partial<Omit<LLMConfig, 'model' | 'temperature' | 'topK' | 'maxTokens' | 'maxHistoryRounds'>> & {
+  model?: unknown;
+  temperature?: unknown;
+  topK?: unknown;
+  maxTokens?: unknown;
+  maxHistoryRounds?: unknown;
+};
 
 interface LegacyStudentProfile {
   label: string;
@@ -43,6 +59,11 @@ interface LegacyLLMConfigV1 {
 }
 
 const DEFAULT_PROFILE_ID: StudentProfileId = 'medium';
+const DEFAULT_LLM_MODEL = 'Doubao-1.5-pro-32k';
+const DEFAULT_LLM_TEMPERATURE = 0.7;
+const DEFAULT_LLM_TOP_K = 50;
+const DEFAULT_LLM_MAX_TOKENS = 200;
+const DEFAULT_LLM_MAX_HISTORY_ROUNDS = 5;
 
 const DEFAULT_STUDENT_PROFILES: StudentProfile[] = [
   {
@@ -72,23 +93,58 @@ const DEFAULT_STUDENT_PROFILES: StudentProfile[] = [
 const defaultConfig: LLMConfig = {
   apiKey: '',
   apiUrl: 'http://llm-service.polymas.com/api/openai/v1/chat/completions',
-  model: 'Doubao-1.5-pro-32k',
+  model: DEFAULT_LLM_MODEL,
+  temperature: DEFAULT_LLM_TEMPERATURE,
+  topK: DEFAULT_LLM_TOP_K,
+  maxTokens: DEFAULT_LLM_MAX_TOKENS,
+  maxHistoryRounds: DEFAULT_LLM_MAX_HISTORY_ROUNDS,
   serviceCode: 'SI_Ability',
   enabled: false,
   systemPromptMode: 'default',
   systemPrompt: '',
   studentProfileId: DEFAULT_PROFILE_ID,
   studentProfiles: DEFAULT_STUDENT_PROFILES,
+  dialogueSimulationEnabled: false,
+  dialogueSimulationContent: '',
+  knowledgeBaseEnabled: false,
+  knowledgeBaseContent: '',
 };
 
 // 可用的模型列表
 const AVAILABLE_MODELS = [
+  { value: 'Doubao-Seed-2.0-pro', label: 'Doubao Seed 2.0 Pro（推荐）' },
+  { value: 'Doubao-Seed-2.0-lite', label: 'Doubao Seed 2.0 Lite' },
+  { value: 'Doubao-Seed-2.0-mini', label: 'Doubao Seed 2.0 Mini' },
+  { value: 'Doubao-Seed-2.0-Code', label: 'Doubao Seed 2.0 Code' },
+  { value: 'Doubao-Seed-1.8', label: 'Doubao Seed 1.8' },
+  { value: 'Doubao-Seed-1.6', label: 'Doubao Seed 1.6' },
+  { value: 'Doubao-Seed-1.6-flash', label: 'Doubao Seed 1.6 Flash' },
+  { value: 'Doubao-Seed-1.6-thinking', label: 'Doubao Seed 1.6 Thinking' },
   { value: 'Doubao-1.5-pro-32k', label: 'Doubao 1.5 Pro 32K（推荐）' },
   { value: 'Doubao-1.5-pro-256k', label: 'Doubao 1.5 Pro 256K' },
+  { value: 'Doubao-1.5-lite-32k', label: 'Doubao 1.5 Lite 32K' },
+  { value: 'Doubao-pro-32k', label: 'Doubao Pro 32K' },
+  { value: 'Doubao-pro-128k', label: 'Doubao Pro 128K' },
+  { value: 'deepseek-v3.1', label: 'DeepSeek V3.1' },
+  { value: 'deepseek-v3', label: 'DeepSeek V3' },
+  { value: 'deepseek-chat', label: 'DeepSeek Chat' },
+  { value: 'deepseek-r1', label: 'DeepSeek R1' },
+  { value: 'qwen-plus-latest', label: 'Qwen Plus Latest' },
+  { value: 'qwen-max-latest', label: 'Qwen Max Latest' },
+  { value: 'qwen3-max', label: 'Qwen3 Max' },
+  { value: 'qwen-plus', label: 'Qwen Plus' },
+  { value: 'qwen-max', label: 'Qwen Max' },
   { value: 'gpt-4o', label: 'GPT-4o' },
   { value: 'gpt-4o-mini', label: 'GPT-4o-mini' },
+  { value: 'gpt-4.1', label: 'GPT-4.1' },
+  { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+  { value: 'gpt-5', label: 'GPT-5' },
+  { value: 'gpt-5-mini', label: 'GPT-5 Mini' },
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
   { value: 'Claude 3.5 HaiKu', label: 'Claude 3.5 HaiKu' },
+  { value: 'Claude Sonnet 4.5', label: 'Claude Sonnet 4.5' },
+  { value: 'claude-4.5-sonnet', label: 'Claude 4.5 Sonnet' },
   { value: 'grok-4', label: 'Grok 4' },
 ] as const;
 
@@ -140,6 +196,47 @@ const normalizeStudentProfiles = (profiles: unknown): StudentProfile[] => {
   return normalized.length > 0 ? normalized : DEFAULT_STUDENT_PROFILES;
 };
 
+const parseFiniteNumber = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const normalizeModel = (model: unknown) => {
+  if (typeof model !== 'string') {
+    return DEFAULT_LLM_MODEL;
+  }
+
+  const trimmed = model.trim();
+  return trimmed.length > 0 ? trimmed : DEFAULT_LLM_MODEL;
+};
+
+const normalizeTemperature = (temperature: unknown) => {
+  const parsed = parseFiniteNumber(temperature);
+  return parsed !== null && parsed >= 0 ? parsed : DEFAULT_LLM_TEMPERATURE;
+};
+
+const normalizePositiveInteger = (value: unknown, fallback: number) => {
+  const parsed = parseFiniteNumber(value);
+  return parsed !== null && Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const normalizeBoolean = (value: unknown, fallback = false) => (typeof value === 'boolean' ? value : fallback);
+
+const normalizeOptionalText = (value: unknown) => (typeof value === 'string' ? value : '');
+
 const resolveLegacyProfiles = (legacy: LegacyLLMConfigV1): StudentProfile[] => {
   if (!legacy.studentProfiles || typeof legacy.studentProfiles !== 'object') {
     return DEFAULT_STUDENT_PROFILES;
@@ -159,7 +256,7 @@ const resolveLegacyProfiles = (legacy: LegacyLLMConfigV1): StudentProfile[] => {
   }));
 };
 
-const normalizeConfig = (config: Partial<LLMConfig>): LLMConfig => {
+const normalizeLLMConfig = (config: LLMConfigInput): LLMConfig => {
   const legacy = config as LegacyLLMConfigV1;
   const studentProfiles = normalizeStudentProfiles(config.studentProfiles ?? resolveLegacyProfiles(legacy));
   const selectedId = typeof config.studentProfileId === 'string' ? config.studentProfileId : legacy.studentProfileKey;
@@ -168,9 +265,18 @@ const normalizeConfig = (config: Partial<LLMConfig>): LLMConfig => {
   return {
     ...defaultConfig,
     ...config,
+    model: normalizeModel(config.model),
+    temperature: normalizeTemperature(config.temperature),
+    topK: normalizePositiveInteger(config.topK, DEFAULT_LLM_TOP_K),
+    maxTokens: normalizePositiveInteger(config.maxTokens, DEFAULT_LLM_MAX_TOKENS),
+    maxHistoryRounds: normalizePositiveInteger(config.maxHistoryRounds, DEFAULT_LLM_MAX_HISTORY_ROUNDS),
     studentProfiles,
     studentProfileId:
       selectedId && studentProfiles.some(profile => profile.id === selectedId) ? selectedId : fallbackId,
+    dialogueSimulationEnabled: normalizeBoolean(config.dialogueSimulationEnabled),
+    dialogueSimulationContent: normalizeOptionalText(config.dialogueSimulationContent),
+    knowledgeBaseEnabled: normalizeBoolean(config.knowledgeBaseEnabled),
+    knowledgeBaseContent: normalizeOptionalText(config.knowledgeBaseContent),
   };
 };
 
@@ -181,12 +287,12 @@ const storage = createStorage<LLMConfig>('llm-config-storage-key', defaultConfig
 
 const llmConfigStorage = {
   ...storage,
-  get: async () => normalizeConfig(await storage.get()),
+  get: async () => normalizeLLMConfig(await storage.get()),
 
   // 更新 API Key
   setApiKey: async (apiKey: string) => {
     await storage.set(current =>
-      normalizeConfig({
+      normalizeLLMConfig({
         ...current,
         apiKey,
         enabled: apiKey.trim().length > 0,
@@ -197,7 +303,7 @@ const llmConfigStorage = {
   // 更新模型
   setModel: async (model: string) => {
     await storage.set(current =>
-      normalizeConfig({
+      normalizeLLMConfig({
         ...current,
         model,
       }),
@@ -205,9 +311,9 @@ const llmConfigStorage = {
   },
 
   // 更新完整配置
-  setConfig: async (config: Partial<LLMConfig>) => {
+  setConfig: async (config: LLMConfigInput) => {
     await storage.set(current =>
-      normalizeConfig({
+      normalizeLLMConfig({
         ...current,
         ...config,
       }),
@@ -216,7 +322,7 @@ const llmConfigStorage = {
 
   // 检查配置是否有效
   isConfigValid: async (): Promise<boolean> => {
-    const config = normalizeConfig(await storage.get());
+    const config = normalizeLLMConfig(await storage.get());
     return config.apiKey.trim().length > 0;
   },
 
@@ -226,5 +332,17 @@ const llmConfigStorage = {
   },
 };
 
-export type { LLMConfig, StudentProfile, StudentProfileId, SystemPromptMode };
-export { AVAILABLE_MODELS, DEFAULT_PROFILE_ID, DEFAULT_SYSTEM_PROMPT, DEFAULT_STUDENT_PROFILES, llmConfigStorage };
+export type { LLMConfig, LLMConfigInput, StudentProfile, StudentProfileId, SystemPromptMode };
+export {
+  AVAILABLE_MODELS,
+  DEFAULT_LLM_MAX_HISTORY_ROUNDS,
+  DEFAULT_LLM_MAX_TOKENS,
+  DEFAULT_LLM_MODEL,
+  DEFAULT_LLM_TEMPERATURE,
+  DEFAULT_LLM_TOP_K,
+  DEFAULT_PROFILE_ID,
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_STUDENT_PROFILES,
+  llmConfigStorage,
+  normalizeLLMConfig,
+};

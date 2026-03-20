@@ -148,12 +148,17 @@ const useAgentChat = () => {
   }, [scriptSteps]);
 
   const fetchTrainTaskName = useCallback(async (taskId: string): Promise<string | undefined> => {
-    const configResponse = await apiRequest<ApiResponse<TrainConfigurationResponse>>({
-      endpoint: API_ENDPOINTS.QUERY_CONFIGURATION,
-      method: 'POST',
-      body: { trainTaskId: taskId },
-    });
-    return configResponse?.data?.trainTaskName;
+    try {
+      const configResponse = await apiRequest<ApiResponse<TrainConfigurationResponse>>({
+        endpoint: API_ENDPOINTS.QUERY_CONFIGURATION,
+        method: 'POST',
+        body: { trainTaskId: taskId },
+      });
+      return configResponse?.data?.trainTaskName;
+    } catch (error) {
+      console.warn('⚠️ 获取训练任务名称失败:', error);
+      return undefined;
+    }
   }, []);
   const updateStoredTrainTaskId = useCallback(async (taskId: string) => {
     try {

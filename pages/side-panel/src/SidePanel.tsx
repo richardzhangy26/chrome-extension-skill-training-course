@@ -156,6 +156,15 @@ const Icons = {
       <line x1="12" y1="16" x2="12.01" y2="16" />
     </svg>
   ),
+  // 多用户/多角色图标
+  Users: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
 };
 
 // ============ 类型定义 ============
@@ -413,6 +422,7 @@ const ChatInput = ({
   isAutoRunning,
   onOpenDebug,
   onOpenSimulationConfig,
+  onOpenMultiRole,
   simulationConfig,
   onToggleDialogueSimulation,
   onToggleKnowledgeBase,
@@ -427,6 +437,7 @@ const ChatInput = ({
   isAutoRunning: boolean;
   onOpenDebug: () => void;
   onOpenSimulationConfig: () => void;
+  onOpenMultiRole: () => void;
   simulationConfig: SimulationModeState;
   onToggleDialogueSimulation: (enabled: boolean) => void;
   onToggleKnowledgeBase: (enabled: boolean) => void;
@@ -522,6 +533,18 @@ const ChatInput = ({
               )}
             </label>
           </div>
+        </div>
+
+        <div className="flex flex-col items-start gap-1">
+          <button
+            onClick={onOpenMultiRole}
+            disabled={debugDisabled}
+            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs text-violet-700 transition-all duration-200 hover:border-violet-400 hover:text-violet-900 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+            title="选择多个学生档位并行训练">
+            <Icons.Users />
+            <span>多角色并行</span>
+          </button>
+          <span className="text-[11px] text-slate-400">同时运行多个角色对比</span>
         </div>
       </div>
       <div className="flex items-end gap-3">
@@ -682,7 +705,7 @@ const MultiRoleView = ({
           const stepProgress = role.currentStepId
             ? `${batch.orderedStepIds.indexOf(role.currentStepId) + 1}/${batch.orderedStepIds.length}`
             : '--/--';
-          const recentMessages = role.messages.slice(-3);
+          const recentMessages = role.messages.slice(-10);
 
           return (
             <div key={role.profileId} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -732,7 +755,7 @@ const MultiRoleView = ({
                             }`}>
                             {msg.role === 'user' ? '学生' : msg.role === 'assistant' ? 'AI' : '系统'}
                           </span>
-                          <p className="line-clamp-2 flex-1 text-slate-600">{msg.content}</p>
+                          <p className="flex-1 text-slate-600">{msg.content}</p>
                         </div>
                       ))}
                     </div>
@@ -1102,6 +1125,7 @@ const SidePanel = () => {
               isAutoRunning={isAutoRunning}
               onOpenDebug={() => setIsDebugOpen(true)}
               onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
+              onOpenMultiRole={() => setIsMultiRolePickerOpen(true)}
               simulationConfig={simulationConfig}
               onToggleDialogueSimulation={enabled => {
                 void handleToggleDialogueSimulation(enabled);

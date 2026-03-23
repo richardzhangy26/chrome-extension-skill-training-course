@@ -60,6 +60,15 @@ const generateMessageId = () => `msg_${generateId()}`;
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+const RETRYABLE_REQUEST_ERROR_PATTERNS = [/HTTP error:\s*(429|5\d\d)/i, /network/i, /failed to fetch/i, /timeout/i];
+
+const shouldRetryRequestError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return RETRYABLE_REQUEST_ERROR_PATTERNS.some(pattern => pattern.test(message));
+};
+
+const isRoleTerminalState = (state: WorkflowState) => state === 'COMPLETED' || state === 'ERROR';
+
 const createRoleRunState = (draft: RoleRunDraft, profile: StudentProfile): RoleRunState => ({
   profileId: draft.profileId,
   profileLabel: draft.profileLabel,
@@ -234,6 +243,18 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
     });
   }, []);
 
+  const markRoleError = useCallback(
+    (roleIndex: number, rawMessage: string, displayPrefix = '❌ 运行失败') => {
+      const normalizedMessage = rawMessage.trim().length > 0 ? rawMessage.trim() : '未知错误';
+      updateRole(roleIndex, role => ({
+        ...addRoleMessage(role, 'system', `${displayPrefix}: ${normalizedMessage}`),
+        workflowState: 'ERROR' as WorkflowState,
+        error: normalizedMessage,
+      }));
+    },
+    [updateRole],
+  );
+
   const updateBatchState = useCallback(() => {
     setBatch(prev => {
       if (!prev) return prev;
@@ -267,29 +288,42 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
       roleIndex: number,
       stepId: string,
       sessionOverride?: string | null,
-    ): Promise<{ completed: boolean; nextStepId?: string }> => {
+    ): Promise<{ completed: boolean; nextStepId?: string; cancelled?: boolean }> => {
       const currentBatch = batchRef.current;
-      if (!currentBatch || !trainTaskId) throw new Error('batch 未初始化');
+      if (!currentBatch || !trainTaskId) return { completed: false, cancelled: true };
       const role = currentBatch.roles[roleIndex];
+      if (!role) return { completed: false, cancelled: true };
 
       updateRole(roleIndex, r => ({ ...r, workflowState: 'RUNNING_CARD' as WorkflowState }));
 
-      const runCardResponse = await apiRequest<ApiResponse<RunCardResponse>>({
+      const runCardRequestPayload = {
         endpoint: API_ENDPOINTS.RUN_CARD,
-        method: 'POST',
+        method: 'POST' as const,
         body: {
           taskId: trainTaskId,
           stepId,
           sessionId: sessionOverride ?? role.sessionId ?? undefined,
         },
-      });
+      };
+
+      let runCardResponse: ApiResponse<RunCardResponse>;
+      try {
+        runCardResponse = await apiRequest<ApiResponse<RunCardResponse>>(runCardRequestPayload);
+      } catch (error) {
+        if (!shouldRetryRequestError(error)) {
+          throw error;
+        }
+
+        await sleep(MULTI_ROLE_RETRY_DELAY_MS);
+        runCardResponse = await apiRequest<ApiResponse<RunCardResponse>>(runCardRequestPayload);
+      }
 
       if (!runCardResponse?.data?.sessionId) {
         throw new Error('启动对话失败：未返回 sessionId');
       }
 
       const newSessionId = runCardResponse.data.sessionId;
-      const stepName = currentBatch.orderedStepIds.includes(stepId) ? stepId : stepId;
+      const stepName = stepId;
 
       updateRole(roleIndex, r => {
         let updated: RoleRunState = {
@@ -393,8 +427,12 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
             sessionId: role.sessionId,
           },
         });
-      } catch {
-        // 遇错重试一次
+      } catch (error) {
+        if (!shouldRetryRequestError(error)) {
+          throw error;
+        }
+
+        // 遇可重试错误重试一次
         await sleep(MULTI_ROLE_RETRY_DELAY_MS);
         try {
           response = await apiRequest<ApiResponse<ChatResponse>>({
@@ -408,11 +446,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
             },
           });
         } catch (retryErr) {
-          updateRole(roleIndex, r => ({
-            ...addRoleMessage(r, 'system', `❌ 发送失败: ${(retryErr as Error).message}`),
-            workflowState: 'ERROR' as WorkflowState,
-            error: (retryErr as Error).message,
-          }));
+          markRoleError(roleIndex, (retryErr as Error).message, '❌ 发送失败');
           return { needConfig: false, completed: false };
         }
       }
@@ -452,13 +486,21 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
         }
 
         updateRole(roleIndex, r => addRoleMessage(r, 'system', `进入下一个阶段——${data.nextStepId}`));
-        const runResult = await runCardForRole(roleIndex, data.nextStepId!, role.sessionId);
-        return { needConfig: false, completed: runResult.completed };
+        try {
+          const runResult = await runCardForRole(roleIndex, data.nextStepId!, role.sessionId);
+          if (runResult.cancelled) {
+            return { needConfig: false, completed: false };
+          }
+          return { needConfig: false, completed: runResult.completed };
+        } catch (error) {
+          markRoleError(roleIndex, (error as Error).message, '❌ 跳转步骤失败');
+          return { needConfig: false, completed: false };
+        }
       }
 
       return { needConfig: false, completed: false };
     },
-    [trainTaskId, updateRole, appendLogEntry, runCardForRole],
+    [trainTaskId, updateRole, appendLogEntry, runCardForRole, markRoleError],
   );
 
   // ============ 公开 API ============
@@ -566,6 +608,9 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
 
           try {
             const result = await runCardForRole(i, firstStepId);
+            if (result.cancelled) {
+              break;
+            }
             updateRole(i, r => ({
               ...r,
               dialogueRound: 1,
@@ -576,11 +621,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
               updateRole(i, r => addRoleMessage(r, 'system', '对话已开始'));
             }
           } catch (err) {
-            updateRole(i, r => ({
-              ...addRoleMessage(r, 'system', `❌ 启动失败: ${(err as Error).message}`),
-              workflowState: 'ERROR' as WorkflowState,
-              error: (err as Error).message,
-            }));
+            markRoleError(i, (err as Error).message, '❌ 启动失败');
           }
 
           if (i < roles.length - 1) {
@@ -601,7 +642,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
         setIsLoading(false);
       }
     },
-    [trainTaskId, updateRole, runCardForRole, updateBatchState],
+    [trainTaskId, updateRole, runCardForRole, updateBatchState, markRoleError],
   );
 
   const setActiveRoleIndex = useCallback((index: number) => {
@@ -698,59 +739,68 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
 
     let needConfig = false;
 
-    while (autoRunActiveRef.current && token === autoRunTokenRef.current) {
-      const currentBatch = batchRef.current;
-      if (!currentBatch || currentBatch.batchState === 'COMPLETED' || currentBatch.batchState === 'ERROR') break;
+    try {
+      while (autoRunActiveRef.current && token === autoRunTokenRef.current) {
+        const currentBatch = batchRef.current;
+        if (!currentBatch) break;
+        if (currentBatch.roles.every(role => isRoleTerminalState(role.workflowState))) break;
 
-      // 找到下一个还在 CHATTING 状态的角色（round-robin）
-      let ranAny = false;
-      for (let i = 0; i < currentBatch.roles.length; i++) {
-        if (!autoRunActiveRef.current || token !== autoRunTokenRef.current) break;
+        // 找到下一个还在 CHATTING 状态的角色（round-robin）
+        let ranAny = false;
+        for (let i = 0; i < currentBatch.roles.length; i++) {
+          if (!autoRunActiveRef.current || token !== autoRunTokenRef.current) break;
 
-        const role = currentBatch.roles[i];
-        if (role.workflowState !== 'CHATTING') continue;
+          const role = currentBatch.roles[i];
+          if (role.workflowState !== 'CHATTING') continue;
 
-        if (isLoadingRef.current) {
-          await sleep(300);
-          continue;
-        }
-
-        setIsLoading(true);
-        try {
-          const result = await autoGenerateForRole(i);
-          if (result.needConfig) {
-            needConfig = true;
-            autoRunActiveRef.current = false;
-            break;
+          if (isLoadingRef.current) {
+            await sleep(300);
+            continue;
           }
-          ranAny = true;
-        } finally {
-          setIsLoading(false);
+
+          setIsLoading(true);
+          try {
+            const result = await autoGenerateForRole(i);
+            if (result.needConfig) {
+              needConfig = true;
+              autoRunActiveRef.current = false;
+              break;
+            }
+            ranAny = true;
+          } catch (error) {
+            markRoleError(i, (error as Error).message, '❌ 自动运行失败');
+          } finally {
+            setIsLoading(false);
+          }
+
+          await sleep(MULTI_ROLE_POLL_INTERVAL_MS);
         }
 
-        await sleep(MULTI_ROLE_POLL_INTERVAL_MS);
-      }
+        if (needConfig) break;
 
-      if (needConfig) break;
+        updateBatchState();
 
-      updateBatchState();
-
-      // 如果没有任何角色能运行，检查是否全部结束
-      if (!ranAny) {
+        // 如果没有任何角色能运行，检查是否全部结束
         const finalBatch = batchRef.current;
-        if (!finalBatch || finalBatch.roles.every(r => r.workflowState !== 'CHATTING')) break;
-        await sleep(500);
+        if (!finalBatch || finalBatch.roles.every(role => isRoleTerminalState(role.workflowState))) {
+          break;
+        }
+        if (!ranAny) {
+          await sleep(MULTI_ROLE_POLL_INTERVAL_MS);
+        }
       }
+    } catch (error) {
+      console.error('多角色自动运行异常:', error);
+    } finally {
+      if (token === autoRunTokenRef.current) {
+        autoRunActiveRef.current = false;
+      }
+      setIsBatchAutoRunning(false);
+      updateBatchState();
     }
-
-    if (token === autoRunTokenRef.current) {
-      autoRunActiveRef.current = false;
-    }
-    setIsBatchAutoRunning(false);
-    updateBatchState();
 
     return { needConfig };
-  }, [autoGenerateForRole, updateBatchState]);
+  }, [autoGenerateForRole, updateBatchState, markRoleError]);
 
   const stopBatchAutoRun = useCallback(() => {
     if (!autoRunActiveRef.current) return;

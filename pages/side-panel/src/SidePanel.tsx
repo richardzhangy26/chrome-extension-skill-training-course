@@ -1,12 +1,15 @@
 import '@src/SidePanel.css';
 import { DebugStepsModal } from './components/DebugStepsModal';
 import { HistoryModal, HistoryIcon } from './components/HistoryModal';
+import { MultiRolePickerModal } from './components/MultiRolePickerModal';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
 import { SimulationConfigModal } from './components/SimulationConfigModal';
 import { useAgentChat } from './hooks/useAgentChat';
+import { useMultiRoleRun } from './hooks/useMultiRoleRun';
 import { normalizeDialogueSimulationContent } from './services/llm-service';
 import { llmConfigStorage } from '@extension/storage';
 import { useRef, useEffect, useState } from 'react';
+import type { MultiRoleRunBatch, RoleRunDraft } from './types/multi-role-types';
 import type { LLMConfig } from '@extension/storage';
 
 // ============ SVG图标组件 ============
@@ -630,6 +633,264 @@ const StartButton = ({
   </div>
 );
 
+// ============ 多角色折叠视图 ============
+const MultiRoleView = ({
+  batch,
+  isLoading,
+  isBatchAutoRunning,
+  onSetActiveRole,
+  onViewHistory,
+}: {
+  batch: MultiRoleRunBatch;
+  isLoading: boolean;
+  isBatchAutoRunning: boolean;
+  onSetActiveRole: (index: number) => void;
+  onViewHistory: (logSessionId: string) => void;
+}) => {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [batch]);
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-white p-3">
+      {/* batch 状态概览 */}
+      <div className="mb-3 flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs">
+        <div
+          className={`h-2 w-2 rounded-full ${
+            batch.batchState === 'RUNNING'
+              ? 'animate-pulse bg-indigo-400'
+              : batch.batchState === 'COMPLETED'
+                ? 'bg-emerald-500'
+                : batch.batchState === 'ERROR'
+                  ? 'bg-red-400'
+                  : 'bg-slate-400'
+          }`}
+        />
+        <span className="font-medium text-indigo-700">
+          多角色模式 · {batch.roles.length} 个角色
+          {isBatchAutoRunning && ' · 自动运行中'}
+        </span>
+      </div>
+
+      {/* 角色卡片列表（手风琴） */}
+      <div className="space-y-2">
+        {batch.roles.map((role, index) => {
+          const isActive = index === batch.activeRoleIndex;
+          const stateConfig = STATE_CONFIG[role.workflowState];
+          const stepProgress = role.currentStepId
+            ? `${batch.orderedStepIds.indexOf(role.currentStepId) + 1}/${batch.orderedStepIds.length}`
+            : '--/--';
+          const recentMessages = role.messages.slice(-3);
+
+          return (
+            <div key={role.profileId} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              {/* 折叠头 */}
+              <div
+                className={`flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors ${
+                  isActive ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                }`}
+                onClick={() => onSetActiveRole(isActive ? -1 : index)}
+                onKeyDown={e => e.key === 'Enter' && onSetActiveRole(isActive ? -1 : index)}
+                role="button"
+                tabIndex={0}
+                aria-label={`展开角色 ${role.profileLabel}`}
+                aria-expanded={isActive}>
+                <div className={`h-2 w-2 flex-shrink-0 rounded-full ${stateConfig.dotColor}`} />
+                <span className="flex-1 text-sm font-medium text-slate-800">{role.profileLabel}</span>
+                <span className="text-xs text-slate-400">{stepProgress} 步</span>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${stateConfig.bgColor} text-slate-600`}>
+                  {stateConfig.label}
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className={`h-4 w-4 text-slate-400 transition-transform ${isActive ? 'rotate-180' : ''}`}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
+
+              {/* 展开内容 */}
+              {isActive && (
+                <div className="border-t border-slate-100 px-3 py-2.5">
+                  {recentMessages.length === 0 ? (
+                    <p className="py-2 text-center text-xs text-slate-400">暂无消息</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {recentMessages.map(msg => (
+                        <div key={msg.id} className="flex items-start gap-2 text-xs">
+                          <span
+                            className={`mt-0.5 flex-shrink-0 rounded px-1 py-0.5 text-[10px] font-medium ${
+                              msg.role === 'user'
+                                ? 'bg-teal-50 text-teal-700'
+                                : msg.role === 'assistant'
+                                  ? 'bg-cyan-50 text-cyan-700'
+                                  : 'bg-slate-100 text-slate-500'
+                            }`}>
+                            {msg.role === 'user' ? '学生' : msg.role === 'assistant' ? 'AI' : '系统'}
+                          </span>
+                          <p className="line-clamp-2 flex-1 text-slate-600">{msg.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 查看完整对话按钮 */}
+                  {role.logSessionId && role.messages.length > 0 && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        onViewHistory(role.logSessionId!);
+                      }}
+                      className="mt-2 w-full cursor-pointer rounded-lg border border-slate-200 py-1.5 text-xs text-slate-500 transition-colors hover:border-indigo-300 hover:text-indigo-600">
+                      查看完整对话
+                    </button>
+                  )}
+
+                  {role.error && <p className="mt-2 text-xs text-red-500">{role.error}</p>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 加载指示器 */}
+      {isLoading && (
+        <div className="mt-3 flex items-center justify-center gap-2 text-sm text-slate-400">
+          <div className="flex items-center gap-1.5">
+            <div
+              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-indigo-400 to-violet-400"
+              style={{ animationDelay: '0ms' }}
+            />
+            <div
+              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-violet-400 to-purple-400"
+              style={{ animationDelay: '150ms' }}
+            />
+            <div
+              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-purple-400 to-indigo-400"
+              style={{ animationDelay: '300ms' }}
+            />
+          </div>
+          <span>处理中...</span>
+        </div>
+      )}
+
+      <div ref={messagesEndRef} />
+    </div>
+  );
+};
+
+// ============ 多角色底部操作区 ============
+const MultiRoleChatInput = ({
+  onSend,
+  onAutoRun,
+  onStopAutoRun,
+  isAutoRunning,
+  onReset,
+  disabled,
+  activeRoleLabel,
+}: {
+  onSend: (content: string) => void;
+  onAutoRun: () => void;
+  onStopAutoRun: () => void;
+  isAutoRunning: boolean;
+  onReset: () => void;
+  disabled: boolean;
+  activeRoleLabel: string | null;
+}) => {
+  const [value, setValue] = useState('');
+
+  const handleSend = () => {
+    const trimmed = value.trim();
+    if (trimmed) {
+      onSend(trimmed);
+      setValue('');
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (value.trim()) {
+        handleSend();
+      }
+    }
+  };
+
+  return (
+    <div className="border-t border-slate-200 bg-white p-4">
+      {activeRoleLabel && (
+        <div className="mb-2 text-xs text-slate-400">
+          手动输入将发送给: <span className="font-medium text-indigo-600">{activeRoleLabel}</span>
+        </div>
+      )}
+
+      <div className="flex items-end gap-3">
+        <textarea
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          placeholder="输入回答（仅发送给当前选中角色）..."
+          rows={2}
+          className="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 placeholder-slate-400 transition-all focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+        />
+
+        <div className="flex flex-col gap-2">
+          {/* 全自动运行 / 停止 */}
+          <div className="group relative">
+            <button
+              onClick={isAutoRunning ? onStopAutoRun : onAutoRun}
+              disabled={!isAutoRunning && disabled}
+              className={`cursor-pointer rounded-xl p-2.5 text-white transition-all duration-200 hover:shadow-lg disabled:cursor-not-allowed disabled:shadow-none ${
+                isAutoRunning
+                  ? 'bg-gradient-to-br from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 hover:shadow-red-500/25'
+                  : 'bg-gradient-to-br from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 hover:shadow-indigo-500/25'
+              }`}>
+              {isAutoRunning ? <Icons.Stop /> : <Icons.Repeat />}
+            </button>
+            <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+              {isAutoRunning ? '停止全部自动运行' : '全部角色自动运行'}
+              <div className="absolute -right-1 top-1/2 -translate-y-1/2 border-4 border-transparent border-l-slate-800" />
+            </div>
+          </div>
+
+          {/* 发送 */}
+          <div className="group relative">
+            <button
+              onClick={handleSend}
+              disabled={disabled || !value.trim()}
+              className="cursor-pointer rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 p-2.5 text-white transition-all duration-200 hover:from-indigo-600 hover:to-violet-600 hover:shadow-lg hover:shadow-indigo-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
+              <Icons.Send />
+            </button>
+            <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+              发送给当前角色
+              <div className="absolute -right-1 top-1/2 -translate-y-1/2 border-4 border-transparent border-l-slate-800" />
+            </div>
+          </div>
+
+          {/* 重置 */}
+          <div className="group relative">
+            <button
+              onClick={onReset}
+              className="cursor-pointer rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 transition-all duration-200 hover:border-red-300 hover:text-red-500">
+              <Icons.Refresh />
+            </button>
+            <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+              退出多角色模式
+              <div className="absolute -right-1 top-1/2 -translate-y-1/2 border-4 border-transparent border-l-slate-800" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ============ 主组件 ============
 const SidePanel = () => {
   const {
@@ -652,13 +913,18 @@ const SidePanel = () => {
     reset,
   } = useAgentChat();
 
+  // 多角色 hook
+  const multiRole = useMultiRoleRun(trainTaskId);
+
   // 弹窗状态
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConfigPromptOpen, setIsConfigPromptOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [isSimulationConfigOpen, setIsSimulationConfigOpen] = useState(false);
+  const [isMultiRolePickerOpen, setIsMultiRolePickerOpen] = useState(false);
   const [simulationConfig, setSimulationConfig] = useState<SimulationModeState>(createSimulationModeState);
+  const [historyInitialSessionId, setHistoryInitialSessionId] = useState<string | undefined>();
 
   const isIdle = workflowState === 'IDLE';
   const isChatting = workflowState === 'CHATTING';
@@ -742,49 +1008,118 @@ const SidePanel = () => {
     await llmConfigStorage.setConfig({ knowledgeBaseEnabled: enabled });
   };
 
+  // 多角色处理
+  const handleMultiRoleConfirm = async (drafts: RoleRunDraft[]) => {
+    await multiRole.startMultiRoleRun(drafts);
+  };
+
+  const handleMultiRoleAutoRun = async () => {
+    if (multiRole.isBatchAutoRunning) {
+      multiRole.stopBatchAutoRun();
+      return;
+    }
+    const result = await multiRole.startBatchAutoRun();
+    if (result.needConfig) {
+      setIsConfigPromptOpen(true);
+    }
+  };
+
+  const handleViewRoleHistory = (logSessionId: string) => {
+    setHistoryInitialSessionId(logSessionId);
+    setIsHistoryOpen(true);
+  };
+
+  const handleOpenHistory = () => {
+    setHistoryInitialSessionId(undefined);
+    setIsHistoryOpen(true);
+  };
+
+  const handleResetAll = () => {
+    if (multiRole.isMultiRoleMode) {
+      multiRole.resetMultiRole();
+    }
+    reset();
+  };
+
   return (
     <div className="flex h-screen flex-col bg-slate-50">
       {/* 头部 */}
       <Header
         trainTaskId={trainTaskId}
-        workflowState={workflowState}
-        dialogueRound={dialogueRound}
-        onReset={reset}
+        workflowState={multiRole.isMultiRoleMode ? 'CHATTING' : workflowState}
+        dialogueRound={multiRole.isMultiRoleMode ? 0 : dialogueRound}
+        onReset={handleResetAll}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenHistory={handleOpenHistory}
       />
 
-      {/* 消息列表 */}
-      <MessageList messages={messages} isLoading={isLoading} />
-
-      {/* 底部操作区 */}
-      {isIdle ? (
-        <StartButton onClick={startConversation} disabled={isLoading} trainTaskId={trainTaskId} />
-      ) : isChatting || isCompleted ? (
-        <ChatInput
-          onSend={sendMessage}
-          onAutoGenerate={handleAutoGenerate}
-          onAutoRun={handleAutoRunToggle}
-          onStopAutoRun={stopAutoRun}
-          isAutoRunning={isAutoRunning}
-          onOpenDebug={() => setIsDebugOpen(true)}
-          onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
-          simulationConfig={simulationConfig}
-          onToggleDialogueSimulation={enabled => {
-            void handleToggleDialogueSimulation(enabled);
-          }}
-          onToggleKnowledgeBase={enabled => {
-            void handleToggleKnowledgeBase(enabled);
-          }}
-          toggleDisabled={isLoading}
-          debugDisabled={isLoading}
-          disabled={isLoading || isCompleted}
-        />
+      {/* 内容区：多角色 vs 单角色 */}
+      {multiRole.isMultiRoleMode && multiRole.batch ? (
+        <>
+          <MultiRoleView
+            batch={multiRole.batch}
+            isLoading={multiRole.isLoading}
+            isBatchAutoRunning={multiRole.isBatchAutoRunning}
+            onSetActiveRole={multiRole.setActiveRoleIndex}
+            onViewHistory={handleViewRoleHistory}
+          />
+          <MultiRoleChatInput
+            onSend={content => {
+              void multiRole.sendToActiveRole(content);
+            }}
+            onAutoRun={() => {
+              void handleMultiRoleAutoRun();
+            }}
+            onStopAutoRun={multiRole.stopBatchAutoRun}
+            isAutoRunning={multiRole.isBatchAutoRunning}
+            onReset={multiRole.resetMultiRole}
+            disabled={
+              multiRole.isLoading ||
+              multiRole.batch.batchState === 'COMPLETED' ||
+              multiRole.batch.batchState === 'ERROR'
+            }
+            activeRoleLabel={
+              multiRole.batch.activeRoleIndex >= 0
+                ? (multiRole.batch.roles[multiRole.batch.activeRoleIndex]?.profileLabel ?? null)
+                : null
+            }
+          />
+        </>
       ) : (
-        <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-white p-5 text-slate-500">
-          <Icons.Loader />
-          <span className="text-sm">正在处理中...</span>
-        </div>
+        <>
+          {/* 消息列表 */}
+          <MessageList messages={messages} isLoading={isLoading} />
+
+          {/* 底部操作区 */}
+          {isIdle ? (
+            <StartButton onClick={startConversation} disabled={isLoading} trainTaskId={trainTaskId} />
+          ) : isChatting || isCompleted ? (
+            <ChatInput
+              onSend={sendMessage}
+              onAutoGenerate={handleAutoGenerate}
+              onAutoRun={handleAutoRunToggle}
+              onStopAutoRun={stopAutoRun}
+              isAutoRunning={isAutoRunning}
+              onOpenDebug={() => setIsDebugOpen(true)}
+              onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
+              simulationConfig={simulationConfig}
+              onToggleDialogueSimulation={enabled => {
+                void handleToggleDialogueSimulation(enabled);
+              }}
+              onToggleKnowledgeBase={enabled => {
+                void handleToggleKnowledgeBase(enabled);
+              }}
+              toggleDisabled={isLoading}
+              debugDisabled={isLoading}
+              disabled={isLoading || isCompleted}
+            />
+          ) : (
+            <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-white p-5 text-slate-500">
+              <Icons.Loader />
+              <span className="text-sm">正在处理中...</span>
+            </div>
+          )}
+        </>
       )}
 
       {/* 设置弹窗 */}
@@ -811,9 +1146,28 @@ const SidePanel = () => {
         isOpen={isSimulationConfigOpen}
         onClose={() => setIsSimulationConfigOpen(false)}
         trainTaskId={trainTaskId}
+        onOpenMultiRole={() => {
+          setIsSimulationConfigOpen(false);
+          setIsMultiRolePickerOpen(true);
+        }}
       />
 
-      <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
+      <MultiRolePickerModal
+        isOpen={isMultiRolePickerOpen}
+        onClose={() => setIsMultiRolePickerOpen(false)}
+        onConfirm={drafts => {
+          void handleMultiRoleConfirm(drafts);
+        }}
+      />
+
+      <HistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => {
+          setIsHistoryOpen(false);
+          setHistoryInitialSessionId(undefined);
+        }}
+        initialSessionId={historyInitialSessionId}
+      />
     </div>
   );
 };

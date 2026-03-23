@@ -18,6 +18,7 @@ const HistoryIcon = () => (
 interface HistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialSessionId?: string;
 }
 
 const formatTimestamp = (timestamp: number) =>
@@ -93,7 +94,7 @@ const downloadLogText = (session: AgentLogSession) => {
   URL.revokeObjectURL(url);
 };
 
-const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
+const HistoryModal = ({ isOpen, onClose, initialSessionId }: HistoryModalProps) => {
   const [sessions, setSessions] = useState<AgentLogSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -134,10 +135,15 @@ const HistoryModal = ({ isOpen, onClose }: HistoryModalProps) => {
       setActiveSessionId(null);
       return;
     }
+    // 优先展开 initialSessionId（来自多角色"查看完整对话"）
+    if (initialSessionId && sortedSessions.some(session => session.id === initialSessionId)) {
+      setActiveSessionId(initialSessionId);
+      return;
+    }
     setActiveSessionId(prev =>
       prev && sortedSessions.some(session => session.id === prev) ? prev : sortedSessions[0].id,
     );
-  }, [isOpen, sortedSessions]);
+  }, [isOpen, sortedSessions, initialSessionId]);
 
   useEffect(() => {
     if (!isOpen) {

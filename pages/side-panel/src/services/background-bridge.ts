@@ -21,6 +21,22 @@ interface ApiRequestPayload {
   headers?: Record<string, string>;
 }
 
+interface ApiBusinessEnvelope {
+  code?: unknown;
+  msg?: unknown;
+  message?: unknown;
+  error?: unknown;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const resolveBusinessErrorMessage = (envelope: ApiBusinessEnvelope) => {
+  const candidates = [envelope.msg, envelope.message, envelope.error];
+  const message = candidates.find(candidate => typeof candidate === 'string' && candidate.trim().length > 0);
+  return typeof message === 'string' ? message : 'API 业务错误';
+};
+
 // 发送消息到Background Script
 const sendMessage = async <T>(type: string, payload?: unknown): Promise<BackgroundResponse<T>> =>
   new Promise(resolve => {
@@ -61,6 +77,14 @@ const apiRequest = async <T>(payload: ApiRequestPayload): Promise<T> => {
   if (response.data === undefined || response.data === null) {
     throw new Error('API request returned empty response');
   }
+
+  if (isRecord(response.data)) {
+    const envelope = response.data as ApiBusinessEnvelope;
+    if (typeof envelope.code === 'number' && envelope.code !== 200) {
+      throw new Error(resolveBusinessErrorMessage(envelope));
+    }
+  }
+
   return response.data;
 };
 

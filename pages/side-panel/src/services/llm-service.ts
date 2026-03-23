@@ -5,7 +5,7 @@
 
 import { apiRequest, API_ENDPOINTS } from './background-bridge';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_PROFILE_ID, llmConfigStorage, normalizeLLMConfig } from '@extension/storage';
-import type { LLMConfig } from '@extension/storage';
+import type { LLMConfig, StudentProfile } from '@extension/storage';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -61,6 +61,10 @@ interface ScriptStepFlow {
 }
 
 type GeneratorProfile = 'good' | 'medium' | 'poor';
+
+interface RuntimeProfileOverride {
+  profile: StudentProfile;
+}
 
 interface DialogueGeneratorStage {
   stepId: string;
@@ -374,16 +378,18 @@ const buildSimulationDialogueMessages = (
   ];
 };
 
-const buildUserMessage = (
-  aiQuestion: string,
-  profile: { label: string; description: string; style: string },
+const buildStudentRoleSystemPrompt = (
+  systemPrompt: string,
+  profile: { label: string; description: string; style: string; fallbackHint?: string },
   config: Pick<
     LLMConfig,
     'dialogueSimulationEnabled' | 'dialogueSimulationContent' | 'knowledgeBaseEnabled' | 'knowledgeBaseContent'
   >,
 ) => {
   const sections = [
-    '## 角色设定',
+    systemPrompt,
+    '',
+    '## 当前扮演设定',
     `学生档位: ${profile.label}`,
     `角色特征: ${profile.description}`,
     `表达风格: ${profile.style}`,
@@ -402,10 +408,15 @@ const buildUserMessage = (
     sections.push('## 参考知识库 (可结合使用)', knowledgeBaseContent, '');
   }
 
-  sections.push('## 当前问题', aiQuestion, '');
-
   return sections.join('\n');
 };
+
+const buildStudentReplyInstruction = () =>
+  [
+    '请继续扮演上面设定的角色，直接回复上一条 assistant 的话。',
+    '如果上一条 assistant 是让你做选择、确认或补充内容，请直接作答。',
+    '仅输出角色回答内容，不要添加角色标签，不要额外解释。',
+  ].join('\n');
 
 const buildRequestPayload = (config: LLMConfig, messages: ChatMessage[]) => ({
   model: config.model,
@@ -510,6 +521,7 @@ const fetchAvailableTextModels = async (
 const generateStudentAnswer = async (
   aiQuestion: string,
   conversationHistory: Array<{ ai: string; student: string }> = [],
+  runtimeOverride?: RuntimeProfileOverride,
 ): Promise<LLMResponse> => {
   // 获取配置
   const config = normalizeLLMConfig(await llmConfigStorage.get());
@@ -520,8 +532,8 @@ const generateStudentAnswer = async (
 
   try {
     const systemPrompt = resolveSystemPrompt(config);
-    const profile = resolveStudentProfile(config);
-    const userMessage = buildUserMessage(aiQuestion, profile, config);
+    const profile = runtimeOverride?.profile ?? resolveStudentProfile(config);
+    const roleSystemPrompt = buildStudentRoleSystemPrompt(systemPrompt, profile, config);
 
     const historyMessages: ChatMessage[] = [];
     for (const turn of conversationHistory.slice(-config.maxHistoryRounds)) {
@@ -530,9 +542,10 @@ const generateStudentAnswer = async (
     }
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: roleSystemPrompt },
       ...historyMessages,
-      { role: 'user', content: userMessage },
+      { role: 'assistant', content: aiQuestion },
+      { role: 'user', content: buildStudentReplyInstruction() },
     ];
 
     const result = await callChatCompletion(config, config.model, messages);
@@ -655,4 +668,4 @@ export {
   normalizeDialogueSimulationContent,
   testLLMConfig,
 };
-export type { GeneratorProfile };
+export type { GeneratorProfile, RuntimeProfileOverride };

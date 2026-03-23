@@ -311,16 +311,16 @@ const SimulationConfigModal = ({ isOpen, onClose, trainTaskId, onOpenMultiRole }
 
           {/* 多人运行入口 */}
           {onOpenMultiRole && (
-            <section className="rounded-xl border border-dashed border-violet-200 bg-violet-50/60 p-4">
+            <section className="rounded-xl border border-dashed border-blue-200 bg-blue-50/60 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-violet-900">多角色并行运行</h3>
-                  <p className="mt-1 text-xs text-violet-700">选择多个学生档位同时跑训练剧本，对比不同角色的表现。</p>
+                  <h3 className="text-sm font-semibold text-blue-900">多角色并行运行</h3>
+                  <p className="mt-1 text-xs text-blue-700">选择多个学生档位同时跑训练剧本，对比不同角色的表现。</p>
                 </div>
                 <button
                   type="button"
                   onClick={onOpenMultiRole}
-                  className="cursor-pointer whitespace-nowrap rounded-lg bg-gradient-to-r from-violet-600 to-indigo-500 px-3 py-2 text-xs font-medium text-white transition-all hover:from-violet-700 hover:to-indigo-600">
+                  className="cursor-pointer whitespace-nowrap rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 px-3 py-2 text-xs font-medium text-white transition-all hover:from-blue-700 hover:to-cyan-600">
                   选择角色
                 </button>
               </div>

@@ -42,13 +42,15 @@ interface ApiResponse<T> {
   data: T;
 }
 
+type ScriptNodeType = 'SCRIPT_START' | 'SCRIPT_END' | 'SCRIPT_NODE';
+
 // API 返回的步骤列表项结构（参考 Python: workflow_tester_base.py）
 interface ScriptStepItem {
   stepId: string; // 步骤ID（用于 runCard）
   stepDetailDTO?: {
     stepName?: string;
     stepOrder?: number;
-    nodeType?: 'SCRIPT_START' | 'SCRIPT_END' | 'SCRIPT_NODE';
+    nodeType?: ScriptNodeType;
   };
 }
 
@@ -109,6 +111,7 @@ const useAgentChat = () => {
   const dialogueRoundRef = useRef(0);
   const activeLogSessionIdRef = useRef<string | null>(null);
   const stepNameMappingRef = useRef<Record<string, string>>({});
+  const stepNodeTypeByIdRef = useRef<Record<string, ScriptNodeType>>({});
   const scriptStepsRef = useRef<ScriptStepItem[]>([]);
 
   useEffect(() => {
@@ -193,6 +196,18 @@ const useAgentChat = () => {
     return stepNameMapping;
   }, []);
 
+  const buildStepNodeTypeMapping = useCallback((steps: ScriptStepItem[]) => {
+    const mapping: Record<string, ScriptNodeType> = {};
+    steps.forEach(step => {
+      const nodeType = step.stepDetailDTO?.nodeType;
+      if (nodeType) {
+        mapping[step.stepId] = nodeType;
+      }
+    });
+    stepNodeTypeByIdRef.current = mapping;
+    return mapping;
+  }, []);
+
   // 生成消息ID
   const generateMessageId = useCallback(() => `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`, []);
 
@@ -213,10 +228,7 @@ const useAgentChat = () => {
     [generateMessageId, currentStepId],
   );
 
-  const isTerminalStep = useCallback(
-    (stepId: string) => getStepDisplayName(stepId) === 'defaultStepName',
-    [getStepDisplayName],
-  );
+  const isTerminalStep = useCallback((stepId: string) => stepNodeTypeByIdRef.current[stepId] === 'SCRIPT_END', []);
   const completeTraining = useCallback(() => {
     setWorkflowState('COMPLETED');
     addMessage('system', '✅ 恭喜！训练已完成！');
@@ -239,9 +251,17 @@ const useAgentChat = () => {
   );
 
   const runCardForStep = useCallback(
-    async (stepId: string, sessionOverride?: string | null) => {
+    async (stepId: string, sessionOverride?: string | null): Promise<ApiResponse<RunCardResponse> | null> => {
       if (!trainTaskId) {
         throw new Error('未找到训练任务ID');
+      }
+
+      // SCRIPT_END 终止节点直接结束，不再请求 runCard
+      if (isTerminalStep(stepId)) {
+        setCurrentStepId(stepId);
+        currentStepIdRef.current = stepId;
+        completeTraining();
+        return null;
       }
 
       setWorkflowState('RUNNING_CARD');
@@ -286,11 +306,11 @@ const useAgentChat = () => {
         const nextStepId = runCardResponse.data.nextStepId;
         setCurrentStepId(nextStepId);
         currentStepIdRef.current = nextStepId;
-        announceNextStep(nextStepId);
         if (isTerminalStep(nextStepId)) {
           completeTraining();
           return runCardResponse;
         }
+        announceNextStep(nextStepId);
         return runCardForStep(nextStepId, runCardResponse.data.sessionId);
       }
 
@@ -378,6 +398,7 @@ const useAgentChat = () => {
         setScriptSteps(steps);
         scriptStepsRef.current = steps;
         buildStepNameMapping(steps);
+        buildStepNodeTypeMapping(steps);
         return steps;
       } catch (err) {
         const message = (err as Error).message || '获取步骤列表失败';
@@ -390,7 +411,7 @@ const useAgentChat = () => {
         setIsStepListLoading(false);
       }
     },
-    [addMessage, buildStepNameMapping, trainTaskId],
+    [addMessage, buildStepNameMapping, buildStepNodeTypeMapping, trainTaskId],
   );
 
   // 监听URL变化
@@ -413,6 +434,7 @@ const useAgentChat = () => {
           setActiveLogSessionId(null);
           activeLogSessionIdRef.current = null;
           stepNameMappingRef.current = {};
+          stepNodeTypeByIdRef.current = {};
           setScriptSteps([]);
           scriptStepsRef.current = [];
           setStepListError(null);
@@ -519,7 +541,10 @@ const useAgentChat = () => {
       // 步骤2: 启动卡片
       addMessage('system', `正在启动步骤: ${firstStepName}...`);
 
-      await runCardForStep(firstStepId);
+      const runCardResult = await runCardForStep(firstStepId);
+      if (runCardResult === null) {
+        return;
+      }
       setDialogueRound(1);
 
       addMessage('system', '对话已开始，请输入你的回答或点击AI自动回答');
@@ -590,7 +615,10 @@ const useAgentChat = () => {
 
         const stepName = getStepDisplayName(stepId);
         addMessage('system', `调试模式：切换到步骤 ${stepName}`);
-        await runCardForStep(stepId, sessionIdRef.current);
+        const runCardResult = await runCardForStep(stepId, sessionIdRef.current);
+        if (runCardResult === null) {
+          return;
+        }
         setDialogueRound(prev => (prev === 0 ? 1 : prev));
       } catch (err) {
         setWorkflowState('ERROR');
@@ -666,10 +694,12 @@ const useAgentChat = () => {
 
           // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
           if (data?.nextStepId) {
-            announceNextStep(data.nextStepId);
             if (isTerminalStep(data.nextStepId)) {
+              setCurrentStepId(data.nextStepId);
+              currentStepIdRef.current = data.nextStepId;
               completeTraining();
             } else {
+              announceNextStep(data.nextStepId);
               await runCardForStep(data.nextStepId, sessionId);
             }
           }
@@ -793,10 +823,12 @@ const useAgentChat = () => {
 
         // chat 返回 nextStepId 时，自动切换到下一步并运行 runCard
         if (data?.nextStepId) {
-          announceNextStep(data.nextStepId);
           if (isTerminalStep(data.nextStepId)) {
+            setCurrentStepId(data.nextStepId);
+            currentStepIdRef.current = data.nextStepId;
             completeTraining();
           } else {
+            announceNextStep(data.nextStepId);
             await runCardForStep(data.nextStepId, activeSessionId);
           }
         }
@@ -880,6 +912,7 @@ const useAgentChat = () => {
     setActiveLogSessionId(null);
     activeLogSessionIdRef.current = null;
     stepNameMappingRef.current = {};
+    stepNodeTypeByIdRef.current = {};
     dialogueRoundRef.current = 0;
     setScriptSteps([]);
     scriptStepsRef.current = [];

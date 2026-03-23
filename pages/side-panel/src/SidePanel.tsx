@@ -34,9 +34,9 @@ const Icons = {
       />
       <defs>
         <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#14B8A6" />
+          <stop offset="0%" stopColor="#2563EB" />
           <stop offset="50%" stopColor="#06B6D4" />
-          <stop offset="100%" stopColor="#0EA5E9" />
+          <stop offset="100%" stopColor="#10B981" />
         </linearGradient>
       </defs>
     </svg>
@@ -230,7 +230,7 @@ const Header = ({
   return (
     <div className="relative overflow-hidden">
       {/* 渐变背景 */}
-      <div className="absolute inset-0 bg-gradient-to-br from-teal-500 via-cyan-500 to-blue-500" />
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-cyan-500 to-emerald-400" />
       {/* 装饰性光晕 */}
       <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
       <div className="absolute -bottom-10 -left-10 h-24 w-24 rounded-full bg-white/10 blur-xl" />
@@ -539,7 +539,7 @@ const ChatInput = ({
           <button
             onClick={onOpenMultiRole}
             disabled={debugDisabled}
-            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs text-violet-700 transition-all duration-200 hover:border-violet-400 hover:text-violet-900 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700 transition-all duration-200 hover:border-blue-400 hover:text-blue-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
             title="选择多个学生档位并行训练">
             <Icons.Users />
             <span>多角色并行</span>
@@ -644,7 +644,7 @@ const StartButton = ({
     <button
       onClick={onClick}
       disabled={disabled || !trainTaskId}
-      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 py-3.5 font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:from-teal-600 hover:via-cyan-600 hover:to-blue-600 hover:shadow-xl hover:shadow-cyan-500/30 disabled:translate-y-0 disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-400 disabled:to-slate-300 disabled:shadow-none">
+      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 py-3.5 font-medium text-white transition-all duration-300 hover:-translate-y-0.5 hover:from-blue-700 hover:via-cyan-600 hover:to-emerald-500 hover:shadow-xl hover:shadow-blue-500/30 disabled:translate-y-0 disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-400 disabled:to-slate-300 disabled:shadow-none">
       <Icons.Play />
       <span>{!trainTaskId ? '请在训练页面打开' : '开始训练'}</span>
     </button>
@@ -679,11 +679,11 @@ const MultiRoleView = ({
   return (
     <div className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 to-white p-3">
       {/* batch 状态概览 */}
-      <div className="mb-3 flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs">
+      <div className="mb-3 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs">
         <div
           className={`h-2 w-2 rounded-full ${
             batch.batchState === 'RUNNING'
-              ? 'animate-pulse bg-indigo-400'
+              ? 'animate-pulse bg-blue-400'
               : batch.batchState === 'COMPLETED'
                 ? 'bg-emerald-500'
                 : batch.batchState === 'ERROR'
@@ -691,7 +691,7 @@ const MultiRoleView = ({
                   : 'bg-slate-400'
           }`}
         />
-        <span className="font-medium text-indigo-700">
+        <span className="font-medium text-blue-700">
           多角色模式 · {batch.roles.length} 个角色
           {isBatchAutoRunning && ' · 自动运行中'}
         </span>
@@ -712,7 +712,7 @@ const MultiRoleView = ({
               {/* 折叠头 */}
               <div
                 className={`flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors ${
-                  isActive ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                  isActive ? 'bg-blue-50' : 'hover:bg-slate-50'
                 }`}
                 onClick={() => onSetActiveRole(isActive ? -1 : index)}
                 onKeyDown={e => e.key === 'Enter' && onSetActiveRole(isActive ? -1 : index)}
@@ -768,7 +768,7 @@ const MultiRoleView = ({
                         e.stopPropagation();
                         onViewHistory(role.logSessionId!);
                       }}
-                      className="mt-2 w-full cursor-pointer rounded-lg border border-slate-200 py-1.5 text-xs text-slate-500 transition-colors hover:border-indigo-300 hover:text-indigo-600">
+                      className="mt-2 w-full cursor-pointer rounded-lg border border-slate-200 py-1.5 text-xs text-slate-500 transition-colors hover:border-blue-300 hover:text-blue-600">
                       查看完整对话
                     </button>
                   )}
@@ -786,15 +786,15 @@ const MultiRoleView = ({
         <div className="mt-3 flex items-center justify-center gap-2 text-sm text-slate-400">
           <div className="flex items-center gap-1.5">
             <div
-              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-indigo-400 to-violet-400"
+              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-blue-400 to-cyan-400"
               style={{ animationDelay: '0ms' }}
             />
             <div
-              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-violet-400 to-purple-400"
+              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400"
               style={{ animationDelay: '150ms' }}
             />
             <div
-              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-purple-400 to-indigo-400"
+              className="h-2 w-2 animate-bounce rounded-full bg-gradient-to-r from-emerald-400 to-blue-400"
               style={{ animationDelay: '300ms' }}
             />
           </div>
@@ -848,7 +848,7 @@ const MultiRoleChatInput = ({
     <div className="border-t border-slate-200 bg-white p-4">
       {activeRoleLabel && (
         <div className="mb-2 text-xs text-slate-400">
-          手动输入将发送给: <span className="font-medium text-indigo-600">{activeRoleLabel}</span>
+          手动输入将发送给: <span className="font-medium text-blue-600">{activeRoleLabel}</span>
         </div>
       )}
 
@@ -860,7 +860,7 @@ const MultiRoleChatInput = ({
           disabled={disabled}
           placeholder="输入回答（仅发送给当前选中角色）..."
           rows={2}
-          className="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 placeholder-slate-400 transition-all focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+          className="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 placeholder-slate-400 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
         />
 
         <div className="flex flex-col gap-2">
@@ -872,7 +872,7 @@ const MultiRoleChatInput = ({
               className={`cursor-pointer rounded-xl p-2.5 text-white transition-all duration-200 hover:shadow-lg disabled:cursor-not-allowed disabled:shadow-none ${
                 isAutoRunning
                   ? 'bg-gradient-to-br from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 hover:shadow-red-500/25'
-                  : 'bg-gradient-to-br from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 hover:shadow-indigo-500/25'
+                  : 'bg-gradient-to-br from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 hover:shadow-blue-500/25'
               }`}>
               {isAutoRunning ? <Icons.Stop /> : <Icons.Repeat />}
             </button>
@@ -887,7 +887,7 @@ const MultiRoleChatInput = ({
             <button
               onClick={handleSend}
               disabled={disabled || !value.trim()}
-              className="cursor-pointer rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 p-2.5 text-white transition-all duration-200 hover:from-indigo-600 hover:to-violet-600 hover:shadow-lg hover:shadow-indigo-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
+              className="cursor-pointer rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 p-2.5 text-white transition-all duration-200 hover:from-cyan-600 hover:to-blue-600 hover:shadow-lg hover:shadow-cyan-500/25 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
               <Icons.Send />
             </button>
             <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">

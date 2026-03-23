@@ -20,12 +20,14 @@ interface ApiResponse<T> {
   data: T;
 }
 
+type ScriptNodeType = 'SCRIPT_START' | 'SCRIPT_END' | 'SCRIPT_NODE';
+
 interface ScriptStepItem {
   stepId: string;
   stepDetailDTO?: {
     stepName?: string;
     stepOrder?: number;
-    nodeType?: 'SCRIPT_START' | 'SCRIPT_END' | 'SCRIPT_NODE';
+    nodeType?: ScriptNodeType;
   };
 }
 
@@ -196,7 +198,16 @@ const buildStepNameMapping = (steps: ScriptStepItem[]): Record<string, string> =
   return mapping;
 };
 
-const isTerminalStepName = (name: string) => name === 'defaultStepName';
+const buildStepNodeTypeMapping = (steps: ScriptStepItem[]): Record<string, ScriptNodeType> => {
+  const mapping: Record<string, ScriptNodeType> = {};
+  for (const step of steps) {
+    const nodeType = step.stepDetailDTO?.nodeType;
+    if (nodeType) {
+      mapping[step.stepId] = nodeType;
+    }
+  }
+  return mapping;
+};
 
 // ============ Hook 实现 ============
 
@@ -206,6 +217,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const batchRef = useRef<MultiRoleRunBatch | null>(null);
+  const stepNodeTypeByIdRef = useRef<Record<string, ScriptNodeType>>({});
   const autoRunActiveRef = useRef(false);
   const autoRunTokenRef = useRef(0);
   const isLoadingRef = useRef(false);
@@ -226,6 +238,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
       setIsBatchAutoRunning(false);
       setBatch(null);
       batchRef.current = null;
+      stepNodeTypeByIdRef.current = {};
       setIsLoading(false);
     }
   }, [trainTaskId]);
@@ -254,6 +267,8 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
     },
     [updateRole],
   );
+
+  const isTerminalStepId = useCallback((stepId: string) => stepNodeTypeByIdRef.current[stepId] === 'SCRIPT_END', []);
 
   const updateBatchState = useCallback(() => {
     setBatch(prev => {
@@ -293,6 +308,23 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
       if (!currentBatch || !trainTaskId) return { completed: false, cancelled: true };
       const role = currentBatch.roles[roleIndex];
       if (!role) return { completed: false, cancelled: true };
+
+      if (isTerminalStepId(stepId)) {
+        updateRole(roleIndex, r =>
+          addRoleMessage(
+            {
+              ...r,
+              currentStepId: stepId,
+              workflowState: 'COMPLETED' as WorkflowState,
+            },
+            'system',
+            '✅ 训练已完成！',
+            false,
+            stepId,
+          ),
+        );
+        return { completed: true };
+      }
 
       updateRole(roleIndex, r => ({ ...r, workflowState: 'RUNNING_CARD' as WorkflowState }));
 
@@ -355,8 +387,14 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
       // 处理跳步
       if (runCardResponse.data.needSkipStep && runCardResponse.data.nextStepId) {
         const nextStepId = runCardResponse.data.nextStepId;
-        if (isTerminalStepName(nextStepId)) {
-          updateRole(roleIndex, r => addRoleMessage({ ...r, workflowState: 'COMPLETED' }, 'system', '✅ 训练已完成！'));
+        if (isTerminalStepId(nextStepId)) {
+          updateRole(roleIndex, r =>
+            addRoleMessage(
+              { ...r, currentStepId: nextStepId, workflowState: 'COMPLETED' },
+              'system',
+              '✅ 训练已完成！',
+            ),
+          );
           return { completed: true };
         }
         updateRole(roleIndex, r => addRoleMessage(r, 'system', `进入下一个阶段——${nextStepId}`));
@@ -365,7 +403,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
 
       return { completed: false };
     },
-    [trainTaskId, updateRole, appendLogEntry],
+    [trainTaskId, updateRole, appendLogEntry, isTerminalStepId],
   );
 
   /**
@@ -480,8 +518,14 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
 
       // 需要跳步
       if (data?.nextStepId) {
-        if (isTerminalStepName(data.nextStepId)) {
-          updateRole(roleIndex, r => addRoleMessage({ ...r, workflowState: 'COMPLETED' }, 'system', '✅ 训练已完成！'));
+        if (isTerminalStepId(data.nextStepId)) {
+          updateRole(roleIndex, r =>
+            addRoleMessage(
+              { ...r, currentStepId: data.nextStepId, workflowState: 'COMPLETED' },
+              'system',
+              '✅ 训练已完成！',
+            ),
+          );
           return { needConfig: false, completed: true };
         }
 
@@ -500,7 +544,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
 
       return { needConfig: false, completed: false };
     },
-    [trainTaskId, updateRole, appendLogEntry, runCardForRole, markRoleError],
+    [trainTaskId, updateRole, appendLogEntry, runCardForRole, markRoleError, isTerminalStepId],
   );
 
   // ============ 公开 API ============
@@ -560,6 +604,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
         if (!firstStepId) throw new Error('无法确定首个训练步骤');
 
         const stepMapping = buildStepNameMapping(steps);
+        stepNodeTypeByIdRef.current = buildStepNodeTypeMapping(steps);
         const batchId = generateId();
 
         // 为每个角色创建 run state 和 log session
@@ -708,9 +753,13 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
             updateRole(roleIndex, r => addRoleMessage(r, 'assistant', data.text!));
           }
           if (data?.nextStepId) {
-            if (isTerminalStepName(data.nextStepId)) {
+            if (isTerminalStepId(data.nextStepId)) {
               updateRole(roleIndex, r =>
-                addRoleMessage({ ...r, workflowState: 'COMPLETED' }, 'system', '✅ 训练已完成！'),
+                addRoleMessage(
+                  { ...r, currentStepId: data.nextStepId, workflowState: 'COMPLETED' },
+                  'system',
+                  '✅ 训练已完成！',
+                ),
               );
             } else {
               updateRole(roleIndex, r => addRoleMessage(r, 'system', `进入下一个阶段——${data.nextStepId}`));
@@ -726,7 +775,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
         setIsLoading(false);
       }
     },
-    [trainTaskId, updateRole, appendLogEntry, runCardForRole, updateBatchState],
+    [trainTaskId, updateRole, appendLogEntry, runCardForRole, updateBatchState, isTerminalStepId],
   );
 
   const startBatchAutoRun = useCallback(async (): Promise<{ needConfig: boolean }> => {
@@ -815,6 +864,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
     setIsBatchAutoRunning(false);
     setBatch(null);
     batchRef.current = null;
+    stepNodeTypeByIdRef.current = {};
     setIsLoading(false);
   }, []);
 

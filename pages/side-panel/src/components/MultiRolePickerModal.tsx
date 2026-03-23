@@ -75,7 +75,7 @@ const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerMod
 
       <div className="relative flex max-h-[80vh] w-[88%] max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         {/* 头部 */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-4 text-white">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-4 text-white">
           <div>
             <h2 className="text-lg font-semibold">选择角色并行运行</h2>
             <p className="mt-1 text-xs text-white/80">
@@ -104,17 +104,17 @@ const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerMod
                     key={profile.id}
                     className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
                       isSelected
-                        ? 'border-indigo-400 bg-white shadow-sm'
+                        ? 'border-blue-400 bg-white shadow-sm'
                         : isDisabled
                           ? 'cursor-not-allowed border-slate-100 bg-slate-50 opacity-50'
-                          : 'border-slate-200 bg-white hover:border-indigo-200 hover:shadow-sm'
+                          : 'border-slate-200 bg-white hover:border-blue-200 hover:shadow-sm'
                     }`}>
                     <input
                       type="checkbox"
                       checked={isSelected}
                       disabled={isDisabled}
                       onChange={() => handleToggle(profile.id)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-slate-800">{profile.label}</div>
@@ -140,7 +140,7 @@ const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerMod
           <button
             onClick={handleConfirm}
             disabled={selectedIds.size === 0}
-            className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-violet-600 to-indigo-500 py-2.5 text-sm font-medium text-white transition-all hover:from-violet-700 hover:to-indigo-600 disabled:cursor-not-allowed disabled:opacity-50">
+            className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-blue-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
             开始运行 ({selectedIds.size})
           </button>
         </div>

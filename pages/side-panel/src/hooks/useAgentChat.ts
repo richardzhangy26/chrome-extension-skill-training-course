@@ -727,7 +727,7 @@ const useAgentChat = () => {
     ],
   );
 
-  // AI自动生成回答（使用豆包模型）
+  // AI自动生成回答（使用LLM模型）
   const autoGenerate = useCallback(async (): Promise<{ needConfig: boolean }> => {
     const activeSessionId = sessionIdRef.current;
     const activeTrainTaskId = trainTaskIdRef.current;
@@ -747,7 +747,9 @@ const useAgentChat = () => {
     }
 
     setIsLoading(true);
-    addMessage('system', '🤖 正在使用豆包模型生成回答...');
+    const llmConfig = await llmConfigStorage.get();
+    const modelName = llmConfig.model || 'LLM';
+    addMessage('system', `🤖 正在使用 ${modelName} 模型生成回答...`);
 
     try {
       // 构建对话历史
@@ -765,7 +767,7 @@ const useAgentChat = () => {
       const llmResult = await generateStudentAnswer(lastAssistantMessage.content, conversationHistory);
 
       // 移除"正在生成"的消息
-      setMessages(prev => prev.filter(m => !m.content.includes('正在使用豆包模型')));
+      setMessages(prev => prev.filter(m => !m.content.includes('模型生成回答')));
 
       if (!llmResult.success) {
         if (llmResult.error?.includes('请先配置')) {

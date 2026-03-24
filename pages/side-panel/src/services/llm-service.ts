@@ -1,5 +1,5 @@
 /**
- * LLM 服务 - 调用豆包模型生成回答
+ * LLM 服务 - 调用 LLM 模型生成回答
  * 参考 Python: auto_script_train.py 中的 _call_doubao_post 方法
  */
 
@@ -516,7 +516,7 @@ const fetchAvailableTextModels = async (
 };
 
 /**
- * 调用豆包模型生成学生回答
+ * 调用 LLM 模型生成学生回答
  */
 const generateStudentAnswer = async (
   aiQuestion: string,

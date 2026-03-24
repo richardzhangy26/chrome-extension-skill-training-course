@@ -757,7 +757,7 @@ const ConfigPromptModal = ({ isOpen, onClose, onOpenSettings }: ConfigPromptModa
         </div>
 
         <h3 className="mb-2 text-lg font-semibold text-slate-800">需要配置 LLM</h3>
-        <p className="mb-5 text-sm text-slate-500">使用 AI 自动回复功能需要先配置豆包模型的 API Key</p>
+        <p className="mb-5 text-sm text-slate-500">使用 AI 自动回复功能需要先配置 LLM 的 API Key</p>
 
         <div className="flex gap-3">
           <button

@@ -1,6 +1,6 @@
 /**
  * LLM 配置存储模块
- * 存储豆包模型 API 配置
+ * 存储 LLM API 配置
  */
 
 import { createStorage, StorageEnum } from '../base/index.js';

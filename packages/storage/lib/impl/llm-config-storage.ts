@@ -17,6 +17,8 @@ interface StudentProfile {
   fallbackHint: string;
 }
 
+type TTSResponseFormat = 'mp3' | 'wav' | 'opus';
+
 // LLM 配置类型
 interface LLMConfig {
   apiKey: string;
@@ -36,14 +38,24 @@ interface LLMConfig {
   dialogueSimulationContent: string;
   knowledgeBaseEnabled: boolean;
   knowledgeBaseContent: string;
+  voiceModeEnabled: boolean;
+  ttsApiUrl: string;
+  ttsModel: string;
+  voice: string;
+  speed: number;
+  ttsResponseFormat: TTSResponseFormat;
 }
 
-type LLMConfigInput = Partial<Omit<LLMConfig, 'model' | 'temperature' | 'topK' | 'maxTokens' | 'maxHistoryRounds'>> & {
+type LLMConfigInput = Partial<
+  Omit<LLMConfig, 'model' | 'temperature' | 'topK' | 'maxTokens' | 'maxHistoryRounds' | 'speed' | 'ttsResponseFormat'>
+> & {
   model?: unknown;
   temperature?: unknown;
   topK?: unknown;
   maxTokens?: unknown;
   maxHistoryRounds?: unknown;
+  speed?: unknown;
+  ttsResponseFormat?: unknown;
 };
 
 interface LegacyStudentProfile {
@@ -64,6 +76,14 @@ const DEFAULT_LLM_TEMPERATURE = 0.7;
 const DEFAULT_LLM_TOP_K = 50;
 const DEFAULT_LLM_MAX_TOKENS = 200;
 const DEFAULT_LLM_MAX_HISTORY_ROUNDS = 5;
+const DEFAULT_TTS_API_URL = 'https://llm-service.polymas.com/api/openai/v1/audio/speech/stream';
+const DEFAULT_TTS_MODEL = 'cosyvoice-v1';
+const DEFAULT_VOICE = 'loongstella';
+const DEFAULT_SPEED = 1.0;
+const DEFAULT_TTS_RESPONSE_FORMAT: TTSResponseFormat = 'mp3';
+const SUPPORTED_TTS_RESPONSE_FORMATS: readonly TTSResponseFormat[] = ['mp3', 'wav', 'opus'];
+const SPEED_MIN = 0.25;
+const SPEED_MAX = 4.0;
 
 const DEFAULT_STUDENT_PROFILES: StudentProfile[] = [
   {
@@ -108,6 +128,12 @@ const defaultConfig: LLMConfig = {
   dialogueSimulationContent: '',
   knowledgeBaseEnabled: false,
   knowledgeBaseContent: '',
+  voiceModeEnabled: false,
+  ttsApiUrl: DEFAULT_TTS_API_URL,
+  ttsModel: DEFAULT_TTS_MODEL,
+  voice: DEFAULT_VOICE,
+  speed: DEFAULT_SPEED,
+  ttsResponseFormat: DEFAULT_TTS_RESPONSE_FORMAT,
 };
 
 // 可用的模型列表
@@ -237,6 +263,32 @@ const normalizeBoolean = (value: unknown, fallback = false) => (typeof value ===
 
 const normalizeOptionalText = (value: unknown) => (typeof value === 'string' ? value : '');
 
+const normalizeNonEmptyText = (value: unknown, fallback: string) => {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+};
+
+const normalizeClampedNumber = (value: unknown, fallback: number, min: number, max: number) => {
+  const parsed = parseFiniteNumber(value);
+  if (parsed === null) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, parsed));
+};
+
+const normalizeTTSResponseFormat = (value: unknown): TTSResponseFormat => {
+  if (typeof value !== 'string') {
+    return DEFAULT_TTS_RESPONSE_FORMAT;
+  }
+  const normalized = value.trim().toLowerCase();
+  return SUPPORTED_TTS_RESPONSE_FORMATS.includes(normalized as TTSResponseFormat)
+    ? (normalized as TTSResponseFormat)
+    : DEFAULT_TTS_RESPONSE_FORMAT;
+};
+
 const resolveLegacyProfiles = (legacy: LegacyLLMConfigV1): StudentProfile[] => {
   if (!legacy.studentProfiles || typeof legacy.studentProfiles !== 'object') {
     return DEFAULT_STUDENT_PROFILES;
@@ -257,7 +309,7 @@ const resolveLegacyProfiles = (legacy: LegacyLLMConfigV1): StudentProfile[] => {
 };
 
 const normalizeLLMConfig = (config: LLMConfigInput): LLMConfig => {
-  const legacy = config as LegacyLLMConfigV1;
+  const legacy = config as unknown as LegacyLLMConfigV1;
   const studentProfiles = normalizeStudentProfiles(config.studentProfiles ?? resolveLegacyProfiles(legacy));
   const selectedId = typeof config.studentProfileId === 'string' ? config.studentProfileId : legacy.studentProfileKey;
   const fallbackId = studentProfiles[0]?.id ?? DEFAULT_PROFILE_ID;
@@ -277,6 +329,12 @@ const normalizeLLMConfig = (config: LLMConfigInput): LLMConfig => {
     dialogueSimulationContent: normalizeOptionalText(config.dialogueSimulationContent),
     knowledgeBaseEnabled: normalizeBoolean(config.knowledgeBaseEnabled),
     knowledgeBaseContent: normalizeOptionalText(config.knowledgeBaseContent),
+    voiceModeEnabled: normalizeBoolean(config.voiceModeEnabled),
+    ttsApiUrl: normalizeNonEmptyText(config.ttsApiUrl, DEFAULT_TTS_API_URL),
+    ttsModel: normalizeNonEmptyText(config.ttsModel, DEFAULT_TTS_MODEL),
+    voice: normalizeNonEmptyText(config.voice, DEFAULT_VOICE),
+    speed: normalizeClampedNumber(config.speed, DEFAULT_SPEED, SPEED_MIN, SPEED_MAX),
+    ttsResponseFormat: normalizeTTSResponseFormat(config.ttsResponseFormat),
   };
 };
 
@@ -332,7 +390,7 @@ const llmConfigStorage = {
   },
 };
 
-export type { LLMConfig, LLMConfigInput, StudentProfile, StudentProfileId, SystemPromptMode };
+export type { LLMConfig, LLMConfigInput, StudentProfile, StudentProfileId, SystemPromptMode, TTSResponseFormat };
 export {
   AVAILABLE_MODELS,
   DEFAULT_LLM_MAX_HISTORY_ROUNDS,
@@ -343,6 +401,14 @@ export {
   DEFAULT_PROFILE_ID,
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_STUDENT_PROFILES,
+  DEFAULT_TTS_API_URL,
+  DEFAULT_TTS_MODEL,
+  DEFAULT_VOICE,
+  DEFAULT_SPEED,
+  DEFAULT_TTS_RESPONSE_FORMAT,
+  SUPPORTED_TTS_RESPONSE_FORMATS,
+  SPEED_MIN,
+  SPEED_MAX,
   llmConfigStorage,
   normalizeLLMConfig,
 };

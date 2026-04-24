@@ -1,14 +1,17 @@
 import '@src/SidePanel.css';
 import { DebugStepsModal } from './components/DebugStepsModal';
 import { HistoryModal, HistoryIcon } from './components/HistoryModal';
+import { ModeToggle } from './components/ModeToggle';
 import { MultiRolePickerModal } from './components/MultiRolePickerModal';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
 import { SimulationConfigModal } from './components/SimulationConfigModal';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useMultiRoleRun } from './hooks/useMultiRoleRun';
+import { useVoiceAgentChat } from './hooks/useVoiceAgentChat';
 import { normalizeDialogueSimulationContent } from './services/llm-service';
 import { llmConfigStorage } from '@extension/storage';
 import { useRef, useEffect, useState } from 'react';
+import type { TrainingMode } from './components/ModeToggle';
 import type { MultiRoleRunBatch, RoleRunDraft } from './types/multi-role-types';
 import type { LLMConfig } from '@extension/storage';
 
@@ -211,18 +214,26 @@ const createSimulationModeState = (): SimulationModeState => ({
 // ============ Header组件 ============
 const Header = ({
   trainTaskId,
+  trainTaskName,
   workflowState,
   dialogueRound,
   onReset,
   onOpenSettings,
   onOpenHistory,
+  mode,
+  onChangeMode,
+  modeToggleDisabled,
 }: {
   trainTaskId: string | null;
+  trainTaskName?: string | null;
   workflowState: WorkflowState;
   dialogueRound: number;
   onReset: () => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
+  mode: TrainingMode;
+  onChangeMode: (mode: TrainingMode) => void;
+  modeToggleDisabled: boolean;
 }) => {
   const config = STATE_CONFIG[workflowState];
   const isProcessing = ['FETCHING_STEPS', 'FETCHING_FIRST_STEP', 'RUNNING_CARD'].includes(workflowState);
@@ -242,7 +253,10 @@ const Header = ({
             <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-sm">
               <Icons.Logo />
             </div>
-            <h1 className="text-lg font-semibold tracking-tight text-white">能力训练助手</h1>
+            <h1 className="text-lg font-semibold tracking-tight text-white">
+              {mode === 'voice' ? '口语训练助手' : '能力训练助手'}
+            </h1>
+            <ModeToggle mode={mode} onChange={onChangeMode} disabled={modeToggleDisabled} />
           </div>
           <div className="flex items-center gap-2">
             {/* 设置按钮 */}
@@ -271,11 +285,17 @@ const Header = ({
           </div>
         </div>
 
-        {/* 任务ID标签 */}
+        {/* 任务标签 */}
         {trainTaskId && (
-          <div className="mb-3 inline-flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1 text-xs text-white/70 backdrop-blur-sm">
-            <span className="text-white/50">Task:</span>
-            <span className="font-mono">{trainTaskId.substring(0, 16)}...</span>
+          <div
+            className="mb-3 inline-flex max-w-full items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1 text-xs text-white/80 backdrop-blur-sm"
+            title={trainTaskName ? `${trainTaskName} · ${trainTaskId}` : trainTaskId}>
+            <span className="text-white/50">任务:</span>
+            {trainTaskName ? (
+              <span className="truncate font-medium">{trainTaskName}</span>
+            ) : (
+              <span className="font-mono">{trainTaskId.substring(0, 16)}...</span>
+            )}
           </div>
         )}
 
@@ -914,6 +934,121 @@ const MultiRoleChatInput = ({
   );
 };
 
+// ============ VoiceChatArea 组件 ============
+interface VoiceChatAreaProps {
+  voice: ReturnType<typeof useVoiceAgentChat>;
+  voiceStateLabel: string;
+  canStart: boolean;
+  onStart: () => void;
+  onAutoGenerate: () => void | Promise<void>;
+  onAutoRunToggle: () => void | Promise<void>;
+  trainTaskId: string | null;
+}
+
+const VoiceChatArea = ({
+  voice,
+  voiceStateLabel,
+  canStart,
+  onStart,
+  onAutoGenerate,
+  onAutoRunToggle,
+  trainTaskId,
+}: VoiceChatAreaProps) => {
+  const [input, setInput] = useState('');
+  const handleSend = () => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    setInput('');
+    void voice.sendUserText(trimmed);
+  };
+
+  const disabled = voice.isLoading || voice.voiceState === 'SENDING_AUDIO' || voice.voiceState === 'CONNECTING';
+  const autoRunning = voice.isAutoRunning;
+
+  return (
+    <>
+      <MessageList messages={voice.messages} isLoading={voice.isLoading} />
+      {voice.voiceState === 'IDLE' || voice.voiceState === 'ERROR' ? (
+        <div className="border-t border-slate-200 bg-white p-5">
+          <button
+            type="button"
+            onClick={onStart}
+            disabled={!canStart || !trainTaskId}
+            className="w-full cursor-pointer rounded-xl bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 py-3.5 text-sm font-semibold text-white shadow-lg shadow-cyan-500/30 transition-all hover:shadow-cyan-500/40 disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-300 disabled:to-slate-300 disabled:shadow-none">
+            {trainTaskId ? '🎙️ 建立语音通道' : '请先进入含 trainTaskId 的训练页面'}
+          </button>
+        </div>
+      ) : (
+        <div className="border-t border-slate-200 bg-white">
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
+            <span
+              className={`inline-flex h-2 w-2 rounded-full ${autoRunning ? 'animate-pulse bg-emerald-500' : 'bg-cyan-500'}`}
+            />
+            <span className="font-medium text-slate-700">{voiceStateLabel}</span>
+            {autoRunning && <span className="text-emerald-600">· 全自动运行中</span>}
+            <span className="ml-auto">第 {voice.dialogueRound} 轮</span>
+          </div>
+          <div className="flex items-stretch gap-2 p-3">
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={disabled || autoRunning}
+              placeholder={
+                autoRunning
+                  ? '全自动模式已开启，手动发送已禁用'
+                  : disabled
+                    ? '处理中，请稍候...'
+                    : '输入回答（Enter 发送 / Shift+Enter 换行）'
+              }
+              rows={2}
+              className="flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+            />
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void onAutoRunToggle()}
+                disabled={voice.voiceState === 'COMPLETED'}
+                title={autoRunning ? '停止全自动' : '开启全自动循环'}
+                className={`flex h-8 w-10 cursor-pointer items-center justify-center rounded-lg text-white shadow-md transition-all disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none ${
+                  autoRunning
+                    ? 'bg-gradient-to-br from-red-500 to-rose-500 shadow-red-500/30 hover:shadow-red-500/40'
+                    : 'bg-gradient-to-br from-emerald-500 to-green-500 shadow-emerald-500/30 hover:shadow-emerald-500/40'
+                }`}>
+                {autoRunning ? <Icons.Stop /> : <Icons.Repeat />}
+              </button>
+              <button
+                type="button"
+                onClick={() => void onAutoGenerate()}
+                disabled={disabled || autoRunning}
+                title="AI 自动生成学生回答（仅本轮）"
+                className="flex h-8 w-10 cursor-pointer items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-md shadow-orange-400/30 transition-all hover:shadow-orange-400/40 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
+                <Icons.Sparkles />
+              </button>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={disabled || autoRunning || !input.trim()}
+                title="发送"
+                className="flex h-8 w-10 cursor-pointer items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-500 text-white shadow-md shadow-blue-500/25 transition-all hover:shadow-blue-500/35 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none">
+                <Icons.Send />
+              </button>
+            </div>
+          </div>
+          <p className="px-4 pb-3 text-xs text-slate-400">
+            文字 → TTS → 音频帧；循环按钮开启全自动时，每轮 Bot 回复完自动生成学生回答
+          </p>
+        </div>
+      )}
+    </>
+  );
+};
+
 // ============ 主组件 ============
 const SidePanel = () => {
   const {
@@ -938,6 +1073,12 @@ const SidePanel = () => {
 
   // 多角色 hook
   const multiRole = useMultiRoleRun(trainTaskId);
+
+  // 口语训练 hook
+  const voice = useVoiceAgentChat();
+
+  // 训练模式：文字 / 口语
+  const [mode, setMode] = useState<TrainingMode>('text');
 
   // 弹窗状态
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -979,6 +1120,25 @@ const SidePanel = () => {
       isMounted = false;
       unsubscribe();
     };
+  }, []);
+
+  // 首次挂载时从存储恢复默认模式（用户可能希望默认进口语训练）
+  const modeHydratedRef = useRef(false);
+  useEffect(() => {
+    if (modeHydratedRef.current) {
+      return;
+    }
+    modeHydratedRef.current = true;
+    llmConfigStorage
+      .get()
+      .then(config => {
+        if (config.voiceModeEnabled) {
+          setMode('voice');
+        }
+      })
+      .catch(() => {
+        // 忽略，仍保留默认文字模式
+      });
   }, []);
 
   // 处理自动生成（检查是否需要配置）
@@ -1062,22 +1222,106 @@ const SidePanel = () => {
       multiRole.resetMultiRole();
     }
     reset();
+    voice.reset();
+  };
+
+  const handleChangeMode = (nextMode: TrainingMode) => {
+    if (nextMode === mode) {
+      return;
+    }
+    // 切换模式前清理两侧的状态，避免遗留会话
+    if (multiRole.isMultiRoleMode) {
+      multiRole.resetMultiRole();
+    }
+    reset();
+    voice.reset();
+    setMode(nextMode);
+    void llmConfigStorage.setConfig({ voiceModeEnabled: nextMode === 'voice' });
+  };
+
+  const handleVoiceAutoGenerate = async () => {
+    const result = await voice.autoGenerate();
+    if (result.needConfig) {
+      setIsConfigPromptOpen(true);
+    }
+  };
+
+  const handleVoiceAutoRunToggle = async () => {
+    if (voice.isAutoRunning) {
+      voice.stopAutoRun();
+      return;
+    }
+    const result = await voice.startAutoRun();
+    if (result.needConfig) {
+      setIsConfigPromptOpen(true);
+    }
+  };
+
+  const voiceBusy = voice.voiceState !== 'IDLE' && voice.voiceState !== 'COMPLETED' && voice.voiceState !== 'ERROR';
+  const textBusy = workflowState !== 'IDLE' || multiRole.isMultiRoleMode;
+  const modeToggleDisabled = mode === 'text' ? textBusy : voiceBusy;
+  const canStartVoice = voice.voiceState === 'IDLE' || voice.voiceState === 'ERROR';
+  const voiceStateLabel: Record<typeof voice.voiceState, string> = {
+    IDLE: '未连接',
+    CONNECTING: '连接中',
+    CONNECTED: '已就绪',
+    SENDING_AUDIO: '发送音频',
+    WAITING_SERVER: '等待服务端',
+    BOT_SPEAKING: 'Bot 回复中',
+    COMPLETED: '已完成',
+    ERROR: '异常',
   };
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
       {/* 头部 */}
-      <Header
-        trainTaskId={trainTaskId}
-        workflowState={multiRole.isMultiRoleMode ? 'CHATTING' : workflowState}
-        dialogueRound={multiRole.isMultiRoleMode ? 0 : dialogueRound}
-        onReset={handleResetAll}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenHistory={handleOpenHistory}
-      />
+      {mode === 'voice' ? (
+        <Header
+          trainTaskId={voice.trainTaskId ?? trainTaskId}
+          trainTaskName={voice.trainTaskName}
+          workflowState={
+            voice.voiceState === 'COMPLETED'
+              ? 'COMPLETED'
+              : voice.voiceState === 'ERROR'
+                ? 'ERROR'
+                : voice.voiceState === 'IDLE'
+                  ? 'IDLE'
+                  : 'CHATTING'
+          }
+          dialogueRound={voice.dialogueRound}
+          onReset={handleResetAll}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenHistory={handleOpenHistory}
+          mode={mode}
+          onChangeMode={handleChangeMode}
+          modeToggleDisabled={modeToggleDisabled}
+        />
+      ) : (
+        <Header
+          trainTaskId={trainTaskId}
+          workflowState={multiRole.isMultiRoleMode ? 'CHATTING' : workflowState}
+          dialogueRound={multiRole.isMultiRoleMode ? 0 : dialogueRound}
+          onReset={handleResetAll}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenHistory={handleOpenHistory}
+          mode={mode}
+          onChangeMode={handleChangeMode}
+          modeToggleDisabled={modeToggleDisabled}
+        />
+      )}
 
-      {/* 内容区：多角色 vs 单角色 */}
-      {multiRole.isMultiRoleMode && multiRole.batch ? (
+      {/* 内容区：口语 vs 多角色 vs 单角色 */}
+      {mode === 'voice' ? (
+        <VoiceChatArea
+          voice={voice}
+          voiceStateLabel={voiceStateLabel[voice.voiceState]}
+          canStart={canStartVoice}
+          onStart={voice.startSession}
+          onAutoGenerate={handleVoiceAutoGenerate}
+          onAutoRunToggle={handleVoiceAutoRunToggle}
+          trainTaskId={voice.trainTaskId ?? trainTaskId}
+        />
+      ) : multiRole.isMultiRoleMode && multiRole.batch ? (
         <>
           <MultiRoleView
             batch={multiRole.batch}

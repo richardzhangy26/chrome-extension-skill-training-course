@@ -2,6 +2,7 @@
  * LLM 设置弹窗组件
  */
 
+import { VoiceModeSettings } from './VoiceModeSettings';
 import { fetchAvailableTextModels, testLLMConfig } from '../services/llm-service';
 import {
   AVAILABLE_MODELS,
@@ -13,6 +14,11 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_PROFILE_ID,
   DEFAULT_STUDENT_PROFILES,
+  DEFAULT_TTS_API_URL,
+  DEFAULT_TTS_MODEL,
+  DEFAULT_VOICE,
+  DEFAULT_SPEED,
+  DEFAULT_TTS_RESPONSE_FORMAT,
   llmConfigStorage,
   normalizeLLMConfig,
 } from '@extension/storage';
@@ -80,6 +86,12 @@ const createDefaultConfig = (): LLMConfig => ({
   dialogueSimulationContent: '',
   knowledgeBaseEnabled: false,
   knowledgeBaseContent: '',
+  voiceModeEnabled: false,
+  ttsApiUrl: DEFAULT_TTS_API_URL,
+  ttsModel: DEFAULT_TTS_MODEL,
+  voice: DEFAULT_VOICE,
+  speed: DEFAULT_SPEED,
+  ttsResponseFormat: DEFAULT_TTS_RESPONSE_FORMAT,
 });
 
 const createConfigDraft = (config: LLMConfig): LLMConfigDraft => ({
@@ -117,7 +129,7 @@ const createModelOption = (value: string): ModelOption => ({
 
 const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const [config, setConfig] = useState<LLMConfigDraft>(() => createConfigDraft(createDefaultConfig()));
-  const [activeTab, setActiveTab] = useState<'llm' | 'system' | 'role'>('llm');
+  const [activeTab, setActiveTab] = useState<'llm' | 'system' | 'role' | 'voice'>('llm');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -318,13 +330,14 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
               { id: 'llm', label: '大模型自动回复' },
               { id: 'system', label: '系统提示词' },
               { id: 'role', label: '用户角色' },
+              { id: 'voice', label: '语音训练' },
             ].map(tab => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id as 'llm' | 'system' | 'role')}
+                  onClick={() => setActiveTab(tab.id as 'llm' | 'system' | 'role' | 'voice')}
                   className={`rounded-t-lg border px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
                       ? 'border-slate-200 border-b-white bg-white text-cyan-600'
@@ -707,6 +720,8 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
               </div>
             </div>
           )}
+
+          {activeTab === 'voice' && <VoiceModeSettings config={config} setConfig={setConfig} />}
         </div>
 
         {/* 底部按钮 */}

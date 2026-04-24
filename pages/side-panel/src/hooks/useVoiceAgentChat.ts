@@ -621,7 +621,16 @@ const useVoiceAgentChat = () => {
       }
       const currentUrl = await getCurrentTabUrl();
       if (disposed) return;
-      if (!currentUrl?.includes(TRAINING_DOMAIN)) {
+      let isTrainingHost = false;
+      if (currentUrl) {
+        try {
+          const parsedUrl = new URL(currentUrl);
+          isTrainingHost = parsedUrl.hostname === TRAINING_DOMAIN;
+        } catch {
+          isTrainingHost = false;
+        }
+      }
+      if (!isTrainingHost) {
         return;
       }
       try {

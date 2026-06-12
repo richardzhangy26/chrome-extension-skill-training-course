@@ -211,7 +211,9 @@ const useVoiceAgentChat = () => {
 
   const requestAbort = useCallback((reason: string) => {
     if (currentAbortRef.current) {
-      currentAbortRef.current.abort(new Error(reason));
+      // 不传自定义 reason：保持默认 DOMException('AbortError')，否则下游的 AbortError 判断会失效
+      console.log(`[voice] abort requested: ${reason}`);
+      currentAbortRef.current.abort();
     }
   }, []);
 
@@ -579,8 +581,8 @@ const useVoiceAgentChat = () => {
 
     if (token === autoRunTokenRef.current) {
       autoRunActiveRef.current = false;
+      setIsAutoRunning(false);
     }
-    setIsAutoRunning(false);
     return { needConfig };
   }, [addMessage, autoGenerate]);
 

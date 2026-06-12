@@ -16,6 +16,7 @@ interface LLMResponse {
   success: boolean;
   content?: string;
   error?: string;
+  finishReason?: string | null;
 }
 
 interface LLMApiResponse {
@@ -23,7 +24,22 @@ interface LLMApiResponse {
     message?: {
       content?: string;
     };
+    finish_reason?: string | null;
+    finishReason?: string | null;
   }>;
+}
+
+interface ChatCompletionRequestPayload {
+  model: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  max_tokens: number;
+  top_k?: number;
+}
+
+interface ChatCompletionRequestOptions {
+  temperature?: number;
+  maxTokens?: number;
 }
 
 interface OpenAIModelsResponse {
@@ -79,6 +95,24 @@ interface DialogueGeneratorStage {
 interface SimulationDialogueGenerationParams {
   trainTaskId: string;
   profile: GeneratorProfile;
+  onProgress?: (progress: SimulationGenerationProgress) => void;
+}
+
+interface SimulationGenerationProgress {
+  current: number;
+  total: number;
+  stageName: string;
+  isRetry?: boolean;
+}
+
+interface StageDialogueGenerationParams {
+  config: LLMConfig;
+  profile: GeneratorProfile;
+  stage: DialogueGeneratorStage;
+  stageIndex: number;
+  totalStages: number;
+  modelsToTry: string[];
+  isConciseRetry?: boolean;
 }
 
 const DIALOGUE_SIMULATION_LINE_PATTERN = /^(AI|用户)\s*[：:]\s*(.+)$/;
@@ -150,6 +184,12 @@ const NON_TEXT_MODEL_PATTERNS = [
   /jimeng/i,
 ] as const;
 
+const DEFAULT_SAMPLING_ONLY_MODEL_PATTERNS = [
+  /(^|[/\-_.\s])gpt[-_\s]?5(?:[-_\s.]|$)/i,
+  /(^|[/\-_.\s])o[134](?:[-_\s.]|$)/i,
+  /reasoning/i,
+] as const;
+
 const resolveSystemPrompt = (config: LLMConfig) => {
   if (config.systemPromptMode === 'custom' && config.systemPrompt.trim()) {
     return config.systemPrompt.trim();
@@ -204,26 +244,40 @@ const buildTextModelHeaders = (config: Pick<LLMConfig, 'apiKey' | 'serviceCode'>
   ...(config.serviceCode.trim() ? { 'service-code': config.serviceCode } : {}),
 });
 
+const requiresDefaultSamplingParameters = (model: string) =>
+  DEFAULT_SAMPLING_ONLY_MODEL_PATTERNS.some(pattern => pattern.test(model.trim()));
+
+const buildChatCompletionPayload = (
+  config: Pick<LLMConfig, 'temperature' | 'topK' | 'maxTokens'>,
+  model: string,
+  messages: ChatMessage[],
+  options: ChatCompletionRequestOptions = {},
+): ChatCompletionRequestPayload => {
+  const payload: ChatCompletionRequestPayload = {
+    model,
+    messages,
+    max_tokens: options.maxTokens ?? config.maxTokens,
+  };
+
+  if (!requiresDefaultSamplingParameters(model)) {
+    payload.temperature = options.temperature ?? config.temperature;
+    payload.top_k = config.topK;
+  }
+
+  return payload;
+};
+
 const callChatCompletion = async (
   config: Pick<LLMConfig, 'apiUrl' | 'apiKey' | 'serviceCode' | 'temperature' | 'topK' | 'maxTokens'>,
   model: string,
   messages: ChatMessage[],
-  options?: {
-    temperature?: number;
-    maxTokens?: number;
-  },
+  options?: ChatCompletionRequestOptions,
 ): Promise<LLMResponse> => {
   try {
     const response = await fetch(config.apiUrl, {
       method: 'POST',
       headers: buildTextModelHeaders(config),
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: options?.temperature ?? config.temperature,
-        max_tokens: options?.maxTokens ?? config.maxTokens,
-        top_k: config.topK,
-      }),
+      body: JSON.stringify(buildChatCompletionPayload(config, model, messages, options)),
     });
 
     if (!response.ok) {
@@ -234,11 +288,17 @@ const callChatCompletion = async (
     const data = (await response.json()) as LLMApiResponse;
     const content = extractResponseContent(data);
 
+    const finishReason = extractResponseFinishReason(data);
+
     if (!content) {
-      return { success: false, error: '模型未返回有效内容' };
+      return {
+        success: false,
+        error: finishReason === 'length' ? '模型输出因长度限制被截断' : '模型未返回有效内容',
+        finishReason,
+      };
     }
 
-    return { success: true, content };
+    return { success: true, content, finishReason };
   } catch (error) {
     return { success: false, error: `调用失败: ${(error as Error).message}` };
   }
@@ -323,25 +383,17 @@ const resolveOrderedScriptStages = (steps: ScriptStepItem[], flows: ScriptStepFl
     }));
 };
 
-const buildSimulationDialogueMessages = (
+const buildSimulationStageDialogueMessages = (
   profile: GeneratorProfile,
-  stages: DialogueGeneratorStage[],
+  stage: DialogueGeneratorStage,
+  stageIndex: number,
+  totalStages: number,
+  isConciseRetry = false,
 ): ChatMessage[] => {
-  const stageBlocks = stages.map((stage, index) =>
-    [
-      `### 阶段 ${index + 1}`,
-      `stepId: ${stage.stepId}`,
-      `stepName: ${stage.stepName}`,
-      `trainerName: ${stage.trainerName || '未提供'}`,
-      `interactiveRounds: ${stage.interactiveRounds}`,
-      `prologue:`,
-      stage.prologue || '(无)',
-      `description:`,
-      stage.description || '(无)',
-      `llmPrompt:`,
-      stage.llmPrompt || '(无)',
-    ].join('\n'),
-  );
+  const maxRounds = Math.max(1, stage.interactiveRounds);
+  const roundInstruction = isConciseRetry
+    ? `只生成 1 轮。AI 和用户回答都必须非常短，优先保证完整闭合，不要超过 ${maxRounds} 轮上限。`
+    : `生成 1 到 ${maxRounds} 轮，不要超过 interactiveRounds 上限；如果 interactiveRounds 为 0，也生成 1 轮用于保留阶段记录。`;
 
   return [
     {
@@ -355,6 +407,7 @@ const buildSimulationDialogueMessages = (
         'AI: <智能体话术>',
         '用户: <学生回答>',
         `${DIALOGUE_LOG_SEPARATOR}`,
+        '每一轮都必须包含上述 4 行，不能缺少分隔线。',
       ].join('\n'),
     },
     {
@@ -363,19 +416,79 @@ const buildSimulationDialogueMessages = (
         `当前要生成的学生档位：${GENERATOR_PROFILE_LABELS[profile]} (${profile})`,
         GENERATOR_PROFILE_GUIDANCE[profile],
         '',
-        '全局生成约束：',
-        '1. 好学生走最佳通关路线，尽量用最少轮次达标；一般学生保留2-3轮被引导过程；差学生可用于边界测试，不强制通关。',
-        '2. interactiveRounds 是该阶段可用轮次上限，不要超过；可以少于这个数字，但必须体现该档位的典型表现。',
-        '3. AI 话术必须贴合每个阶段的 llmPrompt、角色设定和开场白。',
-        '4. 用户回答必须符合档位特点，且围绕阶段目标推进。',
-        '5. 输出中不要省略任何默认流程中的真实阶段。',
-        '6. 输出中不要使用 Markdown 标题、列表、代码块或解释性文字。',
+        `当前只生成第 ${stageIndex + 1}/${totalStages} 阶段，禁止输出其他阶段。`,
+        `轮次要求：${roundInstruction}`,
         '',
-        '阶段配置如下：',
-        stageBlocks.join('\n\n'),
+        '生成约束：',
+        '1. 好学生走最佳通关路线，尽量用最少轮次达标；一般学生保留被引导过程；差学生可用于边界测试，不强制通关。',
+        '2. AI 话术必须贴合该阶段的 llmPrompt、角色设定和开场白。',
+        '3. 用户回答必须符合档位特点，且围绕阶段目标推进。',
+        '4. 输出中不要使用 Markdown 标题、列表、代码块或解释性文字。',
+        '5. 每一轮 Step 行中的 stepName 与 step_id 必须使用下方真实值。',
+        ...(isConciseRetry ? ['6. 这是截断后的精简重试：压缩表达，只保留达标所需的最短问答。'] : []),
+        '',
+        '阶段配置：',
+        `stepId: ${stage.stepId}`,
+        `stepName: ${stage.stepName}`,
+        `trainerName: ${stage.trainerName || '未提供'}`,
+        `interactiveRounds: ${stage.interactiveRounds}`,
+        'prologue:',
+        stage.prologue || '(无)',
+        'description:',
+        stage.description || '(无)',
+        'llmPrompt:',
+        stage.llmPrompt || '(无)',
       ].join('\n'),
     },
   ];
+};
+
+const normalizeGeneratedDialogueBlock = (content: string) =>
+  content
+    .trim()
+    .replace(/^```(?:text|txt|markdown)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+const buildStageTruncationError = (stage: DialogueGeneratorStage, stageIndex: number) =>
+  `第 ${stageIndex + 1} 阶段「${stage.stepName}」生成被截断，请缩短该阶段剧本或降低生成轮数后重试。`;
+
+const generateSimulationDialogueStage = async ({
+  config,
+  profile,
+  stage,
+  stageIndex,
+  totalStages,
+  modelsToTry,
+  isConciseRetry = false,
+}: StageDialogueGenerationParams): Promise<LLMResponse> => {
+  const messages = buildSimulationStageDialogueMessages(profile, stage, stageIndex, totalStages, isConciseRetry);
+  let lastError = '未找到可用模型';
+  let truncatedResult: LLMResponse | null = null;
+
+  for (const model of modelsToTry) {
+    const result = await callChatCompletion(config, model, messages, {
+      temperature: isConciseRetry ? 0.2 : 0.3,
+      maxTokens: Math.max(config.maxTokens, isConciseRetry ? 2048 : 4096),
+    });
+
+    if (result.success && result.content && result.finishReason !== 'length') {
+      return {
+        ...result,
+        content: normalizeGeneratedDialogueBlock(result.content),
+      };
+    }
+
+    if (result.finishReason === 'length') {
+      truncatedResult = result;
+      lastError = '模型输出因长度限制被截断';
+      continue;
+    }
+
+    lastError = result.error || lastError;
+  }
+
+  return truncatedResult ?? { success: false, error: lastError };
 };
 
 const buildStudentRoleSystemPrompt = (
@@ -386,47 +499,58 @@ const buildStudentRoleSystemPrompt = (
     'dialogueSimulationEnabled' | 'dialogueSimulationContent' | 'knowledgeBaseEnabled' | 'knowledgeBaseContent'
   >,
 ) => {
+  const dialogueSimulationContent = config.dialogueSimulationEnabled
+    ? normalizeDialogueSimulationContent(config.dialogueSimulationContent)
+    : '';
+  const fallbackHint = profile.fallbackHint?.trim();
+
   const sections = [
     systemPrompt,
     '',
     '## 当前扮演设定',
     `学生档位: ${profile.label}`,
-    `角色特征: ${profile.description}`,
-    `表达风格: ${profile.style}`,
+    `角色特征: ${profile.description || '未提供'}`,
+    `表达风格: ${profile.style || '未提供'}`,
+    fallbackHint
+      ? `兜底要求: ${fallbackHint}`
+      : '兜底要求: 当示例对话或知识库没有匹配内容时，仍需严格按上述角色特征和表达风格组织学生回答。',
     '',
   ];
 
-  const dialogueSimulationContent = config.dialogueSimulationEnabled
-    ? normalizeDialogueSimulationContent(config.dialogueSimulationContent)
-    : '';
   if (dialogueSimulationContent) {
-    sections.push('## 档位示例对话 (如有匹配请优先引用或改写，优先级最高)', dialogueSimulationContent, '');
+    sections.push(
+      '## 档位示例对话（优先级最高）',
+      '当训练师的提问与示例对话中的场景匹配时，必须优先引用或改写示例中的学生回答，不要自行发挥。',
+      '当示例对话没有匹配场景时，必须回到上方角色特征、表达风格和兜底要求来回答。',
+      dialogueSimulationContent,
+      '',
+    );
   }
 
   const knowledgeBaseContent = config.knowledgeBaseEnabled ? config.knowledgeBaseContent.trim() : '';
   if (knowledgeBaseContent) {
-    sections.push('## 参考知识库 (可结合使用)', knowledgeBaseContent, '');
+    sections.push(
+      '## 参考知识库（次优先级）',
+      '当示例对话中没有匹配的场景时，参考以下知识库内容来组织回答。',
+      knowledgeBaseContent,
+      '',
+    );
   }
+
+  sections.push(
+    '## 回复规则',
+    '你将收到训练师（user）的提问，请直接以学生身份回复。',
+    '如果训练师让你做选择、确认或补充内容，请直接作答。',
+    '仅输出学生回答内容，不要添加角色标签，不要额外解释。',
+  );
 
   return sections.join('\n');
 };
 
-const buildStudentReplyInstruction = () =>
-  [
-    '请继续扮演上面设定的角色，直接回复上一条 assistant 的话。',
-    '如果上一条 assistant 是让你做选择、确认或补充内容，请直接作答。',
-    '仅输出角色回答内容，不要添加角色标签，不要额外解释。',
-  ].join('\n');
-
-const buildRequestPayload = (config: LLMConfig, messages: ChatMessage[]) => ({
-  model: config.model,
-  messages,
-  temperature: config.temperature,
-  max_tokens: config.maxTokens,
-  top_k: config.topK,
-});
-
 const extractResponseContent = (data: LLMApiResponse) => data.choices?.[0]?.message?.content?.trim();
+
+const extractResponseFinishReason = (data: LLMApiResponse) =>
+  data.choices?.[0]?.finish_reason ?? data.choices?.[0]?.finishReason ?? null;
 
 const resolveModelsUrl = (apiUrl: string) => {
   const trimmed = apiUrl.trim();
@@ -537,15 +661,14 @@ const generateStudentAnswer = async (
 
     const historyMessages: ChatMessage[] = [];
     for (const turn of conversationHistory.slice(-config.maxHistoryRounds)) {
-      historyMessages.push({ role: 'assistant', content: turn.ai });
-      historyMessages.push({ role: 'user', content: turn.student });
+      historyMessages.push({ role: 'user', content: turn.ai });
+      historyMessages.push({ role: 'assistant', content: turn.student });
     }
 
     const messages: ChatMessage[] = [
       { role: 'system', content: roleSystemPrompt },
       ...historyMessages,
-      { role: 'assistant', content: aiQuestion },
-      { role: 'user', content: buildStudentReplyInstruction() },
+      { role: 'user', content: aiQuestion },
     ];
 
     const result = await callChatCompletion(config, config.model, messages);
@@ -565,6 +688,7 @@ const generateStudentAnswer = async (
 const generateSimulationDialogueRecord = async ({
   trainTaskId,
   profile,
+  onProgress,
 }: SimulationDialogueGenerationParams): Promise<LLMResponse> => {
   const config = normalizeLLMConfig(await llmConfigStorage.get());
 
@@ -602,24 +726,64 @@ const generateSimulationDialogueRecord = async ({
       return { success: false, error: '未识别到默认通关路径上的有效阶段' };
     }
 
-    const messages = buildSimulationDialogueMessages(profile, orderedStages);
     const modelsToTry = await resolveGeneratorModelCandidates(config);
-    let lastError = '未找到可用模型';
+    const generatedBlocks: string[] = [];
 
-    for (const model of modelsToTry) {
-      const result = await callChatCompletion(config, model, messages, {
-        temperature: 0.3,
-        maxTokens: Math.max(config.maxTokens, 4096),
+    for (const [stageIndex, stage] of orderedStages.entries()) {
+      onProgress?.({
+        current: stageIndex + 1,
+        total: orderedStages.length,
+        stageName: stage.stepName,
       });
 
-      if (result.success) {
-        return result;
+      let stageResult = await generateSimulationDialogueStage({
+        config,
+        profile,
+        stage,
+        stageIndex,
+        totalStages: orderedStages.length,
+        modelsToTry,
+      });
+
+      if (stageResult.finishReason === 'length') {
+        onProgress?.({
+          current: stageIndex + 1,
+          total: orderedStages.length,
+          stageName: stage.stepName,
+          isRetry: true,
+        });
+
+        stageResult = await generateSimulationDialogueStage({
+          config,
+          profile,
+          stage,
+          stageIndex,
+          totalStages: orderedStages.length,
+          modelsToTry,
+          isConciseRetry: true,
+        });
+
+        if (stageResult.finishReason === 'length') {
+          stageResult = {
+            success: false,
+            error: buildStageTruncationError(stage, stageIndex),
+            finishReason: 'length',
+          };
+        }
       }
 
-      lastError = result.error || lastError;
+      if (!stageResult.success || !stageResult.content) {
+        return {
+          success: false,
+          error: stageResult.error || `第 ${stageIndex + 1} 阶段「${stage.stepName}」生成失败`,
+          finishReason: stageResult.finishReason,
+        };
+      }
+
+      generatedBlocks.push(stageResult.content);
     }
 
-    return { success: false, error: lastError };
+    return { success: true, content: generatedBlocks.join('\n\n') };
   } catch (error) {
     return { success: false, error: `生成失败: ${(error as Error).message}` };
   }
@@ -633,13 +797,11 @@ const testLLMConfig = async (config: LLMConfig): Promise<LLMResponse> => {
     const normalizedConfig = normalizeLLMConfig(config);
     const response = await fetch(normalizedConfig.apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': normalizedConfig.apiKey,
-        'service-code': normalizedConfig.serviceCode,
-      },
+      headers: buildTextModelHeaders(normalizedConfig),
       body: JSON.stringify(
-        buildRequestPayload(normalizedConfig, [{ role: 'user', content: '你好，请回复“测试成功”。' }]),
+        buildChatCompletionPayload(normalizedConfig, normalizedConfig.model, [
+          { role: 'user', content: '你好，请回复“测试成功”。' },
+        ]),
       ),
     });
 
@@ -668,4 +830,4 @@ export {
   normalizeDialogueSimulationContent,
   testLLMConfig,
 };
-export type { GeneratorProfile, RuntimeProfileOverride };
+export type { GeneratorProfile, RuntimeProfileOverride, SimulationGenerationProgress };

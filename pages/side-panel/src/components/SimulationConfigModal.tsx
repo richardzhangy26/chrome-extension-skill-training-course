@@ -5,7 +5,7 @@
 import { generateSimulationDialogueRecord, normalizeDialogueSimulationContent } from '../services/llm-service';
 import { llmConfigStorage } from '@extension/storage';
 import { useEffect, useState } from 'react';
-import type { GeneratorProfile } from '../services/llm-service';
+import type { GeneratorProfile, SimulationGenerationProgress } from '../services/llm-service';
 import type { LLMConfig } from '@extension/storage';
 
 type SimulationConfigDraft = Pick<
@@ -55,6 +55,7 @@ const SimulationConfigModal = ({ isOpen, onClose, trainTaskId, onOpenMultiRole }
   const [generatorProfile, setGeneratorProfile] = useState<GeneratorProfile>('good');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [generateProgress, setGenerateProgress] = useState<SimulationGenerationProgress | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -76,6 +77,7 @@ const SimulationConfigModal = ({ isOpen, onClose, trainTaskId, onOpenMultiRole }
         knowledgeBaseContent: config.knowledgeBaseContent,
       });
       setGenerateError(null);
+      setGenerateProgress(null);
     };
 
     void loadConfig();
@@ -104,24 +106,32 @@ const SimulationConfigModal = ({ isOpen, onClose, trainTaskId, onOpenMultiRole }
 
     setIsGenerating(true);
     setGenerateError(null);
+    setGenerateProgress(null);
 
-    const result = await generateSimulationDialogueRecord({
-      trainTaskId,
-      profile: generatorProfile,
-    });
+    try {
+      const result = await generateSimulationDialogueRecord({
+        trainTaskId,
+        profile: generatorProfile,
+        onProgress: setGenerateProgress,
+      });
 
-    if (!result.success || !result.content) {
-      setGenerateError(result.error || '生成失败，请稍后重试。');
+      if (!result.success || !result.content) {
+        setGenerateError(result.error || '生成失败，请稍后重试。');
+        return;
+      }
+
+      setDraft(prev => ({
+        ...prev,
+        dialogueSimulationEnabled: true,
+        dialogueSimulationContent: result.content || '',
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      setGenerateError(`生成失败: ${errorMessage}`);
+    } finally {
       setIsGenerating(false);
-      return;
+      setGenerateProgress(null);
     }
-
-    setDraft(prev => ({
-      ...prev,
-      dialogueSimulationEnabled: true,
-      dialogueSimulationContent: result.content || '',
-    }));
-    setIsGenerating(false);
   };
 
   const normalizedDialogueSimulationContent = normalizeDialogueSimulationContent(draft.dialogueSimulationContent);
@@ -131,6 +141,11 @@ const SimulationConfigModal = ({ isOpen, onClose, trainTaskId, onOpenMultiRole }
     Boolean(draft.dialogueSimulationContent.trim()) &&
     !normalizedDialogueSimulationContent;
   const showKnowledgeBaseEmptyHint = draft.knowledgeBaseEnabled && !draft.knowledgeBaseContent.trim();
+  const generateProgressText = generateProgress
+    ? `${generateProgress.isRetry ? '精简重试中' : '生成中'} ${generateProgress.current}/${generateProgress.total}：${
+        generateProgress.stageName
+      }`
+    : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -224,7 +239,11 @@ const SimulationConfigModal = ({ isOpen, onClose, trainTaskId, onOpenMultiRole }
                   onClick={handleGenerate}
                   disabled={isGenerating || !trainTaskId}
                   className="cursor-pointer rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 px-3 py-2 text-xs font-medium text-white transition-all hover:from-sky-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
-                  {isGenerating ? '生成中...' : '根据剧本生成'}
+                  {generateProgress
+                    ? `生成中 ${generateProgress.current}/${generateProgress.total}`
+                    : isGenerating
+                      ? '生成中...'
+                      : '根据剧本生成'}
                 </button>
               </div>
 
@@ -256,6 +275,7 @@ const SimulationConfigModal = ({ isOpen, onClose, trainTaskId, onOpenMultiRole }
                 })}
               </div>
 
+              {generateProgressText && <p className="mt-3 break-words text-xs text-sky-700">{generateProgressText}</p>}
               {generateError && <p className="mt-3 text-xs text-rose-600">{generateError}</p>}
               {!trainTaskId && (
                 <p className="mt-3 text-xs text-amber-600">未检测到 trainTaskId，暂时不能根据剧本自动生成。</p>

@@ -2,6 +2,7 @@ import { m } from '@/locale/paraglide/messages';
 import { Routes } from '@/lib/routes';
 import type { MenuItemConfig } from '../types';
 import { websiteConfig } from './website';
+import { DOWNLOAD_URL, REPO_URL } from './links';
 /**
  * Footer links, grouped by section
  */
@@ -24,7 +25,10 @@ export function getFooterLinks(): MenuItemConfig[] {
     href: Routes.Faqs,
     external: false,
   });
-  const resourcesItems: MenuItemConfig[] = [];
+  const resourcesItems: MenuItemConfig[] = [
+    { title: 'GitHub', href: REPO_URL, external: true },
+    { title: m.home_hero_primary(), href: DOWNLOAD_URL, external: true },
+  ];
   if (websiteConfig.blog?.enable) {
     resourcesItems.push({
       title: m.nav_blog(),
@@ -32,21 +36,6 @@ export function getFooterLinks(): MenuItemConfig[] {
       external: false,
     });
   }
-  resourcesItems.push({
-    title: m.nav_changelog_title(),
-    href: Routes.Changelog,
-    external: false,
-  });
-  resourcesItems.push({
-    title: m.nav_roadmap_title(),
-    href: Routes.Roadmap,
-    external: false,
-  });
-  const companyItems: MenuItemConfig[] = [
-    { title: m.nav_about_title(), href: Routes.About, external: false },
-    { title: m.nav_contact_title(), href: Routes.Contact, external: false },
-    { title: m.nav_waitlist_title(), href: Routes.Waitlist, external: false },
-  ];
   const legalItems: MenuItemConfig[] = [
     {
       title: m.nav_cookie_policy_title(),
@@ -67,7 +56,6 @@ export function getFooterLinks(): MenuItemConfig[] {
   return [
     { title: m.nav_product(), items: productItems },
     { title: m.nav_resources(), items: resourcesItems },
-    { title: m.nav_company(), items: companyItems },
     { title: m.nav_legal(), items: legalItems },
   ];
 }

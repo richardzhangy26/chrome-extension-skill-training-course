@@ -1,26 +1,16 @@
 import { m } from '@/locale/paraglide/messages';
 import { HeaderSection } from '@/components/shared/header-section';
 import { ScrollReveal } from '@/components/shared/scroll-reveal';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import type { Icon } from '@tabler/icons-react';
-import {
-  IconChartBar,
-  IconDatabase,
-  IconFingerprint,
-  IconId,
-} from '@tabler/icons-react';
+import { IconHistory, IconMessageChatbot, IconScan, IconUsersGroup } from '@tabler/icons-react';
 import { useState } from 'react';
 type ImageKey = 'item-1' | 'item-2' | 'item-3' | 'item-4';
 const icons: Record<ImageKey, Icon> = {
-  'item-1': IconDatabase,
-  'item-2': IconFingerprint,
-  'item-3': IconId,
-  'item-4': IconChartBar,
+  'item-1': IconScan,
+  'item-2': IconMessageChatbot,
+  'item-3': IconUsersGroup,
+  'item-4': IconHistory,
 };
 const images: Record<
   ImageKey,
@@ -77,7 +67,7 @@ export default function FeaturesSection() {
   ];
   return (
     <section id="features" className="px-4 py-16 md:py-24">
-      <div className="mx-auto max-w-6xl px-2 lg:px-0 space-y-8 lg:space-y-20 dark:[--color-border:color-mix(in_oklab,var(--color-white)_10%,transparent)]">
+      <div className="mx-auto max-w-6xl space-y-8 px-2 lg:space-y-20 lg:px-0 dark:[--color-border:color-mix(in_oklab,var(--color-white)_10%,transparent)]">
         <ScrollReveal>
           <HeaderSection
             title={m.home_features_title()}
@@ -90,21 +80,16 @@ export default function FeaturesSection() {
           <div className="grid gap-12 lg:grid-cols-12 lg:gap-24">
             <div className="flex flex-col gap-8 lg:col-span-5">
               <div className="text-left lg:pr-0">
-                <h3 className="py-1 text-3xl font-semibold leading-normal text-foreground lg:text-4xl">
+                <h3 className="text-foreground py-1 text-3xl font-semibold leading-normal lg:text-4xl">
                   {m.home_features_title()}
                 </h3>
-                <p className="mt-4 text-muted-foreground">
-                  {m.home_features_description()}
-                </p>
+                <p className="text-muted-foreground mt-4">{m.home_features_description()}</p>
               </div>
               <Accordion
                 value={[activeItem]}
-                onValueChange={(v) =>
-                  setActiveItem((v?.[0] as ImageKey) ?? 'item-1')
-                }
-                className="w-full"
-              >
-                {featureItems.map((item) => {
+                onValueChange={v => setActiveItem((v?.[0] as ImageKey) ?? 'item-1')}
+                className="w-full">
+                {featureItems.map(item => {
                   const ItemIcon = icons[item.key];
                   return (
                     <AccordionItem key={item.key} value={item.key}>
@@ -114,32 +99,29 @@ export default function FeaturesSection() {
                           {item.title}
                         </div>
                       </AccordionTrigger>
-                      <AccordionContent className="text-muted-foreground">
-                        {item.description}
-                      </AccordionContent>
+                      <AccordionContent className="text-muted-foreground">{item.description}</AccordionContent>
                     </AccordionItem>
                   );
                 })}
               </Accordion>
             </div>
 
-            <div className="relative flex w-full overflow-hidden rounded-2xl border bg-background p-2 lg:col-span-7 lg:h-auto">
-              <div className="relative w-full rounded-2xl aspect-76/59 bg-background">
+            <div className="bg-background relative flex w-full overflow-hidden rounded-2xl border p-2 lg:col-span-7 lg:h-auto">
+              <div className="aspect-76/59 bg-background relative w-full rounded-2xl">
                 <div
                   key={activeItem}
-                  className="animate-crossfade-in size-full overflow-hidden rounded-2xl border bg-muted shadow-md"
-                >
+                  className="animate-crossfade-in bg-muted size-full overflow-hidden rounded-2xl border shadow-md">
                   <img
                     src={images[activeItem].image}
                     alt={images[activeItem].alt}
                     loading="lazy"
-                    className="size-full object-cover object-top-left rounded-2xl dark:hidden"
+                    className="object-top-left size-full rounded-2xl object-cover dark:hidden"
                   />
                   <img
                     src={images[activeItem].darkImage}
                     alt={images[activeItem].alt}
                     loading="lazy"
-                    className="hidden size-full object-cover object-top-left rounded-2xl dark:block"
+                    className="object-top-left hidden size-full rounded-2xl object-cover dark:block"
                   />
                 </div>
               </div>

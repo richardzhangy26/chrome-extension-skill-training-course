@@ -2,11 +2,7 @@ import { getMessageList } from '@/lib/locale';
 import { m } from '@/locale/paraglide/messages';
 import { clientEnv } from '@/env/client';
 import type { WebsiteConfig } from '../types';
-import {
-  DEFAULT_ALLOWED_TYPES,
-  DEFAULT_MAX_FILE_SIZE,
-  DEFAULT_USER_FILES_FOLDER,
-} from '@/storage/constants';
+import { DEFAULT_ALLOWED_TYPES, DEFAULT_MAX_FILE_SIZE, DEFAULT_USER_FILES_FOLDER } from '@/storage/constants';
 
 // Payment provider controlled by env var: 'stripe' | 'creem' | '' (empty means disabled)
 const paymentProvider = clientEnv.VITE_PAYMENT_PROVIDER;
@@ -54,10 +50,7 @@ export const websiteConfig: WebsiteConfig = {
     },
   },
   social: {
-    github: 'https://github.com/MkFastHQ',
-    discord: 'https://mksaas.link/discord',
-    twitter: 'https://x.com/TanStarter',
-    youtube: 'https://www.youtube.com/@TanStarter',
+    github: 'https://github.com/richardzhangy26/chrome-extension-skill-training-course',
   },
   auth: {
     enable: true,
@@ -116,6 +109,8 @@ export const websiteConfig: WebsiteConfig = {
         },
         pro: {
           id: 'pro',
+          // Disabled: the extension is free/open-source — no paid subscription.
+          disabled: true,
           prices: [
             {
               type: 'subscription',
@@ -150,6 +145,8 @@ export const websiteConfig: WebsiteConfig = {
         },
         lifetime: {
           id: 'lifetime',
+          // Disabled: the extension is free/open-source — no paid plan.
+          disabled: true,
           prices: [
             {
               type: 'one_time',

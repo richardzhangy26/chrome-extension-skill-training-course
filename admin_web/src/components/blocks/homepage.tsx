@@ -9,23 +9,21 @@ import Integration2Section from '@/components/blocks/integration2';
 import PricingSection from '@/components/blocks/pricing';
 import FaqSection from '@/components/blocks/faqs';
 import TestimonialsSection from '@/components/blocks/testimonials';
-import NewsletterCard from '@/components/blocks/newsletter-card';
 
 export function HomePage() {
   return (
     <div className="flex flex-col">
       <HeroSection />
       <LogoCloudSection />
+      <Integration2Section />
+      <IntegrationSection />
       <FeaturesSection />
       <Features2Section />
-      <CallToActionSection />
       <StatsSection />
-      <IntegrationSection />
-      <Integration2Section />
+      <TestimonialsSection />
       <PricingSection />
       <FaqSection />
-      <TestimonialsSection />
-      <NewsletterCard />
+      <CallToActionSection />
     </div>
   );
 }

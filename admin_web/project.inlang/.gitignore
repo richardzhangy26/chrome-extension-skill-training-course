@@ -1,0 +1,8 @@
+# Keep the Inlang project lean in Git.
+# Settings and source message JSON files are versioned; generated metadata and
+# plugin cache files are ignored.
+*
+!.gitignore
+!settings.json
+!messages/
+!messages/*.json

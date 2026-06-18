@@ -1,0 +1,45 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+count.txt
+.env
+.env.local
+.env.production
+.dev.vars
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+.content-collections
+__unconfig*
+todos.json
+
+# locale
+project.inlang/cache
+src/locale/paraglide
+
+# claude code
+.claude
+
+# codebuddy
+.codebuddy
+
+# conductor
+.conductor
+
+# kiro
+.kiro
+
+# Auto Claude data directory
+.auto-claude/
+
+# Auto Claude generated files
+.auto-claude-security.json
+.auto-claude-status
+.claude_settings.json
+.worktrees/
+.security-key
+logs/security/

@@ -1,0 +1,50 @@
+{
+  "files.watcherExclude": {
+    "**/routeTree.gen.ts": true
+  },
+  "files.readonlyInclude": {
+    "**/routeTree.gen.ts": true
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "editor.defaultFormatter": "biomejs.biome",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "quickfix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/routeTree.gen.ts": true,
+    "dist": true,
+    ".wrangler": true,
+    ".tanstack": true,
+    ".content-collections": true,
+    ".vscode": true,
+    ".cursor": true,
+    ".claude": true,
+    ".auto-claude": true,
+    ".conductor": true,
+    ".kiro": true,
+    ".github": true
+  }
+}

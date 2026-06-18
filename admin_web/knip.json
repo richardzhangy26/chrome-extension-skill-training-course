@@ -1,0 +1,55 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/start.tsx",
+    "src/server.ts",
+    "src/router.tsx",
+    "src/routes/**/*.ts",
+    "src/routes/**/*.tsx",
+    "scripts/**/*.ts"
+  ],
+  "project": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.ts"],
+  "ignore": [
+    "src/components/ui/**",
+    "src/components/data-table/**",
+    "src/hooks/use-callback-ref.ts",
+    "src/hooks/use-compose-refs.ts",
+    "src/hooks/use-debounced-callback.ts",
+    "src/types/index.d.ts"
+  ],
+  "ignoreDependencies": [
+    "@fontsource/bricolage-grotesque",
+    "@radix-ui/react-slot",
+    "@tanstack/ai-react",
+    "@react-email/preview-server",
+    "@tailwindcss/typography",
+    "cloudflare",
+    "embla-carousel-react",
+    "nanoid",
+    "react-resizable-panels",
+    "shadcn",
+    "tailwindcss",
+    "tw-animate-css"
+  ],
+  "ignoreIssues": {
+    "src/auth/types.ts": ["types"],
+    "src/components/dashboard/chart-area-interactive.tsx": ["exports"],
+    "src/components/layout/sidebar-layout.tsx": ["exports"],
+    "src/hooks/use-apikeys.ts": ["exports"],
+    "src/hooks/use-auth.ts": ["exports"],
+    "src/hooks/use-newsletter.ts": ["exports"],
+    "src/hooks/use-user-files.ts": ["exports"],
+    "src/hooks/use-users.ts": ["exports"],
+    "src/lib/locale.ts": ["exports"],
+    "src/lib/seo.ts": ["exports"],
+    "src/lib/urls.ts": ["exports"],
+    "src/mail/index.ts": ["exports"],
+    "src/mail/render.ts": ["exports"],
+    "src/newsletter/index.ts": ["exports"],
+    "src/notification/index.ts": ["exports"],
+    "src/payment/index.ts": ["exports"],
+    "src/payment/types.ts": ["types"],
+    "src/storage/index.ts": ["exports"],
+    "src/storage/utils.ts": ["exports"]
+  }
+}

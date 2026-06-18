@@ -1,0 +1,63 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+# Ensure only one deployment runs at a time
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_OPTIONS: '--max-old-space-size=4096'
+      # --- Cloudflare credentials (needed by cf-typegen in postinstall) ---
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_DATABASE_ID: ${{ secrets.CLOUDFLARE_DATABASE_ID }}
+      # --- Client-side (VITE_*) env vars baked into the build ---
+      VITE_BASE_URL: ${{ secrets.VITE_BASE_URL }}
+      VITE_PAYMENT_PROVIDER: ${{ secrets.VITE_PAYMENT_PROVIDER }}
+      VITE_STRIPE_PRICE_PRO_MONTHLY: ${{ secrets.VITE_STRIPE_PRICE_PRO_MONTHLY }}
+      VITE_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.VITE_STRIPE_PRICE_PRO_YEARLY }}
+      VITE_STRIPE_PRICE_LIFETIME: ${{ secrets.VITE_STRIPE_PRICE_LIFETIME }}
+      VITE_CREEM_PRODUCT_PRO_MONTHLY: ${{ secrets.VITE_CREEM_PRODUCT_PRO_MONTHLY }}
+      VITE_CREEM_PRODUCT_PRO_YEARLY: ${{ secrets.VITE_CREEM_PRODUCT_PRO_YEARLY }}
+      VITE_CREEM_PRODUCT_LIFETIME: ${{ secrets.VITE_CREEM_PRODUCT_LIFETIME }}
+      VITE_GOOGLE_ANALYTICS_ID: ${{ secrets.VITE_GOOGLE_ANALYTICS_ID }}
+      VITE_CLARITY_PROJECT_ID: ${{ secrets.VITE_CLARITY_PROJECT_ID }}
+      VITE_PLAUSIBLE_SCRIPT: ${{ secrets.VITE_PLAUSIBLE_SCRIPT }}
+      VITE_UMAMI_WEBSITE_ID: ${{ secrets.VITE_UMAMI_WEBSITE_ID }}
+      VITE_UMAMI_SCRIPT: ${{ secrets.VITE_UMAMI_SCRIPT }}
+      VITE_CRISP_WEBSITE_ID: ${{ secrets.VITE_CRISP_WEBSITE_ID }}
+      VITE_AFFILIATE_AFFONSO_ID: ${{ secrets.VITE_AFFILIATE_AFFONSO_ID }}
+      VITE_AFFILIATE_PROMOTEKIT_ID: ${{ secrets.VITE_AFFILIATE_PROMOTEKIT_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Deploy to Cloudflare Workers
+        run: pnpx wrangler deploy

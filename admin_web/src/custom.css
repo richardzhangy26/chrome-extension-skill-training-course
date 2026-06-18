@@ -1,0 +1,185 @@
+/* ── Scroll-reveal & entrance animations ── */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes crossfade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-crossfade-in {
+  animation: crossfade-in 0.4s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+/* Stagger delay utilities for choreographed entrances */
+.delay-0 {
+  animation-delay: 0ms;
+}
+.delay-1 {
+  animation-delay: 100ms;
+}
+.delay-2 {
+  animation-delay: 200ms;
+}
+.delay-3 {
+  animation-delay: 300ms;
+}
+.delay-4 {
+  animation-delay: 400ms;
+}
+.delay-5 {
+  animation-delay: 500ms;
+}
+
+/* Scroll-reveal: hidden until in view */
+.reveal-hidden {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.reveal-visible {
+  animation: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Global interaction polish ── */
+
+/* Smooth focus-visible ring for all focusable elements */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="checkbox"]:focus-visible,
+[role="combobox"]:focus-visible,
+[role="radio"]:focus-visible,
+[role="slider"]:focus-visible,
+[role="switch"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+}
+
+:is(
+    [class*="focus-visible:ring"]:focus-visible,
+    [class*="focus:ring"]:focus,
+    [class*="focus-within:ring"]:focus-within,
+    [class*="hover:ring"]:hover,
+    [class*="active:ring"]:active,
+    [class*="aria-invalid:ring"][aria-invalid="true"],
+    [class*="has-aria-invalid:ring"]:has([aria-invalid="true"]),
+    [class*="has-[[data-slot][aria-invalid=true]]:ring"]:has(
+        [data-slot][aria-invalid="true"]
+      )
+  ) {
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-inset-ring-shadow: 0 0 #0000 !important;
+}
+
+/* Smooth transitions for all links and buttons */
+a,
+button,
+[role="button"] {
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .reveal-hidden {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* custom markdown styles start */
+
+/* Code block background in dark mode for better visibility */
+.dark .prose pre {
+  background: var(--muted);
+}
+.dark .prose pre code {
+  background: transparent;
+}
+
+/* Remove underline from heading links (from rehype-autolink-headings) */
+.prose h1 a,
+.prose h2 a,
+.prose h3 a,
+.prose h4 a,
+.prose h5 a,
+.prose h6 a {
+  text-decoration: none;
+}
+.prose h1 a:hover,
+.prose h2 a:hover,
+.prose h3 a:hover,
+.prose h4 a:hover,
+.prose h5 a:hover,
+.prose h6 a:hover {
+  text-decoration: none;
+}
+
+/* hide scrollbar for screenshot */
+/* html {
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar {
+  display: none;
+} */
+
+/* ── Scrollbar styling ── */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: gray transparent;
+}
+
+/* custom markdown styles end */

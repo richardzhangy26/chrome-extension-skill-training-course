@@ -6,9 +6,11 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import reactPlugin from 'eslint-plugin-react';
 import { browser, es2020, node } from 'globals';
+// eslint-disable-next-line import-x/no-deprecated -- ESLint's defineConfig() is type-incompatible with typescript-eslint's plugin configs; keep this until upstream types align
 import { config, configs as tsConfigs, parser as tsParser } from 'typescript-eslint';
 import type { FixupConfigArray } from '@eslint/compat';
 
+// eslint-disable-next-line import-x/no-deprecated -- ESLint's defineConfig() is type-incompatible with typescript-eslint's plugin configs; keep this until upstream types align
 export default config(
   // Shared configs
   js.configs.recommended,
@@ -25,7 +27,7 @@ export default config(
   },
   // Custom config
   {
-    ignores: ['**/build/**', '**/dist/**', '**/node_modules/**', 'chrome-extension/manifest.js'],
+    ignores: ['**/build/**', '**/dist/**', '**/node_modules/**', 'chrome-extension/manifest.js', 'admin_web/**'],
   },
   {
     files: ['**/*.{ts,tsx}'],

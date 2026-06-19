@@ -2,6 +2,7 @@
  * LLM 设置弹窗组件
  */
 
+import { ModelSelector } from './ModelSelector';
 import { VoiceModeSettings } from './VoiceModeSettings';
 import { fetchAvailableTextModels, testLLMConfig } from '../services/llm-service';
 import {
@@ -23,6 +24,7 @@ import {
   normalizeLLMConfig,
 } from '@extension/storage';
 import { useCallback, useEffect, useState } from 'react';
+import type { ModelOption } from './ModelSelector';
 import type { StudentProfile, LLMConfig } from '@extension/storage';
 
 // 关闭图标
@@ -59,11 +61,6 @@ interface LLMConfigDraft extends Omit<LLMConfig, 'temperature' | 'topK' | 'maxTo
   topK: string;
   maxTokens: string;
   maxHistoryRounds: string;
-}
-
-interface ModelOption {
-  value: string;
-  label: string;
 }
 
 const DEFAULT_MODEL_OPTIONS: ModelOption[] = AVAILABLE_MODELS.map(model => ({ ...model }));
@@ -180,8 +177,6 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
   const currentConnectionSignature = createConnectionSignature(normalizedConfig);
   const requiresRetest = currentConnectionSignature !== testedConnectionSignature;
   const canSave = !requiresRetest;
-  const hasCurrentModelInOptions = availableModels.some(model => model.value === normalizedConfig.model);
-  const selectedModelOptionValue = hasCurrentModelInOptions ? normalizedConfig.model : '__custom__';
 
   useEffect(() => {
     if (testResult && requiresRetest) {
@@ -393,30 +388,15 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
                 />
                 <div className="mt-2">
-                  <label htmlFor="modelPreset" className="mb-1 block text-xs font-medium text-slate-600">
+                  <p id="modelPresetLabel" className="mb-1 text-xs font-medium text-slate-600">
                     从动态文本模型列表中选择
-                  </label>
-                  <select
-                    id="modelPreset"
-                    value={selectedModelOptionValue}
-                    onChange={e => {
-                      const nextValue = e.target.value;
-                      if (nextValue === '__custom__') {
-                        return;
-                      }
-
-                      setConfig(prev => ({ ...prev, model: nextValue }));
-                    }}
-                    className="w-full cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100">
-                    <option value="__custom__">
-                      {hasCurrentModelInOptions ? '请选择一个文本模型' : `当前为自定义模型：${normalizedConfig.model}`}
-                    </option>
-                    {availableModels.map(model => (
-                      <option key={model.value} value={model.value}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
+                  </p>
+                  <ModelSelector
+                    options={availableModels}
+                    value={normalizedConfig.model}
+                    onChange={model => setConfig(prev => ({ ...prev, model }))}
+                    labelId="modelPresetLabel"
+                  />
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
                   支持输入任意模型名；下拉框会从当前 API 动态拉取，仅显示 text 模型，当前共 {availableModels.length}

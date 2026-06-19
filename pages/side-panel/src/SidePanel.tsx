@@ -906,6 +906,10 @@ interface VoiceChatAreaProps {
   onAutoGenerate: () => void | Promise<void>;
   onAutoRunToggle: () => void | Promise<void>;
   trainTaskId: string | null;
+  simulationConfig: SimulationModeState;
+  onToggleSimulation: (enabled: boolean) => void;
+  onToggleKnowledge: (enabled: boolean) => void;
+  onOpenSimulationConfig: () => void;
 }
 
 const VoiceChatArea = ({
@@ -916,6 +920,10 @@ const VoiceChatArea = ({
   onAutoGenerate,
   onAutoRunToggle,
   trainTaskId,
+  simulationConfig,
+  onToggleSimulation,
+  onToggleKnowledge,
+  onOpenSimulationConfig,
 }: VoiceChatAreaProps) => {
   const [input, setInput] = useState('');
   const handleSend = () => {
@@ -933,6 +941,15 @@ const VoiceChatArea = ({
       <MessageList messages={voice.messages} isLoading={voice.isLoading} />
       {voice.voiceState === 'IDLE' || voice.voiceState === 'ERROR' ? (
         <div className="border-t border-slate-200 bg-white p-5">
+          <div className="mb-3">
+            <SimulationConfigBar
+              config={simulationConfig}
+              onToggleSimulation={onToggleSimulation}
+              onToggleKnowledge={onToggleKnowledge}
+              onOpenConfig={onOpenSimulationConfig}
+              disabled={voice.isLoading}
+            />
+          </div>
           <button
             type="button"
             onClick={onStart}
@@ -943,6 +960,15 @@ const VoiceChatArea = ({
         </div>
       ) : (
         <div className="border-t border-slate-200 bg-white">
+          <div className="px-4 pt-3">
+            <SimulationConfigBar
+              config={simulationConfig}
+              onToggleSimulation={onToggleSimulation}
+              onToggleKnowledge={onToggleKnowledge}
+              onOpenConfig={onOpenSimulationConfig}
+              disabled={voice.isLoading}
+            />
+          </div>
           <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
             <span
               className={`inline-flex h-2 w-2 rounded-full ${autoRunning ? 'animate-pulse bg-emerald-500' : 'bg-cyan-500'}`}
@@ -1283,6 +1309,14 @@ const SidePanel = () => {
           onAutoGenerate={handleVoiceAutoGenerate}
           onAutoRunToggle={handleVoiceAutoRunToggle}
           trainTaskId={voice.trainTaskId ?? trainTaskId}
+          simulationConfig={simulationConfig}
+          onToggleSimulation={enabled => {
+            void handleToggleDialogueSimulation(enabled);
+          }}
+          onToggleKnowledge={enabled => {
+            void handleToggleKnowledgeBase(enabled);
+          }}
+          onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
         />
       ) : multiRole.isMultiRoleMode && multiRole.batch ? (
         <>
@@ -1376,11 +1410,15 @@ const SidePanel = () => {
       <SimulationConfigModal
         isOpen={isSimulationConfigOpen}
         onClose={() => setIsSimulationConfigOpen(false)}
-        trainTaskId={trainTaskId}
-        onOpenMultiRole={() => {
-          setIsSimulationConfigOpen(false);
-          setIsMultiRolePickerOpen(true);
-        }}
+        trainTaskId={mode === 'voice' ? (voice.trainTaskId ?? trainTaskId) : trainTaskId}
+        onOpenMultiRole={
+          mode === 'voice'
+            ? undefined
+            : () => {
+                setIsSimulationConfigOpen(false);
+                setIsMultiRolePickerOpen(true);
+              }
+        }
       />
 
       <MultiRolePickerModal

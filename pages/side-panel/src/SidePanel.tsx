@@ -1,4 +1,5 @@
 import '@src/SidePanel.css';
+import { AuthPanel } from './components/AuthPanel';
 import { DebugStepsModal } from './components/DebugStepsModal';
 import { HistoryModal, HistoryIcon } from './components/HistoryModal';
 import { ModelBrandIcon } from './components/ModelBrandIcon';
@@ -7,6 +8,7 @@ import { MultiRolePickerModal } from './components/MultiRolePickerModal';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
 import { SimulationConfigBar } from './components/SimulationConfigBar';
 import { SimulationConfigModal } from './components/SimulationConfigModal';
+import { useAdminWebAuth } from './hooks/useAdminWebAuth';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useMultiRoleRun } from './hooks/useMultiRoleRun';
 import { useVoiceAgentChat } from './hooks/useVoiceAgentChat';
@@ -212,6 +214,10 @@ const Header = ({
   mode,
   onChangeMode,
   modeToggleDisabled,
+  isLoggedIn,
+  accountLabel,
+  onOpenAuth,
+  onLogout,
 }: {
   trainTaskId: string | null;
   trainTaskName?: string | null;
@@ -223,6 +229,10 @@ const Header = ({
   mode: TrainingMode;
   onChangeMode: (mode: TrainingMode) => void;
   modeToggleDisabled: boolean;
+  isLoggedIn: boolean;
+  accountLabel?: string | null;
+  onOpenAuth: () => void;
+  onLogout: () => void;
 }) => {
   const config = STATE_CONFIG[workflowState];
   const isProcessing = ['FETCHING_STEPS', 'FETCHING_FIRST_STEP', 'RUNNING_CARD'].includes(workflowState);
@@ -248,6 +258,22 @@ const Header = ({
             <ModeToggle mode={mode} onChange={onChangeMode} disabled={modeToggleDisabled} />
           </div>
           <div className="flex items-center gap-2">
+            {/* 账号/登录入口 */}
+            {isLoggedIn ? (
+              <button
+                onClick={onLogout}
+                title={accountLabel ?? undefined}
+                className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs text-white/90 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 hover:text-white">
+                <span className="max-w-[6rem] truncate">{accountLabel}</span>
+                <span>登出</span>
+              </button>
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs text-white/90 backdrop-blur-sm transition-all duration-200 hover:bg-white/25 hover:text-white">
+                <span>登录</span>
+              </button>
+            )}
             {/* 设置按钮 */}
             <button
               onClick={onOpenSettings}
@@ -1066,6 +1092,9 @@ const SidePanel = () => {
   // 口语训练 hook
   const voice = useVoiceAgentChat();
 
+  // Admin Web 登录态 hook
+  const { isLoggedIn, session, login, register, logout } = useAdminWebAuth();
+
   // 训练模式：文字 / 口语
   const [mode, setMode] = useState<TrainingMode>('text');
 
@@ -1076,6 +1105,7 @@ const SidePanel = () => {
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [isSimulationConfigOpen, setIsSimulationConfigOpen] = useState(false);
   const [isMultiRolePickerOpen, setIsMultiRolePickerOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [simulationConfig, setSimulationConfig] = useState<SimulationModeState>(createSimulationModeState);
   const [historyInitialSessionId, setHistoryInitialSessionId] = useState<string | undefined>();
 
@@ -1284,6 +1314,12 @@ const SidePanel = () => {
           mode={mode}
           onChangeMode={handleChangeMode}
           modeToggleDisabled={modeToggleDisabled}
+          isLoggedIn={isLoggedIn}
+          accountLabel={session.user?.name || session.user?.email}
+          onOpenAuth={() => setIsAuthOpen(true)}
+          onLogout={() => {
+            void logout();
+          }}
         />
       ) : (
         <Header
@@ -1296,6 +1332,12 @@ const SidePanel = () => {
           mode={mode}
           onChangeMode={handleChangeMode}
           modeToggleDisabled={modeToggleDisabled}
+          isLoggedIn={isLoggedIn}
+          accountLabel={session.user?.name || session.user?.email}
+          onOpenAuth={() => setIsAuthOpen(true)}
+          onLogout={() => {
+            void logout();
+          }}
         />
       )}
 
@@ -1386,6 +1428,9 @@ const SidePanel = () => {
           )}
         </>
       )}
+
+      {/* 登录/注册弹窗 */}
+      <AuthPanel isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLogin={login} onRegister={register} />
 
       {/* 设置弹窗 */}
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />

@@ -1,5 +1,5 @@
 import 'webextension-polyfill';
-import { exampleThemeStorage } from '@extension/storage';
+import { exampleThemeStorage, authSessionStorage } from '@extension/storage';
 
 // ============ 类型定义 ============
 interface BackgroundMessage<T = unknown> {
@@ -13,7 +13,12 @@ interface BackgroundResponse<T = unknown> {
   error?: string;
 }
 
-type BackgroundMessageType = 'GET_CURRENT_TAB_URL' | 'GET_AUTH' | 'EXTRACT_TRAIN_TASK_ID' | 'API_REQUEST';
+type BackgroundMessageType =
+  | 'GET_CURRENT_TAB_URL'
+  | 'GET_AUTH'
+  | 'EXTRACT_TRAIN_TASK_ID'
+  | 'API_REQUEST'
+  | 'ADMIN_WEB_REQUEST';
 
 interface AuthInfo {
   authorization: string | null;
@@ -26,10 +31,19 @@ interface ApiRequestPayload {
   headers?: Record<string, string>;
 }
 
+interface AdminWebRequestPayload {
+  path: string;
+  method: 'GET' | 'POST';
+  body?: Record<string, unknown>;
+  auth?: boolean;
+}
+
 // ============ 常量 ============
 const AUTH_COOKIE_URL = 'https://hike-teaching-center.polymas.com/';
 const AUTH_COOKIE_NAME = 'ai-poly';
 const API_BASE_URL = 'https://cloudapi.polymas.com';
+// Admin Web 基址：dev=本地，prod=部署域名（见计划「前置条件 3」，prod 待回填）
+const ADMIN_WEB_BASE_URL = 'http://localhost:3000';
 const RETRYABLE_HTTP_STATUS = new Set([502, 503, 504]);
 const MAX_RETRY_COUNT = 2;
 
@@ -76,6 +90,9 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
     case 'API_REQUEST':
       return handleApiRequest(message.payload as ApiRequestPayload);
+
+    case 'ADMIN_WEB_REQUEST':
+      return handleAdminWebRequest(message.payload as AdminWebRequestPayload);
 
     default:
       return { success: false, error: `Unknown message type: ${message.type}` };
@@ -202,6 +219,45 @@ const handleApiRequest = async (payload: ApiRequestPayload): Promise<BackgroundR
     }
 
     return { success: false, error: 'API request failed after retries' };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+};
+
+// ============ Admin Web 请求代理（bearer，不注入 polymas 认证） ============
+const handleAdminWebRequest = async (
+  payload: AdminWebRequestPayload,
+): Promise<BackgroundResponse<{ status: number; ok: boolean; json: unknown; setAuthToken: string | null }>> => {
+  try {
+    const { path, method, body, auth } = payload;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    if (auth) {
+      const session = await authSessionStorage.get();
+      if (session.token) {
+        headers['Authorization'] = `Bearer ${session.token}`;
+      }
+    }
+
+    const url = `${ADMIN_WEB_BASE_URL}${path}`;
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const setAuthToken = response.headers.get('set-auth-token');
+    let json: unknown = null;
+    try {
+      json = await response.json();
+    } catch {
+      json = null;
+    }
+
+    return {
+      success: true,
+      data: { status: response.status, ok: response.ok, json, setAuthToken },
+    };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }

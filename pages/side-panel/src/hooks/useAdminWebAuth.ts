@@ -28,11 +28,16 @@ const useAdminWebAuth = () => {
 
   // 登录后把账号配置写入本地；服务端无配置则用本地 seed 上去一次
   const syncConfigDown = useCallback(async () => {
-    const remote = await fetchLlmConfig();
-    if (remote) {
-      await llmConfigStorage.setConfig(remote);
+    const result = await fetchLlmConfig();
+    if (!result.ok) {
+      // 请求失败（网络/非 401 错误）：不种子、不覆盖本地配置
       return;
     }
+    if (result.config) {
+      await llmConfigStorage.setConfig(result.config);
+      return;
+    }
+    // 服务端确认无配置（200 + config:null）：用本地 seed 上去一次
     const local = await llmConfigStorage.get();
     await pushLlmConfig(local);
   }, []);

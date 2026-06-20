@@ -936,6 +936,7 @@ interface VoiceChatAreaProps {
   onToggleSimulation: (enabled: boolean) => void;
   onToggleKnowledge: (enabled: boolean) => void;
   onOpenSimulationConfig: () => void;
+  isLoggedIn: boolean;
 }
 
 const VoiceChatArea = ({
@@ -950,6 +951,7 @@ const VoiceChatArea = ({
   onToggleSimulation,
   onToggleKnowledge,
   onOpenSimulationConfig,
+  isLoggedIn,
 }: VoiceChatAreaProps) => {
   const [input, setInput] = useState('');
   const handleSend = () => {
@@ -973,7 +975,7 @@ const VoiceChatArea = ({
               onToggleSimulation={onToggleSimulation}
               onToggleKnowledge={onToggleKnowledge}
               onOpenConfig={onOpenSimulationConfig}
-              disabled={voice.isLoading}
+              disabled={voice.isLoading || isLoggedIn}
             />
           </div>
           <button
@@ -992,7 +994,7 @@ const VoiceChatArea = ({
               onToggleSimulation={onToggleSimulation}
               onToggleKnowledge={onToggleKnowledge}
               onOpenConfig={onOpenSimulationConfig}
-              disabled={voice.isLoading}
+              disabled={voice.isLoading || isLoggedIn}
             />
           </div>
           <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
@@ -1195,6 +1197,10 @@ const SidePanel = () => {
   };
 
   const handleToggleDialogueSimulation = async (enabled: boolean) => {
+    if (isLoggedIn) {
+      // 登录态下配置为只读，禁止本地写入
+      return;
+    }
     setSimulationConfig(prev => ({
       ...prev,
       dialogueSimulationEnabled: enabled,
@@ -1203,6 +1209,10 @@ const SidePanel = () => {
   };
 
   const handleToggleKnowledgeBase = async (enabled: boolean) => {
+    if (isLoggedIn) {
+      // 登录态下配置为只读，禁止本地写入
+      return;
+    }
     setSimulationConfig(prev => ({
       ...prev,
       knowledgeBaseEnabled: enabled,
@@ -1359,6 +1369,7 @@ const SidePanel = () => {
             void handleToggleKnowledgeBase(enabled);
           }}
           onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
+          isLoggedIn={isLoggedIn}
         />
       ) : multiRole.isMultiRoleMode && multiRole.batch ? (
         <>
@@ -1416,7 +1427,7 @@ const SidePanel = () => {
               onToggleKnowledgeBase={enabled => {
                 void handleToggleKnowledgeBase(enabled);
               }}
-              toggleDisabled={isLoading}
+              toggleDisabled={isLoading || isLoggedIn}
               debugDisabled={isLoading}
               disabled={isLoading || isCompleted}
             />

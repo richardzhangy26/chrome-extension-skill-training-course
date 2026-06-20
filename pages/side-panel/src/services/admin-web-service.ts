@@ -76,18 +76,26 @@ const getSession = async (): Promise<AuthUser | null> => {
     }
     return null;
   }
-  return extractUser(res.json);
+  const user = extractUser(res.json);
+  if (!user) {
+    // 200 + 空/null body：会话已不存在或过期（Better Auth 不返回 401）
+    await authSessionStorage.clear();
+    return null;
+  }
+  return user;
 };
 
-const fetchLlmConfig = async (): Promise<LLMConfig | null> => {
+type FetchConfigResult = { ok: true; config: LLMConfig | null } | { ok: false };
+
+const fetchLlmConfig = async (): Promise<FetchConfigResult> => {
   const res = await adminWebRequest({ path: '/api/extension/config', method: 'GET', auth: true });
   if (!res.ok) {
     if (res.status === 401) {
       await authSessionStorage.clear();
     }
-    return null;
+    return { ok: false };
   }
-  return (res.json as { config?: LLMConfig | null }).config ?? null;
+  return { ok: true, config: (res.json as { config?: LLMConfig | null }).config ?? null };
 };
 
 const pushLlmConfig = async (config: LLMConfig): Promise<boolean> => {

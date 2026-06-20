@@ -1433,7 +1433,7 @@ const SidePanel = () => {
       <AuthPanel isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLogin={login} onRegister={register} />
 
       {/* 设置弹窗 */}
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} readOnly={isLoggedIn} />
 
       {/* 配置提示弹窗 */}
       <ConfigPromptModal
@@ -1456,6 +1456,7 @@ const SidePanel = () => {
         isOpen={isSimulationConfigOpen}
         onClose={() => setIsSimulationConfigOpen(false)}
         trainTaskId={mode === 'voice' ? (voice.trainTaskId ?? trainTaskId) : trainTaskId}
+        readOnly={isLoggedIn}
         onOpenMultiRole={
           mode === 'voice'
             ? undefined

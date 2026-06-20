@@ -3,14 +3,16 @@ import { HeaderSection } from '@/components/shared/header-section';
 import { ScrollReveal } from '@/components/shared/scroll-reveal';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import type { Icon } from '@tabler/icons-react';
-import { IconHistory, IconMessageChatbot, IconScan, IconUsersGroup } from '@tabler/icons-react';
+import { IconDatabase, IconHistory, IconMessageChatbot, IconScan, IconUsersGroup } from '@tabler/icons-react';
 import { useState } from 'react';
-type ImageKey = 'item-1' | 'item-2' | 'item-3' | 'item-4';
+import { getR2AssetUrl } from '@/config/r2-assets';
+type ImageKey = 'item-1' | 'item-2' | 'item-3' | 'item-4' | 'item-5';
 const icons: Record<ImageKey, Icon> = {
   'item-1': IconScan,
   'item-2': IconMessageChatbot,
   'item-3': IconUsersGroup,
   'item-4': IconHistory,
+  'item-5': IconDatabase,
 };
 const images: Record<
   ImageKey,
@@ -21,24 +23,29 @@ const images: Record<
   }
 > = {
   'item-1': {
-    image: 'https://cdn.mksaas.com/blocks/charts-light.png',
-    darkImage: 'https://cdn.mksaas.com/blocks/charts.png',
-    alt: 'Product Feature One',
+    image: getR2AssetUrl('features/task-detection-light.png'),
+    darkImage: getR2AssetUrl('features/task-detection-dark.png'),
+    alt: '自动识别训练任务界面',
   },
   'item-2': {
-    image: 'https://cdn.mksaas.com/blocks/music-light.png',
-    darkImage: 'https://cdn.mksaas.com/blocks/music.png',
-    alt: 'Product Feature Two',
+    image: getR2AssetUrl('features/model-dialogue-light.png'),
+    darkImage: getR2AssetUrl('features/model-dialogue-dark.png'),
+    alt: '多模型对话生成配置界面',
   },
   'item-3': {
-    image: 'https://cdn.mksaas.com/blocks/mail2-light.png',
-    darkImage: 'https://cdn.mksaas.com/blocks/mail2.png',
-    alt: 'Product Feature Three',
+    image: getR2AssetUrl('features/multi-role-light.png'),
+    darkImage: getR2AssetUrl('features/multi-role-dark.png'),
+    alt: '多角色学生并行模拟界面',
   },
   'item-4': {
-    image: 'https://cdn.mksaas.com/blocks/payments-light.png',
-    darkImage: 'https://cdn.mksaas.com/blocks/payments.png',
-    alt: 'Product Feature Four',
+    image: getR2AssetUrl('features/conversation-history-light.png'),
+    darkImage: getR2AssetUrl('features/conversation-history-dark.png'),
+    alt: '训练对话历史记录与复盘界面',
+  },
+  'item-5': {
+    image: getR2AssetUrl('features/conversation-simulation-light.png'),
+    darkImage: getR2AssetUrl('features/conversation-simulation-dark.png'),
+    alt: '对话记录模拟和知识库配置界面',
   },
 };
 export default function FeaturesSection() {
@@ -53,6 +60,11 @@ export default function FeaturesSection() {
       key: 'item-2' as const,
       title: m.home_features_items_item_2_title(),
       description: m.home_features_items_item_2_description(),
+    },
+    {
+      key: 'item-5' as const,
+      title: m.home_features_items_item_5_title(),
+      description: m.home_features_items_item_5_description(),
     },
     {
       key: 'item-3' as const,

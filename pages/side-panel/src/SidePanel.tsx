@@ -5,17 +5,17 @@ import { ModelBrandIcon } from './components/ModelBrandIcon';
 import { ModeToggle } from './components/ModeToggle';
 import { MultiRolePickerModal } from './components/MultiRolePickerModal';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
+import { SimulationConfigBar } from './components/SimulationConfigBar';
 import { SimulationConfigModal } from './components/SimulationConfigModal';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useMultiRoleRun } from './hooks/useMultiRoleRun';
 import { useVoiceAgentChat } from './hooks/useVoiceAgentChat';
-import { normalizeDialogueSimulationContent } from './services/llm-service';
 import { llmConfigStorage } from '@extension/storage';
 import { useRef, useEffect, useState } from 'react';
 import type { TrainingMode } from './components/ModeToggle';
+import type { SimulationModeState } from './components/SimulationConfigBar';
 import type { ChatMessage } from './hooks/useAgentChat';
 import type { MultiRoleRunBatch, RoleRunDraft } from './types/multi-role-types';
-import type { LLMConfig } from '@extension/storage';
 
 // ============ SVG图标组件 ============
 const Icons = {
@@ -181,11 +181,6 @@ type WorkflowState =
   | 'CHATTING'
   | 'COMPLETED'
   | 'ERROR';
-
-type SimulationModeState = Pick<
-  LLMConfig,
-  'dialogueSimulationEnabled' | 'dialogueSimulationContent' | 'knowledgeBaseEnabled' | 'knowledgeBaseContent'
->;
 
 // ============ 状态配置 ============
 const STATE_CONFIG: Record<WorkflowState, { label: string; bgColor: string; dotColor: string }> = {
@@ -470,10 +465,6 @@ const ChatInput = ({
 }) => {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const hasDialogueSimulationContent = Boolean(
-    normalizeDialogueSimulationContent(simulationConfig.dialogueSimulationContent),
-  );
-  const hasKnowledgeBaseContent = Boolean(simulationConfig.knowledgeBaseContent.trim());
 
   const handleSend = () => {
     const trimmed = value.trim();
@@ -519,44 +510,13 @@ const ChatInput = ({
           <span className="text-[11px] text-slate-400">选择步骤快速跳转</span>
         </div>
 
-        <div className="flex flex-col items-start gap-1">
-          <button
-            onClick={onOpenSimulationConfig}
-            disabled={debugDisabled}
-            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 transition-all duration-200 hover:border-sky-300 hover:text-sky-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
-            title="配置对话模拟与知识库模式">
-            <Icons.Book />
-            <span>对话模拟 / 知识库</span>
-          </button>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
-            <label className="flex cursor-pointer items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={simulationConfig.dialogueSimulationEnabled}
-                disabled={toggleDisabled}
-                onChange={event => onToggleDialogueSimulation(event.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 disabled:cursor-not-allowed"
-              />
-              <span>模拟对话</span>
-              {simulationConfig.dialogueSimulationEnabled && !hasDialogueSimulationContent && (
-                <span className="text-amber-600">未识别内容</span>
-              )}
-            </label>
-            <label className="flex cursor-pointer items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={simulationConfig.knowledgeBaseEnabled}
-                disabled={toggleDisabled}
-                onChange={event => onToggleKnowledgeBase(event.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 disabled:cursor-not-allowed"
-              />
-              <span>知识库</span>
-              {simulationConfig.knowledgeBaseEnabled && !hasKnowledgeBaseContent && (
-                <span className="text-amber-600">未配置内容</span>
-              )}
-            </label>
-          </div>
-        </div>
+        <SimulationConfigBar
+          config={simulationConfig}
+          onToggleSimulation={onToggleDialogueSimulation}
+          onToggleKnowledge={onToggleKnowledgeBase}
+          onOpenConfig={onOpenSimulationConfig}
+          disabled={toggleDisabled}
+        />
 
         <div className="flex flex-col items-start gap-1">
           <button
@@ -946,6 +906,10 @@ interface VoiceChatAreaProps {
   onAutoGenerate: () => void | Promise<void>;
   onAutoRunToggle: () => void | Promise<void>;
   trainTaskId: string | null;
+  simulationConfig: SimulationModeState;
+  onToggleSimulation: (enabled: boolean) => void;
+  onToggleKnowledge: (enabled: boolean) => void;
+  onOpenSimulationConfig: () => void;
 }
 
 const VoiceChatArea = ({
@@ -956,6 +920,10 @@ const VoiceChatArea = ({
   onAutoGenerate,
   onAutoRunToggle,
   trainTaskId,
+  simulationConfig,
+  onToggleSimulation,
+  onToggleKnowledge,
+  onOpenSimulationConfig,
 }: VoiceChatAreaProps) => {
   const [input, setInput] = useState('');
   const handleSend = () => {
@@ -973,6 +941,15 @@ const VoiceChatArea = ({
       <MessageList messages={voice.messages} isLoading={voice.isLoading} />
       {voice.voiceState === 'IDLE' || voice.voiceState === 'ERROR' ? (
         <div className="border-t border-slate-200 bg-white p-5">
+          <div className="mb-3">
+            <SimulationConfigBar
+              config={simulationConfig}
+              onToggleSimulation={onToggleSimulation}
+              onToggleKnowledge={onToggleKnowledge}
+              onOpenConfig={onOpenSimulationConfig}
+              disabled={voice.isLoading}
+            />
+          </div>
           <button
             type="button"
             onClick={onStart}
@@ -983,6 +960,15 @@ const VoiceChatArea = ({
         </div>
       ) : (
         <div className="border-t border-slate-200 bg-white">
+          <div className="px-4 pt-3">
+            <SimulationConfigBar
+              config={simulationConfig}
+              onToggleSimulation={onToggleSimulation}
+              onToggleKnowledge={onToggleKnowledge}
+              onOpenConfig={onOpenSimulationConfig}
+              disabled={voice.isLoading}
+            />
+          </div>
           <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
             <span
               className={`inline-flex h-2 w-2 rounded-full ${autoRunning ? 'animate-pulse bg-emerald-500' : 'bg-cyan-500'}`}
@@ -1323,6 +1309,14 @@ const SidePanel = () => {
           onAutoGenerate={handleVoiceAutoGenerate}
           onAutoRunToggle={handleVoiceAutoRunToggle}
           trainTaskId={voice.trainTaskId ?? trainTaskId}
+          simulationConfig={simulationConfig}
+          onToggleSimulation={enabled => {
+            void handleToggleDialogueSimulation(enabled);
+          }}
+          onToggleKnowledge={enabled => {
+            void handleToggleKnowledgeBase(enabled);
+          }}
+          onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
         />
       ) : multiRole.isMultiRoleMode && multiRole.batch ? (
         <>
@@ -1416,11 +1410,15 @@ const SidePanel = () => {
       <SimulationConfigModal
         isOpen={isSimulationConfigOpen}
         onClose={() => setIsSimulationConfigOpen(false)}
-        trainTaskId={trainTaskId}
-        onOpenMultiRole={() => {
-          setIsSimulationConfigOpen(false);
-          setIsMultiRolePickerOpen(true);
-        }}
+        trainTaskId={mode === 'voice' ? (voice.trainTaskId ?? trainTaskId) : trainTaskId}
+        onOpenMultiRole={
+          mode === 'voice'
+            ? undefined
+            : () => {
+                setIsSimulationConfigOpen(false);
+                setIsMultiRolePickerOpen(true);
+              }
+        }
       />
 
       <MultiRolePickerModal

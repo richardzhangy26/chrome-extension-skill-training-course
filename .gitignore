@@ -25,3 +25,5 @@ tsconfig.tsbuildinfo
 **/tailwind-output.css
 
 .claude 
+
+.playwright-mcp/

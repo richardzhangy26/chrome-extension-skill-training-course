@@ -3,3 +3,4 @@ export * from './agent-session-storage.js';
 export * from './agent-chat-storage.js';
 export * from './agent-log-storage.js';
 export * from './llm-config-storage.js';
+export * from './auth-session-storage.js';

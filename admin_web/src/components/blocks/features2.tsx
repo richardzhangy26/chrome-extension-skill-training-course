@@ -5,6 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import type { Icon } from '@tabler/icons-react';
 import { IconDownload, IconKey, IconLogin2, IconMessage2, IconSettings } from '@tabler/icons-react';
 import { useState } from 'react';
+import { getR2AssetUrl } from '@/config/r2-assets';
 
 type StepKey = 'step-1' | 'step-2' | 'step-3' | 'step-4' | 'step-5';
 
@@ -24,7 +25,7 @@ const Features2Section = () => {
       key: 'step-1',
       title: m.home_features2_step1_title(),
       description: m.home_features2_step1_description(),
-      image: '/steps/install-extension.png',
+      image: getR2AssetUrl('steps/install-extension.png'),
       alt: m.home_features2_step1_alt(),
       icon: IconDownload,
     },
@@ -32,7 +33,7 @@ const Features2Section = () => {
       key: 'step-2',
       title: m.home_features2_step2_title(),
       description: m.home_features2_step2_description(),
-      image: '/steps/open-polymas-training.png',
+      image: getR2AssetUrl('steps/open-polymas-training.png'),
       alt: m.home_features2_step2_alt(),
       icon: IconLogin2,
     },
@@ -40,7 +41,7 @@ const Features2Section = () => {
       key: 'step-3',
       title: m.home_features2_step3_title(),
       description: m.home_features2_step3_description(),
-      image: '/steps/api-key-test-success.png',
+      image: getR2AssetUrl('steps/api-key-test-success.png'),
       alt: m.home_features2_step3_alt(),
       icon: IconKey,
     },
@@ -48,7 +49,7 @@ const Features2Section = () => {
       key: 'step-4',
       title: m.home_features2_step4_title(),
       description: m.home_features2_step4_description(),
-      image: '/steps/configure-student-profile.png',
+      image: getR2AssetUrl('steps/configure-student-profile.png'),
       alt: m.home_features2_step4_alt(),
       icon: IconSettings,
     },
@@ -56,7 +57,7 @@ const Features2Section = () => {
       key: 'step-5',
       title: m.home_features2_step5_title(),
       description: m.home_features2_step5_description(),
-      image: '/steps/start-training-conversation.png',
+      image: getR2AssetUrl('steps/start-training-conversation.png'),
       alt: m.home_features2_step5_alt(),
       icon: IconMessage2,
     },

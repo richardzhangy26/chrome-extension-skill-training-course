@@ -1,35 +1,22 @@
-import { m } from '@/locale/paraglide/messages';
+import type { ReactNode } from 'react';
+
+import { MODEL_BRAND_ICONS } from '@/components/blocks/model-brand-icons';
 import { Logo } from '@/components/shared/logo';
 import { ScrollReveal } from '@/components/shared/scroll-reveal';
 import { buttonVariants } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { DOWNLOAD_URL, REPO_URL } from '@/config/links';
-import {
-  IconBrandCodesandbox,
-  IconBrandGoogleFilled,
-  IconBrandOpenai,
-  IconBrandReact,
-  IconBrandVisualStudio,
-  IconBrandWikipedia,
-} from '@tabler/icons-react';
-import { BRAND_COLORS } from '@/components/blocks/integration';
-const BRAND_ICONS = [
-  { Icon: IconBrandOpenai, color: BRAND_COLORS.openai },
-  { Icon: IconBrandCodesandbox, color: BRAND_COLORS.codesandbox },
-  { Icon: IconBrandReact, color: BRAND_COLORS.react },
-  { Icon: IconBrandVisualStudio, color: BRAND_COLORS.vs },
-  { Icon: IconBrandWikipedia, color: BRAND_COLORS.wikipedia },
-  { Icon: IconBrandGoogleFilled, color: BRAND_COLORS.google },
-];
-function IntegrationCard({
+import { m } from '@/locale/paraglide/messages';
+import { cn } from '@/lib/utils';
+
+const IntegrationCard = ({
   children,
   className,
   borderClassName,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
   borderClassName?: string;
-}) {
+}) => {
   return (
     <div
       className={cn(
@@ -40,9 +27,14 @@ function IntegrationCard({
       <div className="relative z-20 m-auto flex size-fit items-center justify-center *:size-8">{children}</div>
     </div>
   );
-}
-export default function Integration2Section() {
-  const [b0, b1, b2, b3, b4, b5] = BRAND_ICONS;
+};
+
+const Integration2Section = () => {
+  const [doubao, openai, gemini, claude, qwen, wenxin] = MODEL_BRAND_ICONS;
+  const renderModelIcon = ({ Icon, iconClassName }: (typeof MODEL_BRAND_ICONS)[number]) => (
+    <Icon aria-hidden="true" className={cn('size-8', iconClassName)} size={32} />
+  );
+
   return (
     <section>
       <div className="relative overflow-hidden py-16 md:py-24">
@@ -51,31 +43,19 @@ export default function Integration2Section() {
           <div className="grid items-center gap-8 sm:grid-cols-2 sm:gap-0">
             <ScrollReveal className="relative mx-auto w-fit">
               <div className="mx-auto mb-2 flex w-fit justify-center gap-2">
-                <IntegrationCard>
-                  <b0.Icon className="size-8" style={{ color: b0.color }} />
-                </IntegrationCard>
-                <IntegrationCard>
-                  <b1.Icon className="size-8" style={{ color: b1.color }} />
-                </IntegrationCard>
+                <IntegrationCard>{renderModelIcon(doubao)}</IntegrationCard>
+                <IntegrationCard>{renderModelIcon(openai)}</IntegrationCard>
               </div>
               <div className="mx-auto my-2 flex w-fit justify-center gap-2">
-                <IntegrationCard>
-                  <b2.Icon className="size-8" style={{ color: b2.color }} />
-                </IntegrationCard>
+                <IntegrationCard>{renderModelIcon(gemini)}</IntegrationCard>
                 <IntegrationCard borderClassName="border-black/25 dark:border-white/25" className="dark:bg-muted">
                   <Logo />
                 </IntegrationCard>
-                <IntegrationCard>
-                  <b3.Icon className="size-8" style={{ color: b3.color }} />
-                </IntegrationCard>
+                <IntegrationCard>{renderModelIcon(claude)}</IntegrationCard>
               </div>
               <div className="mx-auto flex w-fit justify-center gap-2">
-                <IntegrationCard>
-                  <b4.Icon className="size-8" style={{ color: b4.color }} />
-                </IntegrationCard>
-                <IntegrationCard>
-                  <b5.Icon className="size-8" style={{ color: b5.color }} />
-                </IntegrationCard>
+                <IntegrationCard>{renderModelIcon(qwen)}</IntegrationCard>
+                <IntegrationCard>{renderModelIcon(wenxin)}</IntegrationCard>
               </div>
             </ScrollReveal>
             <ScrollReveal delay={200} className="mx-auto max-w-lg space-y-6 text-center sm:text-left">
@@ -104,4 +84,6 @@ export default function Integration2Section() {
       </div>
     </section>
   );
-}
+};
+
+export default Integration2Section;

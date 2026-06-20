@@ -35,6 +35,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@inlang/paraglide-js": "^2.19.0",
     "@libsql/client": "^0.15.15",
+    "@lobehub/icons": "^5.10.0",
     "@radix-ui/react-slot": "^1.2.4",
     "@react-email/components": "^1.0.7",
     "@t3-oss/env-core": "^0.13.10",

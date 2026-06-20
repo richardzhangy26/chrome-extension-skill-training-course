@@ -1,80 +1,80 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mkfast-template",
-  "compatibility_date": "2025-09-02",
-  "compatibility_flags": [
-    // Enable Node.js API
-    // https://developers.cloudflare.com/workers/configuration/compatibility-flags/#nodejs-compatibility-flag
-    "nodejs_compat",
-    // This also enables nodejs_compat_v2 as long as compatibility date is 2024-09-23 or later.
-    // https://developers.cloudflare.com/workers/configuration/compatibility-dates/#nodejs-compatibility-flag
-    // Enable improved Node.js API with polyfills and native code
-    // https://blog.cloudflare.com/zh-cn/more-npm-packages-on-cloudflare-workers-combining-polyfills-and-native-code/
-    // "nodejs_compat_v2",
-    // Enable auto-populating process.env
-    // https://developers.cloudflare.com/workers/configuration/compatibility-flags/#enable-auto-populating-processenv
-    "nodejs_compat_populate_process_env",
-    // Allow to fetch URLs in your app
-    // https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public
-    "global_fetch_strictly_public"
-  ],
-
-  // https://developers.cloudflare.com/workers/wrangler/configuration
-  // The path to the entrypoint of your Worker that will be executed
-  "main": "./src/server.ts",
-
-  // Enables Workers Trace Events Logpush for a Worker
-  "logpush": true,
-
-  // Whether Wrangler should keep variables configured in the dashboard on deploy
-  "keep_vars": true,
-
-  // Enables automatically ingest, store, filter, and analyze logging data emitted from Cloudflare Workers
-  "observability": {
-    "logs": {
-      "enabled": true,
-      "invocation_logs": true
-    },
-    "traces": {
-      "enabled": true,
-      "persist": true,
-      "head_sampling_rate": 1
-    }
-  },
-
-  // Custom domains
-  // https://developers.cloudflare.com/workers/configuration/routing/custom-domains/
-  "routes": [
-    {
-      "pattern": "demo.tanstarter.dev",
-      "custom_domain": true
-    }
-  ],
-
-  /**
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "mkfast-template",
+	"compatibility_date": "2025-09-02",
+	"compatibility_flags": [
+		// Enable Node.js API
+		// https://developers.cloudflare.com/workers/configuration/compatibility-flags/#nodejs-compatibility-flag
+		"nodejs_compat",
+		// This also enables nodejs_compat_v2 as long as compatibility date is 2024-09-23 or later.
+		// https://developers.cloudflare.com/workers/configuration/compatibility-dates/#nodejs-compatibility-flag
+		// Enable improved Node.js API with polyfills and native code
+		// https://blog.cloudflare.com/zh-cn/more-npm-packages-on-cloudflare-workers-combining-polyfills-and-native-code/
+		// "nodejs_compat_v2",
+		// Enable auto-populating process.env
+		// https://developers.cloudflare.com/workers/configuration/compatibility-flags/#enable-auto-populating-processenv
+		"nodejs_compat_populate_process_env",
+		// Allow to fetch URLs in your app
+		// https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public
+		"global_fetch_strictly_public"
+	],
+	// https://developers.cloudflare.com/workers/wrangler/configuration
+	// The path to the entrypoint of your Worker that will be executed
+	"main": "./src/server.ts",
+	// Enables Workers Trace Events Logpush for a Worker
+	"logpush": true,
+	// Whether Wrangler should keep variables configured in the dashboard on deploy
+	"keep_vars": true,
+	// Enables automatically ingest, store, filter, and analyze logging data emitted from Cloudflare Workers
+	"observability": {
+		"logs": {
+			"enabled": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": true,
+			"persist": true,
+			"head_sampling_rate": 1
+		}
+	},
+	// Custom domains
+	// https://developers.cloudflare.com/workers/configuration/routing/custom-domains/
+	"routes": [
+		{
+			"pattern": "demo.tanstarter.dev",
+			"custom_domain": true
+		}
+	],
+	/**
    * Bindings
    * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
    * databases, object storage, AI inference, real-time communication and more.
    * https://developers.cloudflare.com/workers/runtime-apis/bindings/
    */
-  /**
+	/**
    * D1: create database with `npx wrangler d1 create mkfast-template`
    */
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "mkfast-template",
-      "database_id": "dc34f04a-3445-4b5c-bf61-c4ec2328e239",
-      "migrations_dir": "./src/db/migrations"
-    }
-  ],
-  /**
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "polymas_ability",
+			"database_id": "2d823541-c0a3-4a23-8cf3-dfab7f378509",
+			"migrations_dir": "./src/db/migrations"
+		},
+		{
+			"binding": "polymas_ability",
+			"database_name": "polymas-ability",
+			"database_id": "2d823541-c0a3-4a23-8cf3-dfab7f378509",
+			"remote": true
+		}
+	],
+	/**
    * R2: create bucket with `npx wrangler r2 bucket create mkfast-template`
    */
-  "r2_buckets": [
-    {
-      "bucket_name": "mkfast-template",
-      "binding": "BUCKET"
-    }
-  ]
+	"r2_buckets": [
+		{
+			"bucket_name": "polymas-ability",
+			"binding": "BUCKET"
+		}
+	]
 }

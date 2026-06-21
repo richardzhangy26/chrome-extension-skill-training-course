@@ -28,13 +28,9 @@ function parseEnvFile(filePath: string): Record<string, string> {
 // Sync deploy.yml env block with .env.example
 // ---------------------------------------------------------------------------
 
-const DEPLOY_YML = path.join(
-  __dirname,
-  '..',
-  '.github',
-  'workflows',
-  'deploy.yml'
-);
+// Repo-root workflow (admin_web is a standalone project inside the monorepo,
+// so the deploy workflow lives at the repository root, not under admin_web).
+const DEPLOY_YML = path.join(__dirname, '..', '..', '.github', 'workflows', 'deploy.yml');
 
 /** Prefixes of env vars that must appear in the Build step's env block */
 const BUILD_PREFIXES = ['VITE_', 'CLOUDFLARE_'];
@@ -52,9 +48,7 @@ function syncDeployYml(): void {
 
   // Collect build-time var names from .env.production
   const envVars = parseEnvFile(envPath);
-  const requiredKeys = Object.keys(envVars).filter((k) =>
-    BUILD_PREFIXES.some((p) => k.startsWith(p))
-  );
+  const requiredKeys = Object.keys(envVars).filter(k => BUILD_PREFIXES.some(p => k.startsWith(p)));
 
   // Parse deploy.yml and find the job-level env block (under `deploy:`)
   const ymlContent = fs.readFileSync(DEPLOY_YML, 'utf8');
@@ -71,9 +65,7 @@ function syncDeployYml(): void {
   }
 
   if (envLineIndex === -1) {
-    console.log(
-      '⚠️  Could not find job-level env: in deploy.yml, skipping sync\n'
-    );
+    console.log('⚠️  Could not find job-level env: in deploy.yml, skipping sync\n');
     return;
   }
 
@@ -109,16 +101,11 @@ function syncDeployYml(): void {
   }
 
   // Diff
-  const missing = requiredKeys.filter((k) => !existingKeys.has(k));
-  const extra = [...existingKeys].filter(
-    (k) =>
-      BUILD_PREFIXES.some((p) => k.startsWith(p)) && !requiredKeys.includes(k)
-  );
+  const missing = requiredKeys.filter(k => !existingKeys.has(k));
+  const extra = [...existingKeys].filter(k => BUILD_PREFIXES.some(p => k.startsWith(p)) && !requiredKeys.includes(k));
 
   console.log('🔄 Syncing deploy.yml job-level env with .env.production...');
-  console.log(
-    `   .env.production: ${requiredKeys.length} build-time vars | deploy.yml: ${existingKeys.size} vars`
-  );
+  console.log(`   .env.production: ${requiredKeys.length} build-time vars | deploy.yml: ${existingKeys.size} vars`);
 
   if (missing.length === 0 && extra.length === 0) {
     console.log('   ✅ deploy.yml is in sync\n');
@@ -126,20 +113,16 @@ function syncDeployYml(): void {
   }
 
   if (extra.length > 0) {
-    console.log(
-      `   ⚠️  In deploy.yml but not in .env.production: ${extra.join(', ')}`
-    );
+    console.log(`   ⚠️  In deploy.yml but not in .env.production: ${extra.join(', ')}`);
   }
 
   if (missing.length > 0) {
     // Append missing entries
-    const newLines = missing.map((k) => `${indent}${k}: \${{ secrets.${k} }}`);
+    const newLines = missing.map(k => `${indent}${k}: \${{ secrets.${k} }}`);
     lines.splice(lastEntryIndex + 1, 0, ...newLines);
     fs.writeFileSync(DEPLOY_YML, lines.join('\n'), 'utf8');
 
-    console.log(
-      `   ✅ Added ${missing.length} var(s) to deploy.yml: ${missing.join(', ')}`
-    );
+    console.log(`   ✅ Added ${missing.length} var(s) to deploy.yml: ${missing.join(', ')}`);
     console.log('   📝 Remember to commit the updated deploy.yml\n');
   } else {
     console.log('');
@@ -154,7 +137,7 @@ const DELAY_MS = 1500;
 const MAX_RETRIES = 3;
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function getArgValue(shortFlag: string, longFlag: string): string | undefined {
@@ -182,9 +165,7 @@ function getArgValue(shortFlag: string, longFlag: string): string | undefined {
 
 function parseGitHubRepoFromUrl(remoteUrl: string): string | undefined {
   const normalized = remoteUrl.trim().replace(/\.git$/, '');
-  const sshMatch = normalized.match(
-    /^(?:git@|ssh:\/\/git@)github\.com[:/](.+\/.+)$/i
-  );
+  const sshMatch = normalized.match(/^(?:git@|ssh:\/\/git@)github\.com[:/](.+\/.+)$/i);
   if (sshMatch) return sshMatch[1];
 
   const httpsMatch = normalized.match(/^https?:\/\/github\.com\/(.+\/.+)$/i);
@@ -209,15 +190,11 @@ function normalizeRepoIdentifier(value: string): string | undefined {
 
 function getGitRemoteUrl(remoteName: string, cwd: string): string | undefined {
   try {
-    const output = execFileSync(
-      'git',
-      ['config', '--get', `remote.${remoteName}.url`],
-      {
-        cwd,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }
-    );
+    const output = execFileSync('git', ['config', '--get', `remote.${remoteName}.url`], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
 
     return output.trim() || undefined;
   } catch {
@@ -226,16 +203,11 @@ function getGitRemoteUrl(remoteName: string, cwd: string): string | undefined {
 }
 
 function resolveRepo(cwd: string): string {
-  const repoOverride =
-    getArgValue('-R', '--repo') ?? process.env.GITHUB_REPOSITORY;
-  const normalizedOverride = repoOverride
-    ? normalizeRepoIdentifier(repoOverride)
-    : undefined;
+  const repoOverride = getArgValue('-R', '--repo') ?? process.env.GITHUB_REPOSITORY;
+  const normalizedOverride = repoOverride ? normalizeRepoIdentifier(repoOverride) : undefined;
 
   if (repoOverride && !normalizedOverride) {
-    console.error(
-      '❌ Invalid repo value. Use --repo owner/name or set GITHUB_REPOSITORY=owner/name.'
-    );
+    console.error('❌ Invalid repo value. Use --repo owner/name or set GITHUB_REPOSITORY=owner/name.');
     process.exit(1);
   }
 
@@ -256,7 +228,7 @@ function resolveRepo(cwd: string): string {
       stdio: ['ignore', 'pipe', 'ignore'],
     })
       .split(/\r?\n/)
-      .map((remote) => remote.trim())
+      .map(remote => remote.trim())
       .filter(Boolean);
 
     for (const remote of remotes) {
@@ -270,18 +242,11 @@ function resolveRepo(cwd: string): string {
     // Ignore and show the explicit guidance below.
   }
 
-  console.error(
-    '❌ Could not determine the GitHub repo automatically. Use --repo owner/name.'
-  );
+  console.error('❌ Could not determine the GitHub repo automatically. Use --repo owner/name.');
   process.exit(1);
 }
 
-async function setSecret(
-  key: string,
-  value: string,
-  cwd: string,
-  repo: string
-): Promise<boolean> {
+async function setSecret(key: string, value: string, cwd: string, repo: string): Promise<boolean> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       execFileSync('gh', ['secret', 'set', key, '--repo', repo], {
@@ -293,9 +258,7 @@ async function setSecret(
     } catch {
       if (attempt < MAX_RETRIES) {
         const waitMs = DELAY_MS * attempt;
-        console.log(
-          `   ⏳ Retry ${attempt}/${MAX_RETRIES} for ${key} (waiting ${waitMs}ms)...`
-        );
+        console.log(`   ⏳ Retry ${attempt}/${MAX_RETRIES} for ${key} (waiting ${waitMs}ms)...`);
         await sleep(waitMs);
       }
     }

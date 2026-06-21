@@ -9,7 +9,7 @@ import { getBaseUrl } from '@/lib/urls';
 import { serverEnv } from '@/env/server';
 import { websiteConfig } from '@/config/website';
 import { emailHarmony } from 'better-auth-harmony';
-import { admin, apiKey } from 'better-auth/plugins';
+import { admin, apiKey, bearer } from 'better-auth/plugins';
 
 /**
  * Better Auth Configuration
@@ -18,6 +18,9 @@ import { admin, apiKey } from 'better-auth/plugins';
  */
 export const auth = betterAuth({
   baseURL: getBaseUrl(),
+  // 浏览器扩展来源（CSRF/Origin 校验）。dev 期可临时用 'chrome-extension://*'；
+  // 生产务必锁定真实扩展 ID（见计划「前置条件 2」）。
+  trustedOrigins: ['chrome-extension://*'],
   appName: websiteConfig.metadata?.name,
   database: drizzleAdapter(getDb(), {
     provider: 'sqlite',
@@ -65,9 +68,7 @@ export const auth = betterAuth({
   },
   socialProviders: {
     // https://www.better-auth.com/docs/authentication/google
-    ...(websiteConfig.auth?.enableGoogleLogin &&
-    serverEnv.GOOGLE_CLIENT_ID &&
-    serverEnv.GOOGLE_CLIENT_SECRET
+    ...(websiteConfig.auth?.enableGoogleLogin && serverEnv.GOOGLE_CLIENT_ID && serverEnv.GOOGLE_CLIENT_SECRET
       ? {
           google: {
             clientId: serverEnv.GOOGLE_CLIENT_ID,
@@ -100,7 +101,7 @@ export const auth = betterAuth({
     // https://www.better-auth.com/docs/concepts/database#database-hooks
     user: {
       create: {
-        after: async (user) => {
+        after: async user => {
           await onCreateUser(user);
         },
       },
@@ -109,6 +110,9 @@ export const auth = betterAuth({
   plugins: [
     // https://www.better-auth.com/docs/integrations/tanstack
     tanstackStartCookies(),
+    // https://www.better-auth.com/docs/plugins/bearer
+    // 浏览器扩展用 Authorization: Bearer 鉴权（登录响应头 set-auth-token 返回 token）
+    bearer(),
     // https://www.better-auth.com/docs/plugins/admin
     // support user management, ban/unban user, manage user roles, etc.
     admin({
@@ -144,11 +148,7 @@ export const auth = betterAuth({
  */
 async function onCreateUser(user: User) {
   const newsletterConfig = websiteConfig.newsletter;
-  if (
-    !user.email ||
-    !newsletterConfig?.enable ||
-    !newsletterConfig.autoSubscribeAfterSignUp
-  ) {
+  if (!user.email || !newsletterConfig?.enable || !newsletterConfig.autoSubscribeAfterSignUp) {
     return;
   }
 

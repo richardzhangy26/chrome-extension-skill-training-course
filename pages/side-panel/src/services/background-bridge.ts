@@ -88,6 +88,28 @@ const apiRequest = async <T>(payload: ApiRequestPayload): Promise<T> => {
   return response.data;
 };
 
+interface AdminWebRequestPayload {
+  path: string;
+  method: 'GET' | 'POST';
+  body?: Record<string, unknown>;
+  auth?: boolean;
+}
+
+interface AdminWebResponse {
+  status: number;
+  ok: boolean;
+  json: unknown;
+  setAuthToken: string | null;
+}
+
+const adminWebRequest = async (payload: AdminWebRequestPayload): Promise<AdminWebResponse> => {
+  const response = await sendMessage<AdminWebResponse>('ADMIN_WEB_REQUEST', payload);
+  if (!response.success || !response.data) {
+    throw new Error(response.error || 'Admin Web request failed');
+  }
+  return response.data;
+};
+
 // 监听URL变化
 const onTabUrlChanged = (callback: (url: string) => void): (() => void) => {
   const handler = (message: { type: string; payload?: { url: string } }) => {
@@ -109,4 +131,5 @@ const API_ENDPOINTS = {
   CHAT: '/ai-tools/trainRun/chat',
 } as const;
 
-export { getCurrentTabUrl, getAuth, extractTrainTaskId, apiRequest, onTabUrlChanged, API_ENDPOINTS };
+export { getCurrentTabUrl, getAuth, extractTrainTaskId, apiRequest, onTabUrlChanged, API_ENDPOINTS, adminWebRequest };
+export type { AdminWebRequestPayload, AdminWebResponse };

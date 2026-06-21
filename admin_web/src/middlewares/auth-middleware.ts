@@ -1,4 +1,3 @@
-import { auth } from '@/auth/auth';
 import { redirect } from '@tanstack/react-router';
 import { createMiddleware } from '@tanstack/react-start';
 import { getRequestHeaders } from '@tanstack/react-start/server';
@@ -10,29 +9,28 @@ import { websiteConfig } from '@/config/website';
  * Use in route definitions via server: { middleware: [authMiddleware] }.
  * https://www.better-auth.com/docs/integrations/tanstack#middleware
  */
-export const authRouteMiddleware = createMiddleware().server(
-  async ({ next }) => {
-    if (!websiteConfig.auth?.enable) {
-      throw redirect({ to: Routes.Root });
-    }
-
-    const headers = getRequestHeaders();
-    const session = await auth.api.getSession({ headers });
-
-    if (!session?.user) {
-      throw redirect({ to: Routes.Login });
-    }
-
-    if (!session.user.emailVerified) {
-      throw redirect({
-        to: Routes.Login,
-        search: { error: 'email_not_verified' },
-      });
-    }
-
-    return await next();
+export const authRouteMiddleware = createMiddleware().server(async ({ next }) => {
+  if (!websiteConfig.auth?.enable) {
+    throw redirect({ to: Routes.Root });
   }
-);
+
+  const headers = getRequestHeaders();
+  const { auth } = await import('@/auth/auth');
+  const session = await auth.api.getSession({ headers });
+
+  if (!session?.user) {
+    throw redirect({ to: Routes.Login });
+  }
+
+  if (!session.user.emailVerified) {
+    throw redirect({
+      to: Routes.Login,
+      search: { error: 'email_not_verified' },
+    });
+  }
+
+  return await next();
+});
 
 /**
  * Auth API middleware: same as authMiddleware but returns 401 JSON for API routes.
@@ -40,19 +38,17 @@ export const authRouteMiddleware = createMiddleware().server(
  */
 export const authApiMiddleware = createMiddleware().server(async ({ next }) => {
   const headers = getRequestHeaders();
+  const { auth } = await import('@/auth/auth');
   const session = await auth.api.getSession({ headers });
 
   if (!session?.user) {
-    return Response.json(
-      { error: 'Unauthorized' },
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
-    );
+    return Response.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
   if (!session.user.emailVerified) {
     return Response.json(
       { error: 'Email not verified', code: 'email_not_verified' },
-      { status: 403, headers: { 'Content-Type': 'application/json' } }
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
     );
   }
 

@@ -54,6 +54,7 @@ const createProfileId = () => {
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  readOnly?: boolean;
 }
 
 interface LLMConfigDraft extends Omit<LLMConfig, 'temperature' | 'topK' | 'maxTokens' | 'maxHistoryRounds'> {
@@ -124,7 +125,7 @@ const createModelOption = (value: string): ModelOption => ({
   label: AVAILABLE_MODELS.find(model => model.value === value)?.label ?? value,
 });
 
-const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
+const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps) => {
   const [config, setConfig] = useState<LLMConfigDraft>(() => createConfigDraft(createDefaultConfig()));
   const [activeTab, setActiveTab] = useState<'llm' | 'system' | 'role' | 'voice'>('llm');
   const [isTesting, setIsTesting] = useState(false);
@@ -347,378 +348,389 @@ const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
 
         {/* 内容 */}
         <div className="max-h-[calc(80vh-180px)] overflow-y-auto p-5">
-          {activeTab === 'llm' && (
-            <div className="space-y-4">
-              {/* API Key */}
-              <div>
-                <label htmlFor="apiKey" className="mb-1.5 block text-sm font-medium text-slate-700">
-                  API Key <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="apiKey"
-                  type="password"
-                  value={config.apiKey}
-                  onChange={e => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                  placeholder="请输入豆包 API Key"
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                />
-                <p className="mt-1 text-xs text-slate-400">需要企业微信申请 llm-service 获取</p>
-              </div>
-
-              {/* 模型设置 */}
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <label htmlFor="model" className="block text-sm font-medium text-slate-700">
-                    模型
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void loadAvailableModels(normalizedConfig)}
-                    disabled={isLoadingModels}
-                    className="text-xs font-medium text-cyan-600 transition-colors hover:text-cyan-700 disabled:cursor-not-allowed disabled:text-slate-300">
-                    {isLoadingModels ? '刷新中...' : '刷新模型列表'}
-                  </button>
-                </div>
-                <input
-                  id="model"
-                  type="text"
-                  value={config.model}
-                  onChange={e => setConfig(prev => ({ ...prev, model: e.target.value }))}
-                  placeholder={DEFAULT_LLM_MODEL}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                />
-                <div className="mt-2">
-                  <p id="modelPresetLabel" className="mb-1 text-xs font-medium text-slate-600">
-                    从动态文本模型列表中选择
-                  </p>
-                  <ModelSelector
-                    options={availableModels}
-                    value={normalizedConfig.model}
-                    onChange={model => setConfig(prev => ({ ...prev, model }))}
-                    labelId="modelPresetLabel"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  支持输入任意模型名；下拉框会从当前 API 动态拉取，仅显示 text 模型，当前共 {availableModels.length}
-                  个候选。留空时默认使用 {DEFAULT_LLM_MODEL}。
-                </p>
-                {modelsError && <p className="mt-1 text-xs text-amber-600">{modelsError}</p>}
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <label htmlFor="temperature" className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Temperature
-                  </label>
-                  <input
-                    id="temperature"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.1"
-                    value={config.temperature}
-                    onChange={e => setConfig(prev => ({ ...prev, temperature: e.target.value }))}
-                    placeholder={String(DEFAULT_LLM_TEMPERATURE)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="topK" className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Top K
-                  </label>
-                  <input
-                    id="topK"
-                    type="number"
-                    inputMode="numeric"
-                    min="1"
-                    step="1"
-                    value={config.topK}
-                    onChange={e => setConfig(prev => ({ ...prev, topK: e.target.value }))}
-                    placeholder={String(DEFAULT_LLM_TOP_K)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="maxTokens" className="mb-1.5 block text-sm font-medium text-slate-700">
-                    Max Token
-                  </label>
-                  <input
-                    id="maxTokens"
-                    type="number"
-                    inputMode="numeric"
-                    min="1"
-                    step="1"
-                    value={config.maxTokens}
-                    onChange={e => setConfig(prev => ({ ...prev, maxTokens: e.target.value }))}
-                    placeholder={String(DEFAULT_LLM_MAX_TOKENS)}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-slate-400">
-                Temperature 控制回答随机性，越低越稳定，越高越发散；Top K 控制每次采样时参与候选的 token
-                数量，越小越保守，越大越灵活；Max Token
-                控制本次最多生成多少内容，越大回答越长。数值留空或非法时会自动恢复默认值：temperature{' '}
-                {DEFAULT_LLM_TEMPERATURE}、topK {DEFAULT_LLM_TOP_K}、maxToken {DEFAULT_LLM_MAX_TOKENS}。
-              </p>
-
-              {/* 最大历史轮数 */}
-              <div>
-                <label htmlFor="maxHistoryRounds" className="mb-1.5 block text-sm font-medium text-slate-700">
-                  最大历史轮数
-                </label>
-                <input
-                  id="maxHistoryRounds"
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  step="1"
-                  value={config.maxHistoryRounds}
-                  onChange={e => setConfig(prev => ({ ...prev, maxHistoryRounds: e.target.value }))}
-                  placeholder={String(DEFAULT_LLM_MAX_HISTORY_ROUNDS)}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                />
-                <p className="mt-1 text-xs text-slate-400">
-                  发送给大模型的最大对话历史轮数，留空或非法时默认 {DEFAULT_LLM_MAX_HISTORY_ROUNDS} 轮。
-                </p>
-              </div>
-
-              {/* API URL */}
-              <div>
-                <label htmlFor="apiUrl" className="mb-1.5 block text-sm font-medium text-slate-700">
-                  API URL
-                </label>
-                <input
-                  id="apiUrl"
-                  type="text"
-                  value={config.apiUrl}
-                  onChange={e => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
-                  placeholder="API 地址"
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-xs transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                />
-              </div>
-
-              {/* Service Code */}
-              <div>
-                <label htmlFor="serviceCode" className="mb-1.5 block text-sm font-medium text-slate-700">
-                  Service Code
-                </label>
-                <input
-                  id="serviceCode"
-                  type="text"
-                  value={config.serviceCode}
-                  onChange={e => setConfig(prev => ({ ...prev, serviceCode: e.target.value }))}
-                  placeholder="服务代码"
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                />
-              </div>
-
-              {/* 测试结果 */}
-              {testResult && (
-                <div
-                  className={`rounded-lg p-3 text-sm ${
-                    testResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-                  }`}>
-                  {testResult.message}
-                </div>
-              )}
-
-              {requiresRetest && (
-                <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
-                  当前连接参数已变更，请先测试连接通过后再保存配置。
-                </div>
-              )}
+          {readOnly && (
+            <div className="mb-3 rounded-lg bg-cyan-50 p-3 text-xs text-cyan-700">
+              已登录：配置由 Admin Web 统一管理，请前往网页「设置 → 插件配置」修改。
             </div>
           )}
-
-          {activeTab === 'system' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800">系统提示词设置</h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  默认提示词来源于 auto_script_train.py，可切换为自定义提示词。
-                </p>
-                <div className="mt-3 space-y-2">
-                  <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
-                    <input
-                      type="radio"
-                      name="systemPromptMode"
-                      value="default"
-                      checked={config.systemPromptMode === 'default'}
-                      onChange={() =>
-                        setConfig(prev => ({
-                          ...prev,
-                          systemPromptMode: 'default',
-                        }))
-                      }
-                    />
-                    <span>使用默认提示词（auto_script_train.py）</span>
+          <fieldset disabled={readOnly} className="m-0 border-0 p-0">
+            {activeTab === 'llm' && (
+              <div className="space-y-4">
+                {/* API Key */}
+                <div>
+                  <label htmlFor="apiKey" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    API Key <span className="text-red-500">*</span>
                   </label>
-                  <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
-                    <input
-                      type="radio"
-                      name="systemPromptMode"
-                      value="custom"
-                      checked={config.systemPromptMode === 'custom'}
-                      onChange={() =>
-                        setConfig(prev => ({
-                          ...prev,
-                          systemPromptMode: 'custom',
-                          systemPrompt: prev.systemPrompt.trim() ? prev.systemPrompt : DEFAULT_SYSTEM_PROMPT,
-                        }))
-                      }
-                    />
-                    <span>自定义提示词</span>
-                  </label>
+                  <input
+                    id="apiKey"
+                    type="password"
+                    value={config.apiKey}
+                    onChange={e => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                    placeholder="请输入豆包 API Key"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  />
+                  <p className="mt-1 text-xs text-slate-400">需要企业微信申请 llm-service 获取</p>
                 </div>
 
-                <div className="mt-3">
-                  <label htmlFor="systemPrompt" className="mb-1.5 block text-xs font-medium text-slate-600">
-                    提示词内容
+                {/* 模型设置 */}
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label htmlFor="model" className="block text-sm font-medium text-slate-700">
+                      模型
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void loadAvailableModels(normalizedConfig)}
+                      disabled={isLoadingModels}
+                      className="text-xs font-medium text-cyan-600 transition-colors hover:text-cyan-700 disabled:cursor-not-allowed disabled:text-slate-300">
+                      {isLoadingModels ? '刷新中...' : '刷新模型列表'}
+                    </button>
+                  </div>
+                  <input
+                    id="model"
+                    type="text"
+                    value={config.model}
+                    onChange={e => setConfig(prev => ({ ...prev, model: e.target.value }))}
+                    placeholder={DEFAULT_LLM_MODEL}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  />
+                  <div className="mt-2">
+                    <p id="modelPresetLabel" className="mb-1 text-xs font-medium text-slate-600">
+                      从动态文本模型列表中选择
+                    </p>
+                    <ModelSelector
+                      options={availableModels}
+                      value={normalizedConfig.model}
+                      onChange={model => setConfig(prev => ({ ...prev, model }))}
+                      labelId="modelPresetLabel"
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    支持输入任意模型名；下拉框会从当前 API 动态拉取，仅显示 text 模型，当前共 {availableModels.length}
+                    个候选。留空时默认使用 {DEFAULT_LLM_MODEL}。
+                  </p>
+                  {modelsError && <p className="mt-1 text-xs text-amber-600">{modelsError}</p>}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div>
+                    <label htmlFor="temperature" className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Temperature
+                    </label>
+                    <input
+                      id="temperature"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.1"
+                      value={config.temperature}
+                      onChange={e => setConfig(prev => ({ ...prev, temperature: e.target.value }))}
+                      placeholder={String(DEFAULT_LLM_TEMPERATURE)}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="topK" className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Top K
+                    </label>
+                    <input
+                      id="topK"
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
+                      value={config.topK}
+                      onChange={e => setConfig(prev => ({ ...prev, topK: e.target.value }))}
+                      placeholder={String(DEFAULT_LLM_TOP_K)}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="maxTokens" className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Max Token
+                    </label>
+                    <input
+                      id="maxTokens"
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
+                      value={config.maxTokens}
+                      onChange={e => setConfig(prev => ({ ...prev, maxTokens: e.target.value }))}
+                      placeholder={String(DEFAULT_LLM_MAX_TOKENS)}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Temperature 控制回答随机性，越低越稳定，越高越发散；Top K 控制每次采样时参与候选的 token
+                  数量，越小越保守，越大越灵活；Max Token
+                  控制本次最多生成多少内容，越大回答越长。数值留空或非法时会自动恢复默认值：temperature{' '}
+                  {DEFAULT_LLM_TEMPERATURE}、topK {DEFAULT_LLM_TOP_K}、maxToken {DEFAULT_LLM_MAX_TOKENS}。
+                </p>
+
+                {/* 最大历史轮数 */}
+                <div>
+                  <label htmlFor="maxHistoryRounds" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    最大历史轮数
                   </label>
-                  <textarea
-                    id="systemPrompt"
-                    value={systemPromptValue}
-                    onChange={e => setConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
-                    disabled={config.systemPromptMode !== 'custom'}
-                    placeholder="输入自定义系统提示词"
-                    className="min-h-[140px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                  <input
+                    id="maxHistoryRounds"
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    step="1"
+                    value={config.maxHistoryRounds}
+                    onChange={e => setConfig(prev => ({ ...prev, maxHistoryRounds: e.target.value }))}
+                    placeholder={String(DEFAULT_LLM_MAX_HISTORY_ROUNDS)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
                   />
                   <p className="mt-1 text-xs text-slate-400">
-                    使用自定义提示词时，系统会保留角色档位配置作为补充提示。
+                    发送给大模型的最大对话历史轮数，留空或非法时默认 {DEFAULT_LLM_MAX_HISTORY_ROUNDS} 轮。
                   </p>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {activeTab === 'role' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800">用户角色提示词配置</h3>
-                <p className="mt-1 text-xs text-slate-500">你可以自由新增、编辑学生档位，并选择默认使用的档位。</p>
-                <div className="mt-4 flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={handleAddProfile}
-                    className="rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-cyan-600">
-                    添加档位
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetProfiles}
-                    className="text-xs font-medium text-cyan-600 hover:text-cyan-700">
-                    恢复默认档位
-                  </button>
+                {/* API URL */}
+                <div>
+                  <label htmlFor="apiUrl" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    API URL
+                  </label>
+                  <input
+                    id="apiUrl"
+                    type="text"
+                    value={config.apiUrl}
+                    onChange={e => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
+                    placeholder="API 地址"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-xs transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  />
                 </div>
-                <div className="mt-3 space-y-3">
-                  {studentProfileEntries.map(profile => {
-                    const isSelected = config.studentProfileId === profile.id;
-                    const labelId = `studentProfile-label-${profile.id}`;
-                    const descriptionId = `studentProfile-description-${profile.id}`;
-                    const styleId = `studentProfile-style-${profile.id}`;
-                    const fallbackId = `studentProfile-fallback-${profile.id}`;
-                    return (
-                      <div
-                        key={profile.id}
-                        className={`rounded-lg border p-3 text-sm transition ${
-                          isSelected
-                            ? 'border-cyan-400 bg-cyan-50/60'
-                            : 'border-slate-200 bg-white hover:border-cyan-200'
-                        }`}>
-                        <div className="flex items-center justify-between">
-                          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
-                            <input
-                              type="radio"
-                              name="studentProfile"
-                              value={profile.id}
-                              checked={isSelected}
-                              onChange={() => setConfig(prev => ({ ...prev, studentProfileId: profile.id }))}
-                            />
-                            <span>设为当前档位</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteProfile(profile.id)}
-                            disabled={studentProfileEntries.length <= 1}
-                            className="text-xs font-medium text-rose-500 hover:text-rose-600 disabled:cursor-not-allowed disabled:text-slate-300">
-                            删除
-                          </button>
-                        </div>
-                        <div className="mt-3 space-y-2">
-                          <div>
-                            <label htmlFor={labelId} className="mb-1 block text-xs font-medium text-slate-600">
-                              档位名称
-                            </label>
-                            <input
-                              id={labelId}
-                              type="text"
-                              value={profile.label}
-                              onChange={event => handleProfileChange(profile.id, { label: event.target.value })}
-                              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor={descriptionId} className="mb-1 block text-xs font-medium text-slate-600">
-                              角色特征
-                            </label>
-                            <textarea
-                              id={descriptionId}
-                              value={profile.description}
-                              onChange={event => handleProfileChange(profile.id, { description: event.target.value })}
-                              className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor={styleId} className="mb-1 block text-xs font-medium text-slate-600">
-                              表达风格
-                            </label>
-                            <textarea
-                              id={styleId}
-                              value={profile.style}
-                              onChange={event => handleProfileChange(profile.id, { style: event.target.value })}
-                              className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor={fallbackId} className="mb-1 block text-xs font-medium text-slate-600">
-                              补充提示（可选）
-                            </label>
-                            <input
-                              id={fallbackId}
-                              type="text"
-                              value={profile.fallbackHint}
-                              onChange={event => handleProfileChange(profile.id, { fallbackHint: event.target.value })}
-                              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+
+                {/* Service Code */}
+                <div>
+                  <label htmlFor="serviceCode" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Service Code
+                  </label>
+                  <input
+                    id="serviceCode"
+                    type="text"
+                    value={config.serviceCode}
+                    onChange={e => setConfig(prev => ({ ...prev, serviceCode: e.target.value }))}
+                    placeholder="服务代码"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
+
+                {/* 测试结果 */}
+                {testResult && (
+                  <div
+                    className={`rounded-lg p-3 text-sm ${
+                      testResult.success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                    }`}>
+                    {testResult.message}
+                  </div>
+                )}
+
+                {requiresRetest && (
+                  <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
+                    当前连接参数已变更，请先测试连接通过后再保存配置。
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'system' && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-800">系统提示词设置</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    默认提示词来源于 auto_script_train.py，可切换为自定义提示词。
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        name="systemPromptMode"
+                        value="default"
+                        checked={config.systemPromptMode === 'default'}
+                        onChange={() =>
+                          setConfig(prev => ({
+                            ...prev,
+                            systemPromptMode: 'default',
+                          }))
+                        }
+                      />
+                      <span>使用默认提示词（auto_script_train.py）</span>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        name="systemPromptMode"
+                        value="custom"
+                        checked={config.systemPromptMode === 'custom'}
+                        onChange={() =>
+                          setConfig(prev => ({
+                            ...prev,
+                            systemPromptMode: 'custom',
+                            systemPrompt: prev.systemPrompt.trim() ? prev.systemPrompt : DEFAULT_SYSTEM_PROMPT,
+                          }))
+                        }
+                      />
+                      <span>自定义提示词</span>
+                    </label>
+                  </div>
+
+                  <div className="mt-3">
+                    <label htmlFor="systemPrompt" className="mb-1.5 block text-xs font-medium text-slate-600">
+                      提示词内容
+                    </label>
+                    <textarea
+                      id="systemPrompt"
+                      value={systemPromptValue}
+                      onChange={e => setConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
+                      disabled={config.systemPromptMode !== 'custom'}
+                      placeholder="输入自定义系统提示词"
+                      className="min-h-[140px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    />
+                    <p className="mt-1 text-xs text-slate-400">
+                      使用自定义提示词时，系统会保留角色档位配置作为补充提示。
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeTab === 'voice' && <VoiceModeSettings config={config} setConfig={setConfig} />}
+            {activeTab === 'role' && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-800">用户角色提示词配置</h3>
+                  <p className="mt-1 text-xs text-slate-500">你可以自由新增、编辑学生档位，并选择默认使用的档位。</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={handleAddProfile}
+                      className="rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-cyan-600">
+                      添加档位
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetProfiles}
+                      className="text-xs font-medium text-cyan-600 hover:text-cyan-700">
+                      恢复默认档位
+                    </button>
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    {studentProfileEntries.map(profile => {
+                      const isSelected = config.studentProfileId === profile.id;
+                      const labelId = `studentProfile-label-${profile.id}`;
+                      const descriptionId = `studentProfile-description-${profile.id}`;
+                      const styleId = `studentProfile-style-${profile.id}`;
+                      const fallbackId = `studentProfile-fallback-${profile.id}`;
+                      return (
+                        <div
+                          key={profile.id}
+                          className={`rounded-lg border p-3 text-sm transition ${
+                            isSelected
+                              ? 'border-cyan-400 bg-cyan-50/60'
+                              : 'border-slate-200 bg-white hover:border-cyan-200'
+                          }`}>
+                          <div className="flex items-center justify-between">
+                            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                              <input
+                                type="radio"
+                                name="studentProfile"
+                                value={profile.id}
+                                checked={isSelected}
+                                onChange={() => setConfig(prev => ({ ...prev, studentProfileId: profile.id }))}
+                              />
+                              <span>设为当前档位</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProfile(profile.id)}
+                              disabled={studentProfileEntries.length <= 1}
+                              className="text-xs font-medium text-rose-500 hover:text-rose-600 disabled:cursor-not-allowed disabled:text-slate-300">
+                              删除
+                            </button>
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            <div>
+                              <label htmlFor={labelId} className="mb-1 block text-xs font-medium text-slate-600">
+                                档位名称
+                              </label>
+                              <input
+                                id={labelId}
+                                type="text"
+                                value={profile.label}
+                                onChange={event => handleProfileChange(profile.id, { label: event.target.value })}
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={descriptionId} className="mb-1 block text-xs font-medium text-slate-600">
+                                角色特征
+                              </label>
+                              <textarea
+                                id={descriptionId}
+                                value={profile.description}
+                                onChange={event => handleProfileChange(profile.id, { description: event.target.value })}
+                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={styleId} className="mb-1 block text-xs font-medium text-slate-600">
+                                表达风格
+                              </label>
+                              <textarea
+                                id={styleId}
+                                value={profile.style}
+                                onChange={event => handleProfileChange(profile.id, { style: event.target.value })}
+                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={fallbackId} className="mb-1 block text-xs font-medium text-slate-600">
+                                补充提示（可选）
+                              </label>
+                              <input
+                                id={fallbackId}
+                                type="text"
+                                value={profile.fallbackHint}
+                                onChange={event =>
+                                  handleProfileChange(profile.id, { fallbackHint: event.target.value })
+                                }
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'voice' && <VoiceModeSettings config={config} setConfig={setConfig} />}
+          </fieldset>
         </div>
 
         {/* 底部按钮 */}
-        <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-          <button
-            onClick={handleTest}
-            disabled={isTesting || !config.apiKey.trim()}
-            className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
-            {isTesting ? '测试中...' : '测试连接'}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !canSave}
-            className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
-            {isSaving ? '保存中...' : '保存配置'}
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+            <button
+              onClick={handleTest}
+              disabled={isTesting || !config.apiKey.trim()}
+              className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
+              {isTesting ? '测试中...' : '测试连接'}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving || !canSave}
+              className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
+              {isSaving ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

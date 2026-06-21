@@ -1,8 +1,6 @@
-import { getDb } from '@/db';
 import { userFiles } from '@/db/app.schema';
 import { getBaseUrl } from '@/lib/urls';
 import { authApiMiddleware } from '@/middlewares/auth-middleware';
-import { deleteFile, uploadFile } from '@/storage';
 import { StorageError, UploadError } from '@/storage/types';
 import { isPublicFolder } from '@/storage/utils';
 import { createServerFn } from '@tanstack/react-start';
@@ -19,15 +17,13 @@ export const listUserFiles = createServerFn({ method: 'GET' })
   .middleware([authApiMiddleware])
   .handler(async ({ data, context }) => {
     const { userId } = context;
+    const { getDb } = await import('@/db');
     const pageIndex = data.pageIndex;
     const pageSize = data.pageSize;
     const db = getDb();
     const where = eq(userFiles.userId, userId);
 
-    const [totalRow] = await db
-      .select({ count: count() })
-      .from(userFiles)
-      .where(where);
+    const [totalRow] = await db.select({ count: count() }).from(userFiles).where(where);
     const total = totalRow?.count ?? 0;
 
     const items = await db
@@ -48,6 +44,7 @@ export const deleteUserFile = createServerFn({ method: 'POST' })
   .middleware([authApiMiddleware])
   .handler(async ({ data, context }) => {
     const { userId } = context;
+    const [{ getDb }, { deleteFile }] = await Promise.all([import('@/db'), import('@/storage')]);
     const db = getDb();
     const [row] = await db
       .select()
@@ -65,7 +62,7 @@ export const deleteUserFile = createServerFn({ method: 'POST' })
 
 const uploadSchema = z
   .custom<FormData>((v): v is FormData => v instanceof FormData)
-  .transform((fd) => {
+  .transform(fd => {
     const file = fd.get('file');
     if (!file || !(file instanceof File)) {
       throw new Error('File not provided');
@@ -73,13 +70,9 @@ const uploadSchema = z
     const folderRaw = fd.get('folder');
     const folder = typeof folderRaw === 'string' ? folderRaw : undefined;
     const isPublicRaw = fd.get('isPublic');
-    const isPublic =
-      typeof isPublicRaw === 'string' ? isPublicRaw === 'true' : undefined;
+    const isPublic = typeof isPublicRaw === 'string' ? isPublicRaw === 'true' : undefined;
     const descriptionRaw = fd.get('description');
-    const description =
-      typeof descriptionRaw === 'string' && descriptionRaw !== ''
-        ? descriptionRaw
-        : undefined;
+    const description = typeof descriptionRaw === 'string' && descriptionRaw !== '' ? descriptionRaw : undefined;
     return {
       file,
       folder,
@@ -94,6 +87,7 @@ export const uploadUserFile = createServerFn({ method: 'POST' })
   .handler(async ({ data, context }) => {
     const { userId } = context;
     try {
+      const [{ getDb }, { uploadFile }] = await Promise.all([import('@/db'), import('@/storage')]);
       const buffer = Buffer.from(await data.file.arrayBuffer());
       const requestOrigin = getBaseUrl();
       const publicFolder = isPublicFolder(data.folder);

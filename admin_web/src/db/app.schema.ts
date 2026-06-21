@@ -8,8 +8,8 @@ import { integer, sqliteTable, text, index } from 'drizzle-orm/sqlite-core';
 import { user } from './auth.schema';
 import type { PaymentScene, PaymentStatus, PaymentType, PlanInterval } from '@/payment/types';
 
-/** 
- * Payment: subscription and one-time 
+/**
+ * Payment: subscription and one-time
  */
 export const payment = sqliteTable(
   'payment',
@@ -36,7 +36,7 @@ export const payment = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
-  (table) => [
+  table => [
     index('payment_user_id_idx').on(table.userId),
     index('payment_customer_id_idx').on(table.customerId),
     index('payment_subscription_id_idx').on(table.subscriptionId),
@@ -44,7 +44,7 @@ export const payment = sqliteTable(
     index('payment_invoice_id_idx').on(table.invoiceId),
     index('payment_paid_idx').on(table.paid),
     index('payment_user_paid_idx').on(table.userId, table.paid),
-  ]
+  ],
 );
 
 export const paymentRelations = relations(payment, ({ one }) => ({
@@ -74,15 +74,37 @@ export const userFiles = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
-  (table) => [
-    index('user_files_user_id_idx').on(table.userId),
-    index('user_files_r2_key_idx').on(table.r2Key),
-  ]
+  table => [index('user_files_user_id_idx').on(table.userId), index('user_files_r2_key_idx').on(table.r2Key)],
 );
 
 export const userFilesRelations = relations(userFiles, ({ one }) => ({
   user: one(user, {
     fields: [userFiles.userId],
+    references: [user.id],
+  }),
+}));
+
+/**
+ * 扩展 LLM 配置：每个用户一份，整份配置以 JSON 字符串存入 config 列。
+ */
+export const userLlmConfig = sqliteTable(
+  'user_llm_config',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .unique()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    config: text('config').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  table => [index('user_llm_config_user_id_idx').on(table.userId)],
+);
+
+export const userLlmConfigRelations = relations(userLlmConfig, ({ one }) => ({
+  user: one(user, {
+    fields: [userLlmConfig.userId],
     references: [user.id],
   }),
 }));

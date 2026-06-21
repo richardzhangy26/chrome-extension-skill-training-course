@@ -29,12 +29,20 @@ pages/side-panel/src/
 | LLM Requests | `src/services/llm-service.ts` | Configuration and formatting of LLM API prompts. Dialogue simulation is generated **stage-by-stage** (`generateSimulationDialogueStage`), not in one shot, to avoid single-call token-limit truncation; reports progress via an `onProgress` callback and retries once in a leaner mode on a detected `finishReason` truncation |
 | Settings | `src/components/SettingsModal.tsx`, `VoiceModeSettings.tsx` | Configuring prompts, endpoints, student personas, and voice-mode-specific options (TTS model/voice/speed/format) |
 | Dialogue Simulation UI | `src/components/SimulationConfigModal.tsx` | Drives staged generation, surfaces per-stage progress, and cleans up generation state via try/finally on error |
+| Admin Web Login | `src/hooks/useAdminWebAuth.ts`, `src/components/AuthPanel.tsx` | In-extension email/password login/register against the Admin Web's Better Auth. Hook owns login state (via `authSessionStorage`), pulls LLM config down on login, and seeds the server from local on first login |
+| Admin Web Service | `src/services/admin-web-service.ts` | `signUp/signIn/signOut/getSession/fetchLlmConfig/pushLlmConfig` over the background `ADMIN_WEB_REQUEST` channel; persists the bearer token (`set-auth-token`) into `authSessionStorage`; clears session on 401 |
 
 ## CONVENTIONS
 - Separates presentation (React components) from logic (Hooks) strictly.
 - Communicates with the background worker via `background-bridge.ts`.
 - Subscribes to shared Chrome storage via `@extension/storage` hooks to read API Keys and configurations.
 - Voice-mode services talk to Polymas directly (`fetch`/`WebSocket`) rather than through `background-bridge`'s `apiRequest`, since that path JSON-parses responses and would corrupt binary audio.
+
+## ADMIN WEB LOGIN & CONFIG SYNC (v1)
+- Two independent backends coexist: **Polymas** (training content, `ai-poly` cookie, unchanged) and the **Admin Web** (own Better Auth, for user login + LLM config).
+- Auth uses Better Auth's **bearer** token: `admin-web-service.signIn` reads the `set-auth-token` response header and stores it in `authSessionStorage`; subsequent calls go through background `ADMIN_WEB_REQUEST` with `Authorization: Bearer`. This channel is separate from polymas's `API_REQUEST` (different base URL, no cookie auth).
+- **Config sovereignty**: when logged in, the Admin Web is the source of truth. `useAdminWebAuth` pulls config into `llmConfigStorage` on login; `SettingsModal`/`SimulationConfigModal` go read-only (a `readOnly` prop wraps their body in `<fieldset disabled>` + hides save). Logged out → local editing as before. Config flow is one-way (server → extension); first login with no server config seeds the server from local.
+- Email verification is required by the Admin Web; the verification link opens in the browser (not the extension), then the user logs in from the panel.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 - **NO generic components**: Do not build generic buttons or loaders here; import them from `@extension/ui`.

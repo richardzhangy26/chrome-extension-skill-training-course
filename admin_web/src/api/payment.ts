@@ -1,4 +1,3 @@
-import { getDb } from '@/db';
 import { payment } from '@/db/app.schema';
 import { user } from '@/db/auth.schema';
 import { getLocale } from '@/lib/locale';
@@ -6,13 +5,7 @@ import { findPlanByPriceId, getAllPricePlans } from '@/lib/price-plan';
 import { Routes } from '@/lib/routes';
 import { getCanonicalUrl } from '@/lib/urls';
 import { authApiMiddleware } from '@/middlewares/auth-middleware';
-import { createCheckout, createCustomerPortal } from '@/payment';
-import type {
-  PaymentStatus,
-  PlanInterval,
-  PricePlan,
-  Subscription,
-} from '@/payment/types';
+import type { PaymentStatus, PlanInterval, PricePlan, Subscription } from '@/payment/types';
 import { PaymentScenes, PaymentTypes } from '@/payment/types';
 import { websiteConfig } from '@/config/website';
 import { createServerFn } from '@tanstack/react-start';
@@ -32,6 +25,7 @@ export const createCheckoutSession = createServerFn({ method: 'POST' })
   .middleware([authApiMiddleware])
   .handler(async ({ data, context }) => {
     const { userId } = context;
+    const [{ getDb }, { createCheckout }] = await Promise.all([import('@/db'), import('@/payment')]);
     const db = getDb();
     const [userRow] = await db
       .select({ email: user.email, name: user.name })
@@ -52,9 +46,7 @@ export const createCheckoutSession = createServerFn({ method: 'POST' })
     const success = isCreem
       ? (successUrl ?? billingUrl)
       : (successUrl ??
-        getCanonicalUrl(
-          `${Routes.Payment}?session_id={CHECKOUT_SESSION_ID}&callback=${Routes.SettingsBilling}`
-        ));
+        getCanonicalUrl(`${Routes.Payment}?session_id={CHECKOUT_SESSION_ID}&callback=${Routes.SettingsBilling}`));
     const checkoutMetadata = {
       ...metadata,
       userId,
@@ -83,12 +75,9 @@ export const createCustomerPortalSession = createServerFn({ method: 'POST' })
   .middleware([authApiMiddleware])
   .handler(async ({ data, context }) => {
     const { userId } = context;
+    const [{ getDb }, { createCustomerPortal }] = await Promise.all([import('@/db'), import('@/payment')]);
     const db = getDb();
-    const [row] = await db
-      .select({ customerId: user.customerId })
-      .from(user)
-      .where(eq(user.id, userId))
-      .limit(1);
+    const [row] = await db.select({ customerId: user.customerId }).from(user).where(eq(user.id, userId)).limit(1);
     if (!row?.customerId) {
       throw new Error('No customer found for user');
     }
@@ -106,10 +95,11 @@ export const getCurrentPlan = createServerFn({ method: 'GET' })
   .middleware([authApiMiddleware])
   .handler(async ({ context }) => {
     const { userId } = context;
+    const { getDb } = await import('@/db');
     const db = getDb();
     const plans = getAllPricePlans();
-    const freePlan = plans.find((p) => p.isFree && !p.disabled) ?? null;
-    const lifetimePlanIds = plans.filter((p) => p.isLifetime).map((p) => p.id);
+    const freePlan = plans.find(p => p.isFree && !p.disabled) ?? null;
+    const lifetimePlanIds = plans.filter(p => p.isLifetime).map(p => p.id);
 
     const payments = await db
       .select({
@@ -136,14 +126,14 @@ export const getCurrentPlan = createServerFn({ method: 'GET' })
             and(
               eq(payment.type, PaymentTypes.ONE_TIME),
               eq(payment.scene, PaymentScenes.LIFETIME),
-              eq(payment.status, 'completed')
+              eq(payment.status, 'completed'),
             ),
             and(
               eq(payment.type, PaymentTypes.SUBSCRIPTION),
-              or(eq(payment.status, 'active'), eq(payment.status, 'trialing'))
-            )
-          )
-        )
+              or(eq(payment.status, 'active'), eq(payment.status, 'trialing')),
+            ),
+          ),
+        ),
       )
       .orderBy(desc(payment.createdAt));
 
@@ -189,10 +179,7 @@ export const getCurrentPlan = createServerFn({ method: 'GET' })
       return { currentPlan: userLifetimePlan, subscription: null };
     }
     if (activeSubscription) {
-      const subscriptionPlan =
-        plans.find((p) =>
-          p.prices.some((pr) => pr.priceId === activeSubscription!.priceId)
-        ) ?? null;
+      const subscriptionPlan = plans.find(p => p.prices.some(pr => pr.priceId === activeSubscription!.priceId)) ?? null;
       return {
         currentPlan: subscriptionPlan as PricePlan | null,
         subscription: activeSubscription,
@@ -211,16 +198,12 @@ export const checkPaymentCompletion = createServerFn({ method: 'GET' })
   .inputValidator(checkCompletionSchema)
   .middleware([authApiMiddleware])
   .handler(async ({ data, context }) => {
+    const { getDb } = await import('@/db');
     const db = getDb();
     const [record] = await db
       .select()
       .from(payment)
-      .where(
-        and(
-          eq(payment.sessionId, data.sessionId),
-          eq(payment.userId, context.userId)
-        )
-      )
+      .where(and(eq(payment.sessionId, data.sessionId), eq(payment.userId, context.userId)))
       .limit(1);
     return { isPaid: !!record?.paid };
   });

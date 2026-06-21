@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { handleWebhookEvent, isPaymentEnabled } from '@/payment';
 
 /**
  * Creem webhook endpoint
@@ -12,6 +11,7 @@ export const Route = createFileRoute('/api/webhooks/creem')({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const { handleWebhookEvent, isPaymentEnabled } = await import('@/payment');
         if (!isPaymentEnabled()) {
           return Response.json({ received: true }, { status: 200 });
         }
@@ -19,10 +19,7 @@ export const Route = createFileRoute('/api/webhooks/creem')({
         const signature = request.headers.get('creem-signature') ?? '';
         if (!payload || !signature) {
           console.warn('Creem webhook: missing payload or signature');
-          return Response.json(
-            { error: 'Missing payload or signature' },
-            { status: 400 }
-          );
+          return Response.json({ error: 'Missing payload or signature' }, { status: 400 });
         }
         try {
           await handleWebhookEvent(payload, signature);
@@ -35,7 +32,7 @@ export const Route = createFileRoute('/api/webhooks/creem')({
               error: 'Webhook processing failed',
               received: true,
             },
-            { status: 200 }
+            { status: 200 },
           );
         }
       },

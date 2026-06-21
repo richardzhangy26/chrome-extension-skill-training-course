@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { getRequestHeaders } from '@tanstack/react-start/server';
-import { auth } from '@/auth/auth';
 import { readUserLlmConfig, writeUserLlmConfig } from '@/api/extension-config';
 import { llmConfigSchema } from '@/lib/llm-config-schema';
 
@@ -12,6 +11,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 const requireUserId = async (): Promise<string | null> => {
   const headers = getRequestHeaders();
+  const { auth } = await import('@/auth/auth');
   const session = await auth.api.getSession({ headers });
   if (!session?.user || !session.user.emailVerified) {
     return null;

@@ -1,24 +1,11 @@
 import { createServerFn } from '@tanstack/react-start';
 import type { User } from '@/db/types';
 import { adminApiMiddleware } from '@/middlewares/admin-middleware';
-import { getDb } from '@/db';
 import { user } from '@/db/auth.schema';
-import {
-  and,
-  asc,
-  count as countFn,
-  desc,
-  eq,
-  isNull,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, asc, count as countFn, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
-const SORT_FIELD_MAP: Record<
-  string,
-  typeof user.name | typeof user.email | typeof user.createdAt
-> = {
+const SORT_FIELD_MAP: Record<string, typeof user.name | typeof user.email | typeof user.createdAt> = {
   name: user.name,
   email: user.email,
   createdAt: user.createdAt,
@@ -45,6 +32,7 @@ export const listUsers = createServerFn({ method: 'GET' })
   .inputValidator(listUsersInputSchema)
   .middleware([adminApiMiddleware])
   .handler(async ({ data }) => {
+    const { getDb } = await import('@/db');
     const db = getDb();
     const { pageIndex, pageSize, search, sortDesc, role, status } = data;
     const offset = pageIndex * pageSize;
@@ -52,16 +40,10 @@ export const listUsers = createServerFn({ method: 'GET' })
 
     const conditions = [];
     if (search.trim()) {
-      const escaped = search
-        .replace(/\\/g, '\\\\')
-        .replace(/%/g, '\\%')
-        .replace(/_/g, '\\_');
+      const escaped = search.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
       const pattern = `%${escaped}%`;
       conditions.push(
-        or(
-          sql`lower(${user.name}) like lower(${pattern})`,
-          sql`lower(${user.email}) like lower(${pattern})`
-        )!
+        or(sql`lower(${user.name}) like lower(${pattern})`, sql`lower(${user.email}) like lower(${pattern})`)!,
       );
     }
     if (role?.trim()) {
@@ -88,7 +70,7 @@ export const listUsers = createServerFn({ method: 'GET' })
     const [items, [{ count }]] = await Promise.all([selectQuery, countQuery]);
 
     return {
-      items: items.map((row) => ({
+      items: items.map(row => ({
         id: row.id,
         name: row.name,
         email: row.email,

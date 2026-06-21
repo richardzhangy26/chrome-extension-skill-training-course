@@ -1,4 +1,3 @@
-import { getDb } from '@/db';
 import { userLlmConfig } from '@/db/app.schema';
 import { llmConfigSchema, type LlmConfigInput } from '@/lib/llm-config-schema';
 import { authApiMiddleware } from '@/middlewares/auth-middleware';
@@ -7,6 +6,7 @@ import { eq } from 'drizzle-orm';
 
 /** 读取某用户的 LLM 配置；无记录返回 null。 */
 export async function readUserLlmConfig(userId: string): Promise<LlmConfigInput | null> {
+  const { getDb } = await import('@/db');
   const db = getDb();
   const [row] = await db
     .select({ config: userLlmConfig.config })
@@ -23,6 +23,7 @@ export async function readUserLlmConfig(userId: string): Promise<LlmConfigInput 
 
 /** upsert 某用户的 LLM 配置（按 userId 唯一）。 */
 export async function writeUserLlmConfig(userId: string, config: LlmConfigInput): Promise<void> {
+  const { getDb } = await import('@/db');
   const db = getDb();
   const now = new Date();
   const serialized = JSON.stringify(config);

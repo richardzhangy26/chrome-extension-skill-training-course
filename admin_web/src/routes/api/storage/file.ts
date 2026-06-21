@@ -1,10 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { getRequestHeaders } from '@tanstack/react-start/server';
 import { eq } from 'drizzle-orm';
-import { auth } from '@/auth/auth';
-import { getDb } from '@/db';
 import { userFiles } from '@/db/app.schema';
-import { getFile } from '@/storage';
 import { isPublicFolder } from '@/storage/utils';
 import { ConfigurationError } from '@/storage/types';
 
@@ -24,6 +21,11 @@ export const Route = createFileRoute('/api/storage/file')({
 
         try {
           const headers = getRequestHeaders();
+          const [{ auth }, { getDb }, { getFile }] = await Promise.all([
+            import('@/auth/auth'),
+            import('@/db'),
+            import('@/storage'),
+          ]);
           const session = await auth.api.getSession({ headers });
           const userId = session?.user?.id;
           const isPublicKey = isPublicFolder(key);
@@ -65,9 +67,7 @@ export const Route = createFileRoute('/api/storage/file')({
           const isPublicFile = fileRecord?.isPublic === true || isPublicKey;
           const responseHeaders: Record<string, string> = {
             'Content-Type': file.contentType,
-            'Cache-Control': isPublicFile
-              ? 'public, max-age=31536000, immutable'
-              : 'private, no-store',
+            'Cache-Control': isPublicFile ? 'public, max-age=31536000, immutable' : 'private, no-store',
             'X-Content-Type-Options': 'nosniff',
           };
           if (!safeInlineTypes.includes(file.contentType)) {

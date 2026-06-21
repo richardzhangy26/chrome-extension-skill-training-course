@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "mkfast-template",
+	"name": "polymas-ability",
 	"compatibility_date": "2025-09-02",
 	"compatibility_flags": [
 		// Enable Node.js API
@@ -41,7 +41,7 @@
 	// https://developers.cloudflare.com/workers/configuration/routing/custom-domains/
 	"routes": [
 		{
-			"pattern": "demo.tanstarter.dev",
+			"pattern": "polymasability.agicoderbit.com",
 			"custom_domain": true
 		}
 	],

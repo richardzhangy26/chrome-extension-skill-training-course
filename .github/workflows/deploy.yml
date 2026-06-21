@@ -55,7 +55,10 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
-          version: 10.30.3
+          # Read the pnpm version from admin_web's own package.json (pnpm@10.30.3).
+          # Don't pin `version:` here — it conflicts with the root package.json's
+          # packageManager field and fails action-setup.
+          package_json_file: admin_web/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v5

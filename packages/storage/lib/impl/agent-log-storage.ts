@@ -2,6 +2,7 @@
  * 智能体日志存储
  */
 
+import { authSessionStorage } from './auth-session-storage.js';
 import { createStorage, StorageEnum } from '../base/index.js';
 import type { BaseStorageType } from '../base/index.js';
 
@@ -29,6 +30,7 @@ interface AgentLogSession {
   updatedAt: number;
   stepNameMapping?: Record<string, string>;
   entries: AgentLogEntry[];
+  ownerUserId?: string;
 }
 
 const STORAGE_KEY_AGENT_LOGS = 'agent-log-sessions';
@@ -66,6 +68,7 @@ const agentLogStorage: AgentLogStorageType = {
 
   createSession: async ({ taskId, taskName, stepNameMapping }) => {
     const now = Date.now();
+    const auth = await authSessionStorage.get();
     const session: AgentLogSession = {
       id: generateSessionId(),
       taskId,
@@ -74,6 +77,7 @@ const agentLogStorage: AgentLogStorageType = {
       updatedAt: now,
       stepNameMapping,
       entries: [],
+      ...(auth.isLoggedIn && auth.user ? { ownerUserId: auth.user.id } : {}),
     };
 
     await storage.set(current => [...current, session]);
@@ -137,5 +141,18 @@ const agentLogStorage: AgentLogStorageType = {
   },
 };
 
-export { agentLogStorage };
+/**
+ * 按当前登录用户过滤可见 session：
+ * - 登录态：显示本人(ownerUserId===currentUserId) + 匿名(未设 ownerUserId，待迁移)；
+ * - 登出态：仅显示匿名。
+ * 同一 Chrome profile 下不显示其他用户的历史（用户隔离）。
+ */
+const selectVisibleSessions = (sessions: AgentLogSession[], currentUserId: string | null): AgentLogSession[] => {
+  if (currentUserId) {
+    return sessions.filter(s => s.ownerUserId === currentUserId || s.ownerUserId === undefined);
+  }
+  return sessions.filter(s => s.ownerUserId === undefined);
+};
+
+export { agentLogStorage, selectVisibleSessions };
 export type { AgentLogEntryType, AgentLogSource, ChatLogEntry, AgentLogEntry, AgentLogSession, AgentLogStorageType };

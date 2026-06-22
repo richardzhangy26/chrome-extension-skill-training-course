@@ -25,6 +25,7 @@ import { Route as SettingsSecurityRouteImport } from './routes/settings/security
 import { Route as SettingsProfileRouteImport } from './routes/settings/profile'
 import { Route as SettingsPaymentRouteImport } from './routes/settings/payment'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings/notifications'
+import { Route as SettingsHistoryRouteImport } from './routes/settings/history'
 import { Route as SettingsFilesRouteImport } from './routes/settings/files'
 import { Route as SettingsExtensionRouteImport } from './routes/settings/extension'
 import { Route as SettingsBillingRouteImport } from './routes/settings/billing'
@@ -52,6 +53,7 @@ import { Route as legalsCookieRouteImport } from './routes/(legals)/cookie'
 import { Route as ApiWebhooksStripeRouteImport } from './routes/api/webhooks/stripe'
 import { Route as ApiWebhooksCreemRouteImport } from './routes/api/webhooks/creem'
 import { Route as ApiStorageFileRouteImport } from './routes/api/storage/file'
+import { Route as ApiExtensionHistoryRouteImport } from './routes/api/extension/history'
 import { Route as ApiExtensionConfigRouteImport } from './routes/api/extension/config'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -133,6 +135,11 @@ const SettingsPaymentRoute = SettingsPaymentRouteImport.update({
 const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsHistoryRoute = SettingsHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsFilesRoute = SettingsFilesRouteImport.update({
@@ -270,6 +277,11 @@ const ApiStorageFileRoute = ApiStorageFileRouteImport.update({
   path: '/api/storage/file',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiExtensionHistoryRoute = ApiExtensionHistoryRouteImport.update({
+  id: '/api/extension/history',
+  path: '/api/extension/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiExtensionConfigRoute = ApiExtensionConfigRouteImport.update({
   id: '/api/extension/config',
   path: '/api/extension/config',
@@ -314,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/extension': typeof SettingsExtensionRoute
   '/settings/files': typeof SettingsFilesRoute
+  '/settings/history': typeof SettingsHistoryRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/payment': typeof SettingsPaymentRoute
   '/settings/profile': typeof SettingsProfileRoute
@@ -324,6 +337,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/extension/config': typeof ApiExtensionConfigRoute
+  '/api/extension/history': typeof ApiExtensionHistoryRoute
   '/api/storage/file': typeof ApiStorageFileRoute
   '/api/webhooks/creem': typeof ApiWebhooksCreemRoute
   '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
@@ -358,6 +372,7 @@ export interface FileRoutesByTo {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/extension': typeof SettingsExtensionRoute
   '/settings/files': typeof SettingsFilesRoute
+  '/settings/history': typeof SettingsHistoryRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/payment': typeof SettingsPaymentRoute
   '/settings/profile': typeof SettingsProfileRoute
@@ -368,6 +383,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/extension/config': typeof ApiExtensionConfigRoute
+  '/api/extension/history': typeof ApiExtensionHistoryRoute
   '/api/storage/file': typeof ApiStorageFileRoute
   '/api/webhooks/creem': typeof ApiWebhooksCreemRoute
   '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
@@ -406,6 +422,7 @@ export interface FileRoutesById {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/extension': typeof SettingsExtensionRoute
   '/settings/files': typeof SettingsFilesRoute
+  '/settings/history': typeof SettingsHistoryRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/payment': typeof SettingsPaymentRoute
   '/settings/profile': typeof SettingsProfileRoute
@@ -416,6 +433,7 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/extension/config': typeof ApiExtensionConfigRoute
+  '/api/extension/history': typeof ApiExtensionHistoryRoute
   '/api/storage/file': typeof ApiStorageFileRoute
   '/api/webhooks/creem': typeof ApiWebhooksCreemRoute
   '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
@@ -455,6 +473,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/extension'
     | '/settings/files'
+    | '/settings/history'
     | '/settings/notifications'
     | '/settings/payment'
     | '/settings/profile'
@@ -465,6 +484,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/extension/config'
+    | '/api/extension/history'
     | '/api/storage/file'
     | '/api/webhooks/creem'
     | '/api/webhooks/stripe'
@@ -499,6 +519,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/extension'
     | '/settings/files'
+    | '/settings/history'
     | '/settings/notifications'
     | '/settings/payment'
     | '/settings/profile'
@@ -509,6 +530,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/auth/$'
     | '/api/extension/config'
+    | '/api/extension/history'
     | '/api/storage/file'
     | '/api/webhooks/creem'
     | '/api/webhooks/stripe'
@@ -546,6 +568,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/extension'
     | '/settings/files'
+    | '/settings/history'
     | '/settings/notifications'
     | '/settings/payment'
     | '/settings/profile'
@@ -556,6 +579,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/extension/config'
+    | '/api/extension/history'
     | '/api/storage/file'
     | '/api/webhooks/creem'
     | '/api/webhooks/stripe'
@@ -587,6 +611,7 @@ export interface RootRouteChildren {
   BlogIndexRoute: typeof BlogIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiExtensionConfigRoute: typeof ApiExtensionConfigRoute
+  ApiExtensionHistoryRoute: typeof ApiExtensionHistoryRoute
   ApiStorageFileRoute: typeof ApiStorageFileRoute
   ApiWebhooksCreemRoute: typeof ApiWebhooksCreemRoute
   ApiWebhooksStripeRoute: typeof ApiWebhooksStripeRoute
@@ -704,6 +729,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/settings/notifications'
       preLoaderRoute: typeof SettingsNotificationsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/history': {
+      id: '/settings/history'
+      path: '/history'
+      fullPath: '/settings/history'
+      preLoaderRoute: typeof SettingsHistoryRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/files': {
@@ -895,6 +927,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStorageFileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/extension/history': {
+      id: '/api/extension/history'
+      path: '/api/extension/history'
+      fullPath: '/api/extension/history'
+      preLoaderRoute: typeof ApiExtensionHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/extension/config': {
       id: '/api/extension/config'
       path: '/api/extension/config'
@@ -959,6 +998,7 @@ interface SettingsRouteChildren {
   SettingsBillingRoute: typeof SettingsBillingRoute
   SettingsExtensionRoute: typeof SettingsExtensionRoute
   SettingsFilesRoute: typeof SettingsFilesRoute
+  SettingsHistoryRoute: typeof SettingsHistoryRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsPaymentRoute: typeof SettingsPaymentRoute
   SettingsProfileRoute: typeof SettingsProfileRoute
@@ -971,6 +1011,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsBillingRoute: SettingsBillingRoute,
   SettingsExtensionRoute: SettingsExtensionRoute,
   SettingsFilesRoute: SettingsFilesRoute,
+  SettingsHistoryRoute: SettingsHistoryRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsPaymentRoute: SettingsPaymentRoute,
   SettingsProfileRoute: SettingsProfileRoute,
@@ -1008,6 +1049,7 @@ const rootRouteChildren: RootRouteChildren = {
   BlogIndexRoute: BlogIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiExtensionConfigRoute: ApiExtensionConfigRoute,
+  ApiExtensionHistoryRoute: ApiExtensionHistoryRoute,
   ApiStorageFileRoute: ApiStorageFileRoute,
   ApiWebhooksCreemRoute: ApiWebhooksCreemRoute,
   ApiWebhooksStripeRoute: ApiWebhooksStripeRoute,

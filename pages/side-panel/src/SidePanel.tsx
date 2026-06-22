@@ -10,6 +10,7 @@ import { SimulationConfigBar } from './components/SimulationConfigBar';
 import { SimulationConfigModal } from './components/SimulationConfigModal';
 import { useAdminWebAuth } from './hooks/useAdminWebAuth';
 import { useAgentChat } from './hooks/useAgentChat';
+import { useHistorySync } from './hooks/useHistorySync';
 import { useMultiRoleRun } from './hooks/useMultiRoleRun';
 import { useVoiceAgentChat } from './hooks/useVoiceAgentChat';
 import { llmConfigStorage } from '@extension/storage';
@@ -1096,6 +1097,8 @@ const SidePanel = () => {
 
   // Admin Web 登录态 hook
   const { isLoggedIn, session, login, register, logout } = useAdminWebAuth();
+  const currentUserId = session.user?.id ?? null;
+  useHistorySync(isLoggedIn, currentUserId);
 
   // 训练模式：文字 / 口语
   const [mode, setMode] = useState<TrainingMode>('text');
@@ -1493,6 +1496,7 @@ const SidePanel = () => {
           setHistoryInitialSessionId(undefined);
         }}
         initialSessionId={historyInitialSessionId}
+        currentUserId={currentUserId}
       />
     </div>
   );

@@ -4,7 +4,7 @@
  */
 
 import { relations } from 'drizzle-orm';
-import { integer, sqliteTable, text, index } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { user } from './auth.schema';
 import type { PaymentScene, PaymentStatus, PaymentType, PlanInterval } from '@/payment/types';
 
@@ -105,6 +105,36 @@ export const userLlmConfig = sqliteTable(
 export const userLlmConfigRelations = relations(userLlmConfig, ({ one }) => ({
   user: one(user, {
     fields: [userLlmConfig.userId],
+    references: [user.id],
+  }),
+}));
+
+/**
+ * 扩展训练历史：每个用户的每条 session 一行；session 列存整份 AgentLogSession 的 JSON。
+ * deletedAt 非空即 tombstone（软删，防跨设备删除复活）；tombstone 行 session 置空省空间。
+ */
+export const userAgentLog = sqliteTable(
+  'user_agent_log',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id').notNull(),
+    session: text('session'),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+    deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  table => [
+    uniqueIndex('user_agent_log_user_session_idx').on(table.userId, table.sessionId),
+    index('user_agent_log_user_id_idx').on(table.userId),
+  ],
+);
+
+export const userAgentLogRelations = relations(userAgentLog, ({ one }) => ({
+  user: one(user, {
+    fields: [userAgentLog.userId],
     references: [user.id],
   }),
 }));

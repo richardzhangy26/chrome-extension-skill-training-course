@@ -3,9 +3,11 @@ import {
   IconBell,
   IconCreditCard,
   IconFileUpload,
+  IconHistory,
   IconKey,
   IconLayoutDashboard,
   IconLock,
+  IconPuzzle,
   IconSettings2,
   IconShieldCheck,
   IconUserCircle,
@@ -86,6 +88,18 @@ export function getSidebarLinks(): MenuItemConfig[] {
               },
             ]
           : []),
+        {
+          title: '插件配置',
+          icon: IconPuzzle,
+          href: Routes.SettingsExtension,
+          external: false,
+        },
+        {
+          title: '插件历史',
+          icon: IconHistory,
+          href: Routes.SettingsHistory,
+          external: false,
+        },
       ],
     },
   ];

@@ -2,7 +2,7 @@
  * 历史日志弹窗组件
  */
 
-import { agentLogStorage } from '@extension/storage';
+import { agentLogStorage, selectVisibleSessions } from '@extension/storage';
 import { useEffect, useMemo, useState } from 'react';
 import type { AgentLogSession, AgentLogEntry } from '@extension/storage';
 
@@ -19,6 +19,7 @@ interface HistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialSessionId?: string;
+  currentUserId: string | null;
 }
 
 const formatTimestamp = (timestamp: number) =>
@@ -94,7 +95,7 @@ const downloadLogText = (session: AgentLogSession) => {
   URL.revokeObjectURL(url);
 };
 
-const HistoryModal = ({ isOpen, onClose, initialSessionId }: HistoryModalProps) => {
+const HistoryModal = ({ isOpen, onClose, initialSessionId, currentUserId }: HistoryModalProps) => {
   const [sessions, setSessions] = useState<AgentLogSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -110,7 +111,7 @@ const HistoryModal = ({ isOpen, onClose, initialSessionId }: HistoryModalProps) 
     let isMounted = true;
 
     const fetchSessions = async () => {
-      const data = await agentLogStorage.get();
+      const data = selectVisibleSessions(await agentLogStorage.get(), currentUserId);
       if (isMounted) {
         setSessions(data);
       }
@@ -123,7 +124,7 @@ const HistoryModal = ({ isOpen, onClose, initialSessionId }: HistoryModalProps) 
       isMounted = false;
       unsubscribe();
     };
-  }, [isOpen]);
+  }, [isOpen, currentUserId]);
 
   const sortedSessions = useMemo(() => [...sessions].sort((a, b) => b.updatedAt - a.updatedAt), [sessions]);
 
@@ -189,6 +190,28 @@ const HistoryModal = ({ isOpen, onClose, initialSessionId }: HistoryModalProps) 
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
             剧本存放在浏览器本地存储中，请下载完成后及时清理删除。
           </div>
+
+          {!currentUserId ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500">
+              当前未登录，仅显示本机匿名历史。登录后将显示并同步你账号的历史。
+            </div>
+          ) : null}
+
+          {currentUserId && sessions.some(s => s.ownerUserId === undefined) ? (
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  const all = await agentLogStorage.get();
+                  await agentLogStorage.set(
+                    all.map(s => (s.ownerUserId === undefined ? { ...s, ownerUserId: currentUserId } : s)),
+                  );
+                })();
+              }}
+              className="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-2 text-left text-xs text-cyan-700 transition-colors hover:border-cyan-300">
+              检测到本机匿名历史，点此归入当前账号并同步到云端。
+            </button>
+          ) : null}
 
           <div className="flex flex-1 gap-4 overflow-hidden">
             <div className="w-[40%] min-w-[220px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3">

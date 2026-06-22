@@ -36,6 +36,13 @@
       "when": 1781950494552,
       "tag": "0004_large_sinister_six",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1782094353112,
+      "tag": "0005_slimy_goliath",
+      "breakpoints": true
     }
   ]
 }

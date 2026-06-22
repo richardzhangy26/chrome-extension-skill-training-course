@@ -25,6 +25,7 @@ import { Route as SettingsSecurityRouteImport } from './routes/settings/security
 import { Route as SettingsProfileRouteImport } from './routes/settings/profile'
 import { Route as SettingsPaymentRouteImport } from './routes/settings/payment'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings/notifications'
+import { Route as SettingsHistoryRouteImport } from './routes/settings/history'
 import { Route as SettingsFilesRouteImport } from './routes/settings/files'
 import { Route as SettingsExtensionRouteImport } from './routes/settings/extension'
 import { Route as SettingsBillingRouteImport } from './routes/settings/billing'
@@ -134,6 +135,11 @@ const SettingsPaymentRoute = SettingsPaymentRouteImport.update({
 const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsHistoryRoute = SettingsHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsFilesRoute = SettingsFilesRouteImport.update({
@@ -320,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/extension': typeof SettingsExtensionRoute
   '/settings/files': typeof SettingsFilesRoute
+  '/settings/history': typeof SettingsHistoryRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/payment': typeof SettingsPaymentRoute
   '/settings/profile': typeof SettingsProfileRoute
@@ -365,6 +372,7 @@ export interface FileRoutesByTo {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/extension': typeof SettingsExtensionRoute
   '/settings/files': typeof SettingsFilesRoute
+  '/settings/history': typeof SettingsHistoryRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/payment': typeof SettingsPaymentRoute
   '/settings/profile': typeof SettingsProfileRoute
@@ -414,6 +422,7 @@ export interface FileRoutesById {
   '/settings/billing': typeof SettingsBillingRoute
   '/settings/extension': typeof SettingsExtensionRoute
   '/settings/files': typeof SettingsFilesRoute
+  '/settings/history': typeof SettingsHistoryRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/payment': typeof SettingsPaymentRoute
   '/settings/profile': typeof SettingsProfileRoute
@@ -464,6 +473,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/extension'
     | '/settings/files'
+    | '/settings/history'
     | '/settings/notifications'
     | '/settings/payment'
     | '/settings/profile'
@@ -509,6 +519,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/extension'
     | '/settings/files'
+    | '/settings/history'
     | '/settings/notifications'
     | '/settings/payment'
     | '/settings/profile'
@@ -557,6 +568,7 @@ export interface FileRouteTypes {
     | '/settings/billing'
     | '/settings/extension'
     | '/settings/files'
+    | '/settings/history'
     | '/settings/notifications'
     | '/settings/payment'
     | '/settings/profile'
@@ -717,6 +729,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/settings/notifications'
       preLoaderRoute: typeof SettingsNotificationsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/history': {
+      id: '/settings/history'
+      path: '/history'
+      fullPath: '/settings/history'
+      preLoaderRoute: typeof SettingsHistoryRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/files': {
@@ -979,6 +998,7 @@ interface SettingsRouteChildren {
   SettingsBillingRoute: typeof SettingsBillingRoute
   SettingsExtensionRoute: typeof SettingsExtensionRoute
   SettingsFilesRoute: typeof SettingsFilesRoute
+  SettingsHistoryRoute: typeof SettingsHistoryRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsPaymentRoute: typeof SettingsPaymentRoute
   SettingsProfileRoute: typeof SettingsProfileRoute
@@ -991,6 +1011,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsBillingRoute: SettingsBillingRoute,
   SettingsExtensionRoute: SettingsExtensionRoute,
   SettingsFilesRoute: SettingsFilesRoute,
+  SettingsHistoryRoute: SettingsHistoryRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsPaymentRoute: SettingsPaymentRoute,
   SettingsProfileRoute: SettingsProfileRoute,

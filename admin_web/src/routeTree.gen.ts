@@ -52,6 +52,7 @@ import { Route as legalsCookieRouteImport } from './routes/(legals)/cookie'
 import { Route as ApiWebhooksStripeRouteImport } from './routes/api/webhooks/stripe'
 import { Route as ApiWebhooksCreemRouteImport } from './routes/api/webhooks/creem'
 import { Route as ApiStorageFileRouteImport } from './routes/api/storage/file'
+import { Route as ApiExtensionHistoryRouteImport } from './routes/api/extension/history'
 import { Route as ApiExtensionConfigRouteImport } from './routes/api/extension/config'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -270,6 +271,11 @@ const ApiStorageFileRoute = ApiStorageFileRouteImport.update({
   path: '/api/storage/file',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiExtensionHistoryRoute = ApiExtensionHistoryRouteImport.update({
+  id: '/api/extension/history',
+  path: '/api/extension/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiExtensionConfigRoute = ApiExtensionConfigRouteImport.update({
   id: '/api/extension/config',
   path: '/api/extension/config',
@@ -324,6 +330,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/extension/config': typeof ApiExtensionConfigRoute
+  '/api/extension/history': typeof ApiExtensionHistoryRoute
   '/api/storage/file': typeof ApiStorageFileRoute
   '/api/webhooks/creem': typeof ApiWebhooksCreemRoute
   '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
@@ -368,6 +375,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/extension/config': typeof ApiExtensionConfigRoute
+  '/api/extension/history': typeof ApiExtensionHistoryRoute
   '/api/storage/file': typeof ApiStorageFileRoute
   '/api/webhooks/creem': typeof ApiWebhooksCreemRoute
   '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
@@ -416,6 +424,7 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/extension/config': typeof ApiExtensionConfigRoute
+  '/api/extension/history': typeof ApiExtensionHistoryRoute
   '/api/storage/file': typeof ApiStorageFileRoute
   '/api/webhooks/creem': typeof ApiWebhooksCreemRoute
   '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
@@ -465,6 +474,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/extension/config'
+    | '/api/extension/history'
     | '/api/storage/file'
     | '/api/webhooks/creem'
     | '/api/webhooks/stripe'
@@ -509,6 +519,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/auth/$'
     | '/api/extension/config'
+    | '/api/extension/history'
     | '/api/storage/file'
     | '/api/webhooks/creem'
     | '/api/webhooks/stripe'
@@ -556,6 +567,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/extension/config'
+    | '/api/extension/history'
     | '/api/storage/file'
     | '/api/webhooks/creem'
     | '/api/webhooks/stripe'
@@ -587,6 +599,7 @@ export interface RootRouteChildren {
   BlogIndexRoute: typeof BlogIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiExtensionConfigRoute: typeof ApiExtensionConfigRoute
+  ApiExtensionHistoryRoute: typeof ApiExtensionHistoryRoute
   ApiStorageFileRoute: typeof ApiStorageFileRoute
   ApiWebhooksCreemRoute: typeof ApiWebhooksCreemRoute
   ApiWebhooksStripeRoute: typeof ApiWebhooksStripeRoute
@@ -895,6 +908,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStorageFileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/extension/history': {
+      id: '/api/extension/history'
+      path: '/api/extension/history'
+      fullPath: '/api/extension/history'
+      preLoaderRoute: typeof ApiExtensionHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/extension/config': {
       id: '/api/extension/config'
       path: '/api/extension/config'
@@ -1008,6 +1028,7 @@ const rootRouteChildren: RootRouteChildren = {
   BlogIndexRoute: BlogIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiExtensionConfigRoute: ApiExtensionConfigRoute,
+  ApiExtensionHistoryRoute: ApiExtensionHistoryRoute,
   ApiStorageFileRoute: ApiStorageFileRoute,
   ApiWebhooksCreemRoute: ApiWebhooksCreemRoute,
   ApiWebhooksStripeRoute: ApiWebhooksStripeRoute,

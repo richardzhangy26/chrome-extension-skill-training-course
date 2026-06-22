@@ -48,12 +48,14 @@ export function ExtensionHistoryView() {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
-    getMyHistory().then(({ sessions: rows }) => {
-      const sorted = [...rows].sort((a, b) => b.updatedAt - a.updatedAt);
-      setSessions(sorted);
-      setActiveId(sorted[0]?.id ?? null);
-      setLoaded(true);
-    });
+    getMyHistory()
+      .then(({ sessions: rows }) => {
+        const sorted = [...rows].sort((a, b) => b.updatedAt - a.updatedAt);
+        setSessions(sorted);
+        setActiveId(sorted[0]?.id ?? null);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
   }, []);
 
   if (!loaded) {

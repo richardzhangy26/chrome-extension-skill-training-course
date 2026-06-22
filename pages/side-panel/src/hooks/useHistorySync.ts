@@ -131,11 +131,11 @@ const useHistorySync = (isLoggedIn: boolean, userId: string | null): void => {
         clearTimeout(debounceRef.current);
       }
       debounceRef.current = setTimeout(() => {
-        void reconcileChanges();
+        reconcileChanges().catch(() => {});
       }, DEBOUNCE_MS);
     };
 
-    void mergeOnLogin();
+    mergeOnLogin().catch(() => {});
     const unsubscribe = agentLogStorage.subscribe(handleChange);
 
     return () => {

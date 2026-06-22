@@ -5,7 +5,7 @@
 
 import { adminWebRequest } from './background-bridge';
 import { authSessionStorage } from '@extension/storage';
-import type { AuthUser, LLMConfig } from '@extension/storage';
+import type { AuthUser, LLMConfig, AgentLogSession } from '@extension/storage';
 
 interface AuthResult {
   ok: boolean;
@@ -108,5 +108,57 @@ const pushLlmConfig = async (config: LLMConfig): Promise<boolean> => {
   return res.ok;
 };
 
-export { signUp, signIn, signOut, getSession, fetchLlmConfig, pushLlmConfig };
-export type { AuthResult };
+interface Tombstone {
+  sessionId: string;
+  deletedAt: number;
+}
+
+type FetchHistoryResult = { ok: true; sessions: AgentLogSession[]; tombstones: Tombstone[] } | { ok: false };
+
+// 上传前剥离纯本地字段 ownerUserId（归属由服务端按 token 决定）。
+const stripOwner = (s: AgentLogSession): AgentLogSession => {
+  const copy = { ...s };
+  delete copy.ownerUserId;
+  return copy;
+};
+
+const fetchHistory = async (): Promise<FetchHistoryResult> => {
+  const res = await adminWebRequest({ path: '/api/extension/history', method: 'GET', auth: true });
+  if (!res.ok) {
+    if (res.status === 401) {
+      await authSessionStorage.clear();
+    }
+    return { ok: false };
+  }
+  const json = res.json as { sessions?: AgentLogSession[]; tombstones?: Tombstone[] };
+  return { ok: true, sessions: json.sessions ?? [], tombstones: json.tombstones ?? [] };
+};
+
+const pushHistory = async (sessions: AgentLogSession[]): Promise<boolean> => {
+  if (sessions.length === 0) {
+    return true;
+  }
+  const res = await adminWebRequest({
+    path: '/api/extension/history',
+    method: 'POST',
+    auth: true,
+    body: { sessions: sessions.map(stripOwner) },
+  });
+  return res.ok;
+};
+
+const deleteHistory = async (sessionIds: string[]): Promise<boolean> => {
+  if (sessionIds.length === 0) {
+    return true;
+  }
+  const res = await adminWebRequest({
+    path: '/api/extension/history',
+    method: 'DELETE',
+    auth: true,
+    body: { sessionIds },
+  });
+  return res.ok;
+};
+
+export { signUp, signIn, signOut, getSession, fetchLlmConfig, pushLlmConfig, fetchHistory, pushHistory, deleteHistory };
+export type { AuthResult, Tombstone };

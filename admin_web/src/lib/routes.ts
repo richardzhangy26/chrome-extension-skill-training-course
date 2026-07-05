@@ -49,6 +49,8 @@ export const Routes = {
   SettingsFiles: '/settings/files',
   SettingsApiKeys: '/settings/apikeys',
   SettingsNotifications: '/settings/notifications',
+  SettingsExtension: '/settings/extension',
+  SettingsHistory: '/settings/history',
 
   // Admin routes
   Admin: '/admin',

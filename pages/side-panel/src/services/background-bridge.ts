@@ -90,7 +90,7 @@ const apiRequest = async <T>(payload: ApiRequestPayload): Promise<T> => {
 
 interface AdminWebRequestPayload {
   path: string;
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'DELETE';
   body?: Record<string, unknown>;
   auth?: boolean;
 }

@@ -23,10 +23,11 @@ export const authRouteMiddleware = createMiddleware().server(async ({ next }) =>
   }
 
   if (!session.user.emailVerified) {
-    throw redirect({
-      to: Routes.Login,
-      search: { error: 'email_not_verified' },
-    });
+    // 注意：不要带 search 参数。/auth/login 未声明 validateSearch，
+    // 带 search 的 redirect 在当前 h3/TanStack Start 版本下会让响应状态码越界
+    // （"Responses may only be constructed with status codes in the range 200 to 599"）。
+    // 与未登录分支保持一致：跳到纯 /auth/login。
+    throw redirect({ to: Routes.Login });
   }
 
   return await next();

@@ -1,29 +1,34 @@
-# packages/shared KNOWLEDGE BASE
+# packages/shared Agent Guide
 
-## OVERVIEW
-Core shared utilities, HOCs, custom hooks, and agent domain models used across the entire monorepo.
+## Overview
+`packages/shared` contains generic extension utilities, types, hooks, and higher-order wrappers used by multiple extension workspaces. Keep this package broadly reusable and free of page-specific business logic.
 
-## STRUCTURE
-```
+## Structure
+```text
 packages/shared/lib/
 ├── agent/    # Agent domain models, state machine, and API client types
-├── hoc/      # Higher-order components (Error Boundary, Suspense)
-├── hooks/    # Shared React hooks (e.g., use-storage)
-└── utils/    # General utilities, logging, and DOM shadow root initialization
+├── hoc/      # Error boundary and suspense wrappers
+├── hooks/    # Shared React hooks
+└── utils/    # General utilities and extension app initialization helpers
 ```
 
-## WHERE TO LOOK
+## Where To Look
 | Task | Location | Notes |
-|------|----------|-------|
-| Agent Logic | `lib/agent/state-machine.ts` | Core state transition models for conversations |
-| Storage Sync | `lib/hooks/use-storage.tsx` | Helper to read/write Chrome local/sync storage reactively |
-| App Init | `lib/utils/init-app-with-shadow.ts`| Shadow DOM initialization for content scripts |
-| HOCs | `lib/hoc/` | Standard wrappers for extension entry points (`with-error-boundary`) |
+| --- | --- | --- |
+| Agent models/state | `lib/agent/` | Shared conversation/domain primitives |
+| Storage hook helpers | `lib/hooks/use-storage.tsx` | Reactive wrapper for extension storage use cases |
+| App initialization | `lib/utils/init-app-with-shadow.ts` | Shadow DOM initialization for content surfaces |
+| HOCs | `lib/hoc/` | Standard wrappers for extension entry points |
 
-## CONVENTIONS
-- Keep code entirely generic and framework-agnostic where possible, except for the `hooks` and `hoc` folders which are React-specific.
-- **ESM Imports**: Must use the `.js` extension for all relative path imports.
+## Conventions
+- Keep code generic. Anything tied to side-panel flows, Admin Web auth, Polymas endpoints, or a specific page belongs elsewhere.
+- Relative ESM imports must include the `.js` extension.
+- React-specific code is allowed only in `hooks` and `hoc`.
+- Prefer small pure utilities and typed domain helpers.
+- Export public APIs from package entrypoints consistently with nearby files.
 
-## ANTI-PATTERNS (THIS PROJECT)
-- **NO UI components**: Do not implement visual UI elements here. Move them to `packages/ui`.
-- **NO Page logic**: Business logic bound to a specific page or popup belongs in that `pages/` workspace.
+## Anti-Patterns
+- Do not implement visual UI elements here; use `packages/ui`.
+- Do not call `chrome.*` directly if a wrapper exists in `@extension/storage` or page services.
+- Do not import side-panel services, background bridge code, Admin Web services, or page-specific components.
+- Do not add synchronization or auth-session ownership logic here; that belongs in `packages/storage` or feature hooks.

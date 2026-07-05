@@ -4,6 +4,7 @@
 
 import { ModelSelector } from './ModelSelector';
 import { VoiceModeSettings } from './VoiceModeSettings';
+import { requestHostPermissions } from '../services/host-permission-service';
 import { fetchAvailableTextModels, testLLMConfig } from '../services/llm-service';
 import {
   AVAILABLE_MODELS,
@@ -196,6 +197,13 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
       return;
     }
 
+    try {
+      await requestHostPermissions([nextConfig.apiUrl]);
+    } catch (error) {
+      setTestResult({ success: false, message: `❌ ${(error as Error).message}` });
+      return;
+    }
+
     setIsTesting(true);
     setTestResult(null);
 
@@ -223,13 +231,35 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
     }
 
     setIsSaving(true);
-    await llmConfigStorage.setConfig({
-      ...nextConfig,
-      enabled: nextConfig.apiKey.trim().length > 0,
-    });
-    setConfig(createConfigDraft(nextConfig));
-    setIsSaving(false);
-    onClose();
+    try {
+      await requestHostPermissions([nextConfig.apiUrl, nextConfig.ttsApiUrl]);
+      await llmConfigStorage.setConfig({
+        ...nextConfig,
+        enabled: nextConfig.apiKey.trim().length > 0,
+      });
+      setConfig(createConfigDraft(nextConfig));
+      onClose();
+    } catch (error) {
+      setTestResult({ success: false, message: `❌ ${(error as Error).message}` });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleGrantHostAccess = async () => {
+    const nextConfig = normalizeDraftConfig(config);
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      await requestHostPermissions([nextConfig.apiUrl, nextConfig.ttsApiUrl]);
+      setTestResult({ success: true, message: '✅ 已授权当前 LLM / TTS API 域名' });
+      void loadAvailableModels(nextConfig);
+    } catch (error) {
+      setTestResult({ success: false, message: `❌ ${(error as Error).message}` });
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -715,7 +745,22 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
         </div>
 
         {/* 底部按钮 */}
-        {!readOnly && (
+        {readOnly ? (
+          <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+            <button
+              onClick={handleTest}
+              disabled={isTesting || !config.apiKey.trim()}
+              className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
+              {isTesting ? '测试中...' : '测试连接'}
+            </button>
+            <button
+              onClick={handleGrantHostAccess}
+              disabled={isTesting}
+              className="flex-1 cursor-pointer rounded-lg border border-cyan-300 bg-white py-2.5 text-sm font-medium text-cyan-700 transition-colors hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-50">
+              授权当前 API 域名
+            </button>
+          </div>
+        ) : (
           <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
             <button
               onClick={handleTest}

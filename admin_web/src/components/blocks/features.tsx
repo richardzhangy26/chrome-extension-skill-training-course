@@ -23,28 +23,28 @@ const images: Record<
   }
 > = {
   'item-1': {
-    image: getR2AssetUrl('features/task-detection-light.png'),
-    darkImage: getR2AssetUrl('features/task-detection-dark.png'),
+    image: getR2AssetUrl('features/task-detection-light.webp'),
+    darkImage: getR2AssetUrl('features/task-detection-dark.webp'),
     alt: '自动识别训练任务界面',
   },
   'item-2': {
-    image: getR2AssetUrl('features/model-dialogue-light.png'),
-    darkImage: getR2AssetUrl('features/model-dialogue-dark.png'),
+    image: getR2AssetUrl('features/model-dialogue-light.webp'),
+    darkImage: getR2AssetUrl('features/model-dialogue-dark.webp'),
     alt: '多模型对话生成配置界面',
   },
   'item-3': {
-    image: getR2AssetUrl('features/multi-role-light.png'),
-    darkImage: getR2AssetUrl('features/multi-role-dark.png'),
+    image: getR2AssetUrl('features/multi-role-light.webp'),
+    darkImage: getR2AssetUrl('features/multi-role-dark.webp'),
     alt: '多角色学生并行模拟界面',
   },
   'item-4': {
-    image: getR2AssetUrl('features/conversation-history-light.png'),
-    darkImage: getR2AssetUrl('features/conversation-history-dark.png'),
+    image: getR2AssetUrl('features/conversation-history-light.webp'),
+    darkImage: getR2AssetUrl('features/conversation-history-dark.webp'),
     alt: '训练对话历史记录与复盘界面',
   },
   'item-5': {
-    image: getR2AssetUrl('features/conversation-simulation-light.png'),
-    darkImage: getR2AssetUrl('features/conversation-simulation-dark.png'),
+    image: getR2AssetUrl('features/conversation-simulation-light.webp'),
+    darkImage: getR2AssetUrl('features/conversation-simulation-dark.webp'),
     alt: '对话记录模拟和知识库配置界面',
   },
 };

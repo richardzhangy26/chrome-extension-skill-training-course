@@ -26,34 +26,56 @@ const useAdminWebAuth = () => {
     };
   }, []);
 
-  // 登录后把账号配置写入本地；服务端无配置则用本地 seed 上去一次
+  // 配置同步（admin_web 为准）：服务端有「有效」配置则下行覆盖本地；
+  // 服务端无有效配置但本地有效则上传一次 seed；两边都无效则不动，
+  // 从源头杜绝「空配置上传 → 反过来覆盖本地真实 key」。
   const syncConfigDown = useCallback(async () => {
     const result = await fetchLlmConfig();
     if (!result.ok) {
-      // 请求失败（网络/非 401 错误）：不种子、不覆盖本地配置
+      // 请求失败（网络/401 等）：不种子、不覆盖本地配置
+      const code = result.code ? ` (${result.code})` : '';
+      console.warn(`[admin-web] 拉取配置失败，跳过本次同步：${result.status} ${result.message}${code}`);
       return;
     }
-    if (result.config) {
-      await llmConfigStorage.setConfig(result.config);
-      return;
-    }
-    // 服务端确认无配置（200 + config:null）：用本地 seed 上去一次
     const local = await llmConfigStorage.get();
-    await pushLlmConfig(local);
+    if (result.config) {
+      // 服务端有 key → 完全以服务端为准（含 simulation/知识库/TTS/档位等）；
+      // 服务端无 key 但本地有 → 仅保留本地 key、其余仍取服务端，
+      // 避免历史遗留的空 key 配置把本地真实 key 覆盖掉，也不丢网页侧的其它配置。
+      const server = result.config;
+      const merged =
+        server.apiKey.trim().length > 0
+          ? server
+          : { ...server, apiKey: local.apiKey, enabled: local.apiKey.trim().length > 0 };
+      await llmConfigStorage.setConfig(merged);
+      return;
+    }
+    // 服务端确认无配置（config:null）：仅当本地有有效 key 时才上传一次 seed（默认/空配置绝不上传）
+    if (local.apiKey.trim().length > 0) {
+      const ok = await pushLlmConfig(local);
+      if (!ok) {
+        console.warn('[admin-web] 本地配置上传失败');
+      }
+    }
   }, []);
 
   // 启动时校验既有 token 是否仍有效
   useEffect(() => {
     (async () => {
-      const current = await authSessionStorage.get();
-      if (current.isLoggedIn) {
-        const user = await getSession();
-        if (user) {
-          await syncConfigDown();
+      try {
+        const current = await authSessionStorage.get();
+        if (current.isLoggedIn) {
+          const user = await getSession();
+          if (user) {
+            await syncConfigDown();
+          }
+          // getSession 内部在 401 时已 clear()，订阅会刷新 UI
         }
-        // getSession 内部在 401 时已 clear()，订阅会刷新 UI
+      } catch (error) {
+        console.warn('[admin-web] 启动同步失败', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, [syncConfigDown]);
 

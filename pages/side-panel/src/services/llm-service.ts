@@ -4,6 +4,7 @@
  */
 
 import { apiRequest, API_ENDPOINTS } from './background-bridge';
+import { assertHostPermission } from './host-permission-service';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_PROFILE_ID, llmConfigStorage, normalizeLLMConfig } from '@extension/storage';
 import type { LLMConfig, StudentProfile } from '@extension/storage';
 
@@ -274,6 +275,7 @@ const callChatCompletion = async (
   options?: ChatCompletionRequestOptions,
 ): Promise<LLMResponse> => {
   try {
+    await assertHostPermission(config.apiUrl);
     const response = await fetch(config.apiUrl, {
       method: 'POST',
       headers: buildTextModelHeaders(config),
@@ -620,6 +622,7 @@ const fetchAvailableTextModels = async (
     throw new Error('API URL 无法解析出 models 接口地址');
   }
 
+  await assertHostPermission(modelsUrl);
   const response = await fetch(modelsUrl, {
     method: 'GET',
     headers: {
@@ -795,6 +798,7 @@ const generateSimulationDialogueRecord = async ({
 const testLLMConfig = async (config: LLMConfig): Promise<LLMResponse> => {
   try {
     const normalizedConfig = normalizeLLMConfig(config);
+    await assertHostPermission(normalizedConfig.apiUrl);
     const response = await fetch(normalizedConfig.apiUrl, {
       method: 'POST',
       headers: buildTextModelHeaders(normalizedConfig),

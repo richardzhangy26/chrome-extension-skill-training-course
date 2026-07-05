@@ -4,7 +4,7 @@
  */
 
 import { adminWebRequest } from './background-bridge';
-import { authSessionStorage } from '@extension/storage';
+import { authSessionStorage, normalizeAuthToken } from '@extension/storage';
 import type { AuthUser, LLMConfig, AgentLogSession } from '@extension/storage';
 
 interface AuthResult {
@@ -12,6 +12,37 @@ interface AuthResult {
   error?: string;
   needsVerification?: boolean;
 }
+
+interface AdminWebFailure {
+  ok: false;
+  status: number;
+  message: string;
+  code?: string;
+}
+
+const extractErrorMessage = (json: unknown, fallback: string): string => {
+  if (!json || typeof json !== 'object') {
+    return fallback;
+  }
+  const record = json as { error?: unknown; message?: unknown };
+  const message = [record.error, record.message].find(value => typeof value === 'string' && value.trim().length > 0);
+  return typeof message === 'string' ? message : fallback;
+};
+
+const extractErrorCode = (json: unknown): string | undefined => {
+  if (!json || typeof json !== 'object') {
+    return undefined;
+  }
+  const code = (json as { code?: unknown }).code;
+  return typeof code === 'string' && code.trim().length > 0 ? code : undefined;
+};
+
+const toFailure = (res: { status: number; json: unknown }, fallback: string): AdminWebFailure => ({
+  ok: false,
+  status: res.status,
+  message: extractErrorMessage(res.json, fallback),
+  code: extractErrorCode(res.json),
+});
 
 const extractUser = (json: unknown): AuthUser | null => {
   if (!json || typeof json !== 'object') {
@@ -52,10 +83,13 @@ const signIn = async (input: { email: string; password: string }): Promise<AuthR
     return { ok: false, error: msg };
   }
   const user = extractUser(res.json);
-  if (!res.setAuthToken || !user) {
+  const bodyToken = (res.json as { token?: unknown })?.token;
+  const token =
+    (typeof bodyToken === 'string' ? normalizeAuthToken(bodyToken) : null) ?? normalizeAuthToken(res.setAuthToken);
+  if (!token || !user) {
     return { ok: false, error: '登录响应缺少令牌或用户信息' };
   }
-  await authSessionStorage.setSession(res.setAuthToken, user);
+  await authSessionStorage.setSession(token, user);
   return { ok: true };
 };
 
@@ -85,7 +119,7 @@ const getSession = async (): Promise<AuthUser | null> => {
   return user;
 };
 
-type FetchConfigResult = { ok: true; config: LLMConfig | null } | { ok: false };
+type FetchConfigResult = { ok: true; config: LLMConfig | null } | AdminWebFailure;
 
 const fetchLlmConfig = async (): Promise<FetchConfigResult> => {
   const res = await adminWebRequest({ path: '/api/extension/config', method: 'GET', auth: true });
@@ -93,7 +127,7 @@ const fetchLlmConfig = async (): Promise<FetchConfigResult> => {
     if (res.status === 401) {
       await authSessionStorage.clear();
     }
-    return { ok: false };
+    return toFailure(res, `拉取配置失败(${res.status})`);
   }
   return { ok: true, config: (res.json as { config?: LLMConfig | null }).config ?? null };
 };
@@ -113,7 +147,7 @@ interface Tombstone {
   deletedAt: number;
 }
 
-type FetchHistoryResult = { ok: true; sessions: AgentLogSession[]; tombstones: Tombstone[] } | { ok: false };
+type FetchHistoryResult = { ok: true; sessions: AgentLogSession[]; tombstones: Tombstone[] } | AdminWebFailure;
 
 // 上传前剥离纯本地字段 ownerUserId（归属由服务端按 token 决定）。
 const stripOwner = (s: AgentLogSession): AgentLogSession => {
@@ -128,7 +162,7 @@ const fetchHistory = async (): Promise<FetchHistoryResult> => {
     if (res.status === 401) {
       await authSessionStorage.clear();
     }
-    return { ok: false };
+    return toFailure(res, `拉取历史失败(${res.status})`);
   }
   const json = res.json as { sessions?: AgentLogSession[]; tombstones?: Tombstone[] };
   return { ok: true, sessions: json.sessions ?? [], tombstones: json.tombstones ?? [] };

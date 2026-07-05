@@ -1,11 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import {
-  createRootRouteWithContext,
-  HeadContent,
-  Outlet,
-  Scripts,
-  useRouterState,
-} from '@tanstack/react-router';
+import { createRootRouteWithContext, HeadContent, Outlet, Scripts, useRouterState } from '@tanstack/react-router';
 import { Analytics } from '@/components/analytics/analytics';
 import { CrispChat } from '@/components/chatbox/crisp-chat';
 import { ThemeProvider } from '@/components/theme/theme-provider';
@@ -14,22 +8,16 @@ import { Footer } from '@/components/layout/footer';
 import { DefaultNotFound } from '@/components/layout/default-not-found';
 import { Toaster } from '@/components/shared/toaster';
 import { websiteConfig } from '@/config/website';
+import { getBrandAssetUrl } from '@/config/brand-assets';
 import appCss from '../styles.css?url';
 import { DefaultCatchBoundary } from '@/components/layout/default-catch-boundary';
 import { Routes } from '@/lib/routes';
 import { getCanonicalUrl, getOgImage, twitterHandleFromUrl } from '@/lib/urls';
-import {
-  getCanonicalPathname,
-  getLocale,
-  localeConfig,
-  locales,
-} from '@/lib/locale';
+import { getCanonicalPathname, getLocale, localeConfig, locales } from '@/lib/locale';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { lazy } from 'react';
 
-const DevTools = import.meta.env.DEV
-  ? lazy(() => import('@/integrations/devtools'))
-  : () => null;
+const DevTools = import.meta.env.DEV ? lazy(() => import('@/integrations/devtools')) : () => null;
 
 /**
  * https://github.com/backpine/tanstack-start-on-cloudflare/blob/main/src/routes/__root.tsx
@@ -39,16 +27,14 @@ export const Route = createRootRouteWithContext<{
 }>()({
   head: () => {
     const ogImage = getOgImage();
-    const twitterSite = websiteConfig.social?.twitter
-      ? twitterHandleFromUrl(websiteConfig.social.twitter)
-      : null;
+    const twitterSite = websiteConfig.social?.twitter ? twitterHandleFromUrl(websiteConfig.social.twitter) : null;
     const currentLocale = getLocale();
     // OG locale format uses underscore (e.g. en_US, zh_CN), unlike BCP 47 used
     // for <html lang> / hreflang which uses hyphens.
     const ogLocale = localeConfig[currentLocale].hreflang.replace('-', '_');
     const alternateOgLocales = locales
-      .filter((l) => l !== currentLocale)
-      .map((l) => localeConfig[l].hreflang.replace('-', '_'));
+      .filter(l => l !== currentLocale)
+      .map(l => localeConfig[l].hreflang.replace('-', '_'));
     return {
       meta: [
         { charSet: 'utf-8' },
@@ -66,7 +52,7 @@ export const Route = createRootRouteWithContext<{
           content: websiteConfig.metadata?.name ?? '',
         },
         { property: 'og:locale', content: ogLocale },
-        ...alternateOgLocales.map((loc) => ({
+        ...alternateOgLocales.map(loc => ({
           property: 'og:locale:alternate',
           content: loc,
         })),
@@ -78,9 +64,7 @@ export const Route = createRootRouteWithContext<{
         { property: 'og:url', content: getCanonicalUrl('/') },
         ...(ogImage ? [{ property: 'og:image', content: ogImage }] : []),
         { name: 'twitter:title', content: websiteConfig.metadata?.title ?? '' },
-        ...(twitterSite
-          ? [{ name: 'twitter:site', content: twitterSite }]
-          : []),
+        ...(twitterSite ? [{ name: 'twitter:site', content: twitterSite }] : []),
         {
           name: 'twitter:description',
           content: websiteConfig.metadata?.description ?? '',
@@ -97,22 +81,22 @@ export const Route = createRootRouteWithContext<{
         {
           rel: 'apple-touch-icon',
           sizes: '180x180',
-          href: '/apple-touch-icon.png',
+          href: getBrandAssetUrl('apple-touch-icon.png'),
         },
         {
           rel: 'icon',
           type: 'image/png',
           sizes: '32x32',
-          href: '/favicon-32x32.png',
+          href: getBrandAssetUrl('favicon-32x32.png'),
         },
         {
           rel: 'icon',
           type: 'image/png',
           sizes: '16x16',
-          href: '/favicon-16x16.png',
+          href: getBrandAssetUrl('favicon-16x16.png'),
         },
-        { rel: 'icon', href: '/favicon.ico' },
-        { rel: 'manifest', href: '/manifest.json' },
+        { rel: 'icon', href: getBrandAssetUrl('favicon.ico') },
+        { rel: 'manifest', href: getBrandAssetUrl('manifest.json') },
       ],
     };
   },
@@ -128,19 +112,16 @@ export const Route = createRootRouteWithContext<{
  * Only marketing pages get Navbar + Footer; auth/dashboard/404 pages don't.
  */
 function RootComponent() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname }) ?? '';
+  const pathname = useRouterState({ select: s => s.location.pathname }) ?? '';
   const canonicalPathname = getCanonicalPathname(pathname);
-  const matches = useRouterState({ select: (s) => s.matches }) ?? [];
+  const matches = useRouterState({ select: s => s.matches }) ?? [];
   const isAuthPages = canonicalPathname.startsWith(Routes.Auth);
   const isProtectedPages =
     canonicalPathname.startsWith(Routes.Admin) ||
     canonicalPathname.startsWith(Routes.Dashboard) ||
     canonicalPathname.startsWith(Routes.Settings);
   // When no child route matches (e.g. /hello), only root is in matches; use minimal layout
-  const isNotFound =
-    canonicalPathname !== Routes.Root &&
-    canonicalPathname !== '' &&
-    matches.length <= 1;
+  const isNotFound = canonicalPathname !== Routes.Root && canonicalPathname !== '' && matches.length <= 1;
 
   if (isAuthPages || isProtectedPages || isNotFound) {
     return (

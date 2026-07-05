@@ -1,7 +1,9 @@
+import { ADMIN_WEB_BASE_URLS, IS_DEV } from '@extension/env';
 import { readFileSync } from 'node:fs';
 import type { ManifestType } from '@extension/shared';
 
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
+const adminWebBaseUrl = IS_DEV ? ADMIN_WEB_BASE_URLS.development : ADMIN_WEB_BASE_URLS.production;
 
 /**
  * @prop default_locale
@@ -31,12 +33,14 @@ const manifest = {
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
   host_permissions: [
-    '<all_urls>',
     'https://cloudapi.polymas.com/*',
     'https://hike-teaching-center.polymas.com/*',
-    'https://*.polymas.com/*',
+    'http://llm-service.polymas.com/*',
+    'https://llm-service.polymas.com/*',
+    `${adminWebBaseUrl}/*`,
   ],
-  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel', 'cookies', 'activeTab'],
+  optional_host_permissions: ['http://*/*', 'https://*/*'],
+  permissions: ['storage', 'tabs', 'sidePanel', 'cookies', 'activeTab'],
   options_page: 'options/index.html',
   background: {
     service_worker: 'background.js',
@@ -48,35 +52,7 @@ const manifest = {
   icons: {
     '128': 'icon-128.png',
   },
-  content_scripts: [
-    {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
-      js: ['content/all.iife.js'],
-    },
-    {
-      matches: ['https://example.com/*'],
-      js: ['content/example.iife.js'],
-    },
-    {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
-      js: ['content-ui/all.iife.js'],
-    },
-    {
-      matches: ['https://example.com/*'],
-      js: ['content-ui/example.iife.js'],
-    },
-    {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
-      css: ['content.css'],
-    },
-  ],
   devtools_page: 'devtools/index.html',
-  web_accessible_resources: [
-    {
-      resources: ['*.js', '*.css', '*.svg', 'icon-128.png', 'icon-34.png'],
-      matches: ['*://*/*'],
-    },
-  ],
   side_panel: {
     default_path: 'side-panel/index.html',
   },

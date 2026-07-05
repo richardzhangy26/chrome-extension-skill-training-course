@@ -1,6 +1,7 @@
 import { getMessageList } from '@/lib/locale';
 import { m } from '@/locale/paraglide/messages';
 import { clientEnv } from '@/env/client';
+import { getR2AssetUrl } from '@/config/r2-assets';
 import type { WebsiteConfig } from '../types';
 import { DEFAULT_ALLOWED_TYPES, DEFAULT_MAX_FILE_SIZE, DEFAULT_USER_FILES_FOLDER } from '@/storage/constants';
 
@@ -44,9 +45,9 @@ export const websiteConfig: WebsiteConfig = {
       return m.site_description();
     },
     images: {
-      ogImage: '/og.png',
-      logoLight: '/logo.png',
-      logoDark: '/logo-dark.png',
+      ogImage: getR2AssetUrl('og.png'),
+      logoLight: getR2AssetUrl('logo.png'),
+      logoDark: getR2AssetUrl('logo-dark.png'),
     },
   },
   social: {

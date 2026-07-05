@@ -1,28 +1,35 @@
-# packages/ui KNOWLEDGE BASE
+# packages/ui Agent Guide
 
-## OVERVIEW
-Shared React UI component library for the extension.
+## Overview
+`packages/ui` is the shared React UI component library for extension surfaces. It should provide reusable presentation primitives without owning Chrome APIs, background messaging, Polymas calls, Admin Web auth, or storage synchronization policy.
 
-## STRUCTURE
-```
+## Structure
+```text
 packages/ui/lib/
-├── assets/       # Static assets like SVGs
-├── components/   # React components (agent-chat, error-display, etc.)
-├── utils.ts      # UI-specific utilities (e.g., `cn` for Tailwind class merging)
+├── assets/       # Static assets such as SVGs
+├── components/   # Reusable React components
+├── utils.ts      # UI helpers such as cn()
 └── index.ts      # Package exports
 ```
 
-## WHERE TO LOOK
+## Where To Look
 | Task | Location | Notes |
-|------|----------|-------|
+| --- | --- | --- |
 | Chat UI | `lib/components/agent-chat/` | Reusable message bubbles, inputs, and step indicators |
 | Error UI | `lib/components/error-display/` | Error boundaries and fallback views |
+| Utility classes | `lib/utils.ts` | Tailwind class merging helpers |
 
-## CONVENTIONS
-- UI components use standard Tailwind CSS classes and the `cn()` utility for merging.
-- **ESM Imports**: Relative imports must include the `.js` extension (e.g., `import { cn } from '../../utils.js';`) to support proper module resolution in Vite/ESBuild output.
-- React components use PascalCase, and hooks use camelCase.
-- Maintain generic UI state; complex domain logic should be handled by the consuming page/feature.
+## Conventions
+- Components use PascalCase.
+- Hooks use camelCase with a `use` prefix.
+- Use Tailwind classes and `cn()` for class composition.
+- Relative ESM imports must include the `.js` extension.
+- Keep props explicit and behavior presentational. Domain state machines should live in consuming pages/hooks.
+- Export reusable components through package entrypoints when they are meant for cross-workspace use.
 
-## ANTI-PATTERNS (THIS PROJECT)
-- **NO business logic**: Do not fetch data or directly communicate with the Chrome background script from within this shared UI package.
+## Anti-Patterns
+- Do not fetch data here.
+- Do not call `chrome.*` here.
+- Do not communicate with the background service worker here.
+- Do not import `@extension/storage` for business behavior unless the component is explicitly a storage-aware shared UI pattern.
+- Do not place Admin Web login/config logic or Polymas training logic in this package.

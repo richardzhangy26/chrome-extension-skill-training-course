@@ -1,0 +1,21 @@
+Chrome Web Store 上传映射
+
+商店图标 *
+- store-icon-logo-128x128.png
+  备选：store-icon-128x128.png（AI 生成图标）
+
+以当地语言显示的屏幕截图 *
+- localized-screenshot-zh-1-task-detection-1280x800.jpg
+- localized-screenshot-zh-2-ai-training-1280x800.jpg
+- localized-screenshot-zh-3-voice-history-1280x800.jpg
+
+全球通用的屏幕截图 *
+- global-screenshot-1-task-detection-1280x800.jpg
+- global-screenshot-2-ai-training-1280x800.jpg
+- global-screenshot-3-voice-history-1280x800.jpg
+
+小型宣传图块
+- small-promo-tile-440x280.jpg
+
+顶部宣传图块
+- marquee-promo-tile-1400x560.jpg

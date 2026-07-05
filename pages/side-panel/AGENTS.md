@@ -1,49 +1,88 @@
-# pages/side-panel KNOWLEDGE BASE
+# pages/side-panel Agent Guide
 
-## OVERVIEW
-Primary UI surface (Chrome Side Panel) acting as the main LLM interaction chat interface for the Polymas training assistant. Supports two interaction modes, toggled via `ModeToggle.tsx`: text chat (`useAgentChat`) and voice/口语训练 (`useVoiceAgentChat`).
+## Overview
+`pages/side-panel` is the main Chrome extension UI for Polymas training. It supports:
+- Text training through Polymas REST APIs.
+- Voice training through the Polymas `trainFlow` WebSocket plus local TTS/audio framing.
+- LLM-driven AI student answers.
+- Dialogue simulation and knowledge-base configuration shared across text and voice modes.
+- Admin Web login/register and server-managed LLM configuration.
 
-## STRUCTURE
-```
+## Structure
+```text
 pages/side-panel/src/
-├── components/        # UI views and Modals (Settings, History, Debug, VoiceModeSettings, ModeToggle, etc.)
-├── hooks/              # Complex state management and logic (useAgentChat, useVoiceAgentChat, useMultiRoleRun)
+├── components/        # UI views and modals
+├── hooks/             # Conversation/auth state machines
 ├── services/
-│   ├── audio/          # TTS synthesis + PCM encoding for voice mode (tts-client, pcm-codec, frame-builder)
-│   ├── ws/              # WebSocket client for the Polymas training-flow channel (training-ws-client)
-│   ├── llm-service.ts   # LLM prompt formatting, student-answer generation, staged dialogue simulation
-│   ├── background-bridge.ts     # Side panel <-> background script messaging
-│   └── polymas-user-service.ts  # Cached fetch of current Polymas user/school id
-└── SidePanel.tsx       # Main application entry view
+│   ├── audio/         # TTS synthesis and PCM/audio frame helpers
+│   ├── ws/            # Polymas training-flow WebSocket client
+│   ├── llm-service.ts
+│   ├── background-bridge.ts
+│   ├── admin-web-service.ts
+│   └── polymas-user-service.ts
+├── types/
+└── SidePanel.tsx
 ```
 
-## WHERE TO LOOK
+## Where To Look
 | Task | Location | Notes |
-|------|----------|-------|
-| Chat Core Logic | `src/hooks/useAgentChat.ts` | Text-mode state machine managing the AI agent conversation |
-| Voice Chat Logic | `src/hooks/useVoiceAgentChat.ts` | Voice-mode state machine: `IDLE → CONNECTING → CONNECTED → SENDING_AUDIO → WAITING_SERVER → BOT_SPEAKING → COMPLETED/ERROR`. Drives the WS client + TTS pipeline and reuses the `ChatMessage` shape from `useAgentChat` so `MessageBubble`/`MessageList` stay shared. |
-| Multi-Role Logic| `src/hooks/useMultiRoleRun.ts`| State management for simulating multiple roles/personas |
-| Training WS Client | `src/services/ws/training-ws-client.ts` | Connects to `wss://cloudapi.polymas.com/ai-tools/ws/v2/trainFlow`; mirrors `auto_audio_train.py`'s `TrainingClient` (connect/listen_loop/send_json) with a heartbeat and event-handler callbacks (`onBotAnswer`, `onStepEnd`, `onTaskEnd`, ...) |
-| TTS / Audio Pipeline | `src/services/audio/tts-client.ts`, `pcm-codec.ts`, `frame-builder.ts` | `synthesizeTTS()` fetches raw or SSE-framed audio directly (not via `apiRequest`, to avoid JSON-mangling binary data); `mp3ToPcm16k()` decodes to 16k PCM; `buildAudioFrames()`/`buildSilenceFrame()` chunk it for the WS channel |
-| Polymas User Info | `src/services/polymas-user-service.ts` | `fetchPolymasUserInfo()` caches `{userId, schoolId}` in-memory; call `invalidatePolymasUserInfo()` on auth changes |
-| LLM Requests | `src/services/llm-service.ts` | Configuration and formatting of LLM API prompts. Dialogue simulation is generated **stage-by-stage** (`generateSimulationDialogueStage`), not in one shot, to avoid single-call token-limit truncation; reports progress via an `onProgress` callback and retries once in a leaner mode on a detected `finishReason` truncation |
-| Settings | `src/components/SettingsModal.tsx`, `VoiceModeSettings.tsx` | Configuring prompts, endpoints, student personas, and voice-mode-specific options (TTS model/voice/speed/format) |
-| Dialogue Simulation UI | `src/components/SimulationConfigModal.tsx` | Drives staged generation, surfaces per-stage progress, and cleans up generation state via try/finally on error |
-| Admin Web Login | `src/hooks/useAdminWebAuth.ts`, `src/components/AuthPanel.tsx` | In-extension email/password login/register against the Admin Web's Better Auth. Hook owns login state (via `authSessionStorage`), pulls LLM config down on login, and seeds the server from local on first login |
-| Admin Web Service | `src/services/admin-web-service.ts` | `signUp/signIn/signOut/getSession/fetchLlmConfig/pushLlmConfig` over the background `ADMIN_WEB_REQUEST` channel; persists the bearer token (`set-auth-token`) into `authSessionStorage`; clears session on 401 |
+| --- | --- | --- |
+| Text chat state | `src/hooks/useAgentChat.ts` | `IDLE -> FETCHING_STEPS -> RUNNING_CARD -> CHATTING -> COMPLETED` |
+| Voice chat state | `src/hooks/useVoiceAgentChat.ts` | `IDLE -> CONNECTING -> CONNECTED -> SENDING_AUDIO -> WAITING_SERVER -> BOT_SPEAKING -> COMPLETED/ERROR` |
+| Voice WS client | `src/services/ws/training-ws-client.ts` | Connects to `wss://cloudapi.polymas.com/ai-tools/ws/v2/trainFlow`; owns message handlers and heartbeat |
+| TTS/audio pipeline | `src/services/audio/tts-client.ts`, `pcm-codec.ts`, `frame-builder.ts` | TTS is fetched directly, decoded to 16k PCM, then chunked for the WS channel |
+| LLM requests | `src/services/llm-service.ts` | Payload building, model config, student answers, stage-by-stage simulation generation |
+| Simulation UI | `src/components/SimulationConfigModal.tsx`, `SimulationConfigBar.tsx` | Shared text/voice controls for dialogue simulation and knowledge base |
+| Settings UI | `src/components/SettingsModal.tsx`, `VoiceModeSettings.tsx` | LLM settings and voice/TTS settings |
+| Admin Web auth | `src/hooks/useAdminWebAuth.ts`, `src/components/AuthPanel.tsx` | Login/register/session state and config pull-down |
+| Admin Web requests | `src/services/admin-web-service.ts` | Calls Better Auth and extension config APIs over `ADMIN_WEB_REQUEST` |
+| Background bridge | `src/services/background-bridge.ts` | Typed message bridge to the MV3 background service worker |
+| Polymas user info | `src/services/polymas-user-service.ts` | Cached `{ userId, schoolId }`; invalidate on auth changes |
 
-## CONVENTIONS
-- Separates presentation (React components) from logic (Hooks) strictly.
-- Communicates with the background worker via `background-bridge.ts`.
-- Subscribes to shared Chrome storage via `@extension/storage` hooks to read API Keys and configurations.
-- Voice-mode services talk to Polymas directly (`fetch`/`WebSocket`) rather than through `background-bridge`'s `apiRequest`, since that path JSON-parses responses and would corrupt binary audio.
+## Mode And Runtime Rules
+- `ModeToggle.tsx` switches between text training and voice training; the mode is persisted in `llmConfigStorage.voiceModeEnabled`.
+- Text and voice sessions must reset cleanly when switching modes.
+- Voice mode sends generated or manually-entered student text through TTS, PCM conversion, and the WS audio frame sender.
+- Voice-mode services talk directly to Polymas via `fetch`/`WebSocket`; do not route binary TTS audio through `apiRequest`, because that path JSON-parses responses.
+- Manual voice text input is TTS-sent as user audio. Simulation/knowledge-base content only affects AI auto-generation, matching text-mode behavior.
 
-## ADMIN WEB LOGIN & CONFIG SYNC (v1)
-- Two independent backends coexist: **Polymas** (training content, `ai-poly` cookie, unchanged) and the **Admin Web** (own Better Auth, for user login + LLM config).
-- Auth uses Better Auth's **bearer** token: `admin-web-service.signIn` reads the `set-auth-token` response header and stores it in `authSessionStorage`; subsequent calls go through background `ADMIN_WEB_REQUEST` with `Authorization: Bearer`. This channel is separate from polymas's `API_REQUEST` (different base URL, no cookie auth).
-- **Config sovereignty**: when logged in, the Admin Web is the source of truth. `useAdminWebAuth` pulls config into `llmConfigStorage` on login; `SettingsModal`/`SimulationConfigModal` go read-only (a `readOnly` prop wraps their body in `<fieldset disabled>` + hides save). Logged out → local editing as before. Config flow is one-way (server → extension); first login with no server config seeds the server from local.
-- Email verification is required by the Admin Web; the verification link opens in the browser (not the extension), then the user logs in from the panel.
+## Dialogue Simulation And Knowledge Base
+- `llmConfigStorage` is the single source for:
+  - `dialogueSimulationEnabled`
+  - `dialogueSimulationContent`
+  - `knowledgeBaseEnabled`
+  - `knowledgeBaseContent`
+  - `studentProfiles`
+  - `studentProfileId`
+- `SimulationConfigBar.tsx` is shared by text and voice modes. Do not fork separate simulation toggle UIs unless behavior truly diverges.
+- Voice mode already consumes simulation/knowledge-base content through `generateStudentAnswer()` -> `buildStudentRoleSystemPrompt()`. Adding a new runtime branch is usually wrong.
+- `generateSimulationDialogueStage` is intentionally stage-by-stage and reports progress. Do not replace it with one long LLM call; long one-shot prompts previously truncated.
+- `SimulationConfigModal` must clean async generation state in `finally` so failures do not leave the UI stuck.
 
-## ANTI-PATTERNS (THIS PROJECT)
-- **NO generic components**: Do not build generic buttons or loaders here; import them from `@extension/ui`.
-- **NO Chrome API direct usage**: Avoid using `chrome.*` directly if a wrapper exists in `@extension/shared` or `@extension/storage`.
+## Admin Web Login And Config Sync
+- Admin Web auth is separate from Polymas auth.
+- `admin-web-service.ts` handles `signUp`, `signIn`, `signOut`, `getSession`, `fetchLlmConfig`, and `pushLlmConfig`.
+- Better Auth returns the bearer token in `set-auth-token`; store it through `authSessionStorage`.
+- All authenticated Admin Web requests go through `background-bridge.adminWebRequest()` with `auth: true`.
+- `useAdminWebAuth` owns session state and config synchronization:
+  - startup checks an existing token with `getSession`;
+  - login pulls config down;
+  - `GET /api/extension/config` returning `config:null` means seed the server once from local `llmConfigStorage`;
+  - any 401 clears local auth session.
+- When logged in, Admin Web is the config source of truth. `SettingsModal` and `SimulationConfigModal` should be read-only; users edit config at `/settings/extension`.
+- When logged out, local config remains editable.
+
+## Conventions
+- Keep presentation in React components and stateful workflow logic in hooks.
+- Use `background-bridge.ts` instead of direct `chrome.runtime.sendMessage` in feature code.
+- Use `@extension/storage` and `@extension/ui`; do not import across workspace packages with deep relative paths.
+- Shared UI belongs in `@extension/ui`. Do not create generic buttons/loaders in side-panel unless they are truly local to this page.
+- Keep exports at the end of files to satisfy root ESLint.
+- Use arrow functions rather than function declarations in extension TypeScript/TSX.
+
+## Anti-Patterns
+- Do not call `chrome.*` directly from side-panel code if a bridge/storage wrapper exists.
+- Do not mix Admin Web bearer tokens into Polymas `API_REQUEST` calls.
+- Do not mix Polymas `ai-poly` cookie auth into Admin Web requests.
+- Do not add duplicate simulation/knowledge-base state outside `llmConfigStorage`.
+- Do not make logged-in config editable in the extension; it should remain read-only until the sync model changes.

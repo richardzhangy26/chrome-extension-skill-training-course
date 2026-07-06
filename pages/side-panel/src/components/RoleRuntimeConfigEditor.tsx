@@ -44,6 +44,7 @@ const RoleRuntimeConfigEditor = ({ value, onChange, readOnly = false }: RoleRunt
       </label>
       {draft.dialogueSimulationEnabled && (
         <textarea
+          aria-label="该角色的独立对话剧本"
           value={draft.dialogueSimulationContent}
           disabled={readOnly}
           onChange={event => update({ dialogueSimulationContent: event.target.value })}
@@ -64,6 +65,7 @@ const RoleRuntimeConfigEditor = ({ value, onChange, readOnly = false }: RoleRunt
       </label>
       {draft.knowledgeBaseEnabled && (
         <textarea
+          aria-label="该角色的独立知识库"
           value={draft.knowledgeBaseContent}
           disabled={readOnly}
           onChange={event => update({ knowledgeBaseContent: event.target.value })}

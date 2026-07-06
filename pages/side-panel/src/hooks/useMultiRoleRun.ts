@@ -82,6 +82,7 @@ const createRoleRunState = (draft: RoleRunDraft, profile: StudentProfile): RoleR
   dialogueRound: 0,
   logSessionId: null,
   error: null,
+  runtimeConfigOverride: null,
 });
 
 const addRoleMessage = (

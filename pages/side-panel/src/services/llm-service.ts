@@ -6,6 +6,7 @@
 import { apiRequest, API_ENDPOINTS } from './background-bridge';
 import { assertHostPermission } from './host-permission-service';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_PROFILE_ID, llmConfigStorage, normalizeLLMConfig } from '@extension/storage';
+import type { RoleRuntimeConfig } from '../types/multi-role-types';
 import type { LLMConfig, StudentProfile } from '@extension/storage';
 
 interface ChatMessage {
@@ -81,6 +82,7 @@ type GeneratorProfile = 'good' | 'medium' | 'poor';
 
 interface RuntimeProfileOverride {
   profile: StudentProfile;
+  runtimeConfigOverride?: RoleRuntimeConfig;
 }
 
 interface DialogueGeneratorStage {
@@ -500,9 +502,15 @@ const buildStudentRoleSystemPrompt = (
     LLMConfig,
     'dialogueSimulationEnabled' | 'dialogueSimulationContent' | 'knowledgeBaseEnabled' | 'knowledgeBaseContent'
   >,
+  runtimeConfigOverride?: RoleRuntimeConfig,
 ) => {
-  const dialogueSimulationContent = config.dialogueSimulationEnabled
-    ? normalizeDialogueSimulationContent(config.dialogueSimulationContent)
+  const effectiveDialogueEnabled = runtimeConfigOverride?.dialogueSimulationEnabled ?? config.dialogueSimulationEnabled;
+  const effectiveDialogueContent = runtimeConfigOverride?.dialogueSimulationContent ?? config.dialogueSimulationContent;
+  const effectiveKnowledgeEnabled = runtimeConfigOverride?.knowledgeBaseEnabled ?? config.knowledgeBaseEnabled;
+  const effectiveKnowledgeContent = runtimeConfigOverride?.knowledgeBaseContent ?? config.knowledgeBaseContent;
+
+  const dialogueSimulationContent = effectiveDialogueEnabled
+    ? normalizeDialogueSimulationContent(effectiveDialogueContent)
     : '';
   const fallbackHint = profile.fallbackHint?.trim();
 
@@ -529,7 +537,7 @@ const buildStudentRoleSystemPrompt = (
     );
   }
 
-  const knowledgeBaseContent = config.knowledgeBaseEnabled ? config.knowledgeBaseContent.trim() : '';
+  const knowledgeBaseContent = effectiveKnowledgeEnabled ? effectiveKnowledgeContent.trim() : '';
   if (knowledgeBaseContent) {
     sections.push(
       '## 参考知识库（次优先级）',
@@ -660,7 +668,12 @@ const generateStudentAnswer = async (
   try {
     const systemPrompt = resolveSystemPrompt(config);
     const profile = runtimeOverride?.profile ?? resolveStudentProfile(config);
-    const roleSystemPrompt = buildStudentRoleSystemPrompt(systemPrompt, profile, config);
+    const roleSystemPrompt = buildStudentRoleSystemPrompt(
+      systemPrompt,
+      profile,
+      config,
+      runtimeOverride?.runtimeConfigOverride,
+    );
 
     const historyMessages: ChatMessage[] = [];
     for (const turn of conversationHistory.slice(-config.maxHistoryRounds)) {

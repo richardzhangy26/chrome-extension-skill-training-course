@@ -521,7 +521,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
         if (isTerminalStepId(data.nextStepId)) {
           updateRole(roleIndex, r =>
             addRoleMessage(
-              { ...r, currentStepId: data.nextStepId, workflowState: 'COMPLETED' },
+              { ...r, currentStepId: data.nextStepId ?? null, workflowState: 'COMPLETED' },
               'system',
               '✅ 训练已完成！',
             ),
@@ -756,7 +756,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
             if (isTerminalStepId(data.nextStepId)) {
               updateRole(roleIndex, r =>
                 addRoleMessage(
-                  { ...r, currentStepId: data.nextStepId, workflowState: 'COMPLETED' },
+                  { ...r, currentStepId: data.nextStepId ?? null, workflowState: 'COMPLETED' },
                   'system',
                   '✅ 训练已完成！',
                 ),

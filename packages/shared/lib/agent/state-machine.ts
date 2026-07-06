@@ -3,8 +3,8 @@
  * 遵循开闭原则，通过配置扩展而非修改
  */
 
-import type { WorkflowState } from './types.js';
 import { WORKFLOW_TRANSITIONS } from './constants.js';
+import type { WorkflowState } from './types.js';
 
 export interface StateTransition {
   from: WorkflowState;
@@ -75,6 +75,5 @@ export class WorkflowStateMachine {
 }
 
 // 创建状态机实例的工厂函数
-export function createWorkflowStateMachine(initialState?: WorkflowState): WorkflowStateMachine {
-  return new WorkflowStateMachine(initialState);
-}
+export const createWorkflowStateMachine = (initialState?: WorkflowState): WorkflowStateMachine =>
+  new WorkflowStateMachine(initialState);

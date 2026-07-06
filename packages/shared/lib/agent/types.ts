@@ -75,11 +75,7 @@ export interface ChatResponse {
 }
 
 // ============ Background消息类型 ============
-export type BackgroundMessageType =
-  | 'GET_CURRENT_TAB_URL'
-  | 'GET_AUTH'
-  | 'EXTRACT_TRAIN_TASK_ID'
-  | 'API_REQUEST';
+export type BackgroundMessageType = 'GET_CURRENT_TAB_URL' | 'GET_AUTH' | 'EXTRACT_TRAIN_TASK_ID' | 'API_REQUEST';
 
 export interface BackgroundMessage<T = unknown> {
   type: BackgroundMessageType;

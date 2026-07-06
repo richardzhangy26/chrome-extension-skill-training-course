@@ -1096,9 +1096,28 @@ const SidePanel = () => {
   const voice = useVoiceAgentChat();
 
   // Admin Web 登录态 hook
-  const { isLoggedIn, session, login, register, logout } = useAdminWebAuth();
+  const { isLoggedIn, session, login, register, logout, refreshConfig } = useAdminWebAuth();
   const currentUserId = session.user?.id ?? null;
   useHistorySync(isLoggedIn, currentUserId);
+
+  // 登录态下，侧边栏重新可见/获得焦点时从 admin_web 拉取最新配置，
+  // 网页改完配置切回插件即生效（无需重开侧边栏）。
+  useEffect(() => {
+    if (!isLoggedIn) {
+      return;
+    }
+    const pull = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshConfig();
+      }
+    };
+    document.addEventListener('visibilitychange', pull);
+    window.addEventListener('focus', pull);
+    return () => {
+      document.removeEventListener('visibilitychange', pull);
+      window.removeEventListener('focus', pull);
+    };
+  }, [isLoggedIn, refreshConfig]);
 
   // 训练模式：文字 / 口语
   const [mode, setMode] = useState<TrainingMode>('text');

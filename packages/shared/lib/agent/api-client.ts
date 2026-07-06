@@ -89,6 +89,4 @@ export class AgentApiClient {
 }
 
 // 创建API客户端实例的工厂函数
-export function createAgentApiClient(httpClient?: HttpClient): AgentApiClient {
-  return new AgentApiClient(httpClient);
-}
+export const createAgentApiClient = (httpClient?: HttpClient): AgentApiClient => new AgentApiClient(httpClient);

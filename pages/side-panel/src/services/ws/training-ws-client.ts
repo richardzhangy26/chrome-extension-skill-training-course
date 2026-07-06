@@ -45,7 +45,8 @@ interface TrainingWsHandlers {
 }
 
 const WS_BASE = 'wss://cloudapi.polymas.com/ai-tools/ws/v2/trainFlow';
-const HEARTBEAT_INTERVAL_MS = 30_000;
+// 浏览器 WebSocket 发不了协议层 ping（auto_audio_train.py 有 ping_interval=20 兜底），用更短的应用层心跳补偿
+const HEARTBEAT_INTERVAL_MS = 20_000;
 const OPEN_TIMEOUT_MS = 10_000;
 
 class TrainingWsClient {
@@ -53,6 +54,10 @@ class TrainingWsClient {
   private readonly handlers: TrainingWsHandlers;
   private ws: WebSocket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  // 对齐 auto_audio_train.py 的 _ws_send_lock：音频帧发送期间不得插入 heartBeat 等文本帧，
+  // 否则服务端会把音频流提前收束（用户输入被截断）甚至丢会话
+  private audioSending = false;
+  private heartbeatPending = false;
 
   constructor(taskId: string, handlers: TrainingWsHandlers) {
     this.taskId = taskId;
@@ -144,6 +149,22 @@ class TrainingWsClient {
     return this.ws?.readyState ?? WebSocket.CLOSED;
   }
 
+  get isAudioSending(): boolean {
+    return this.audioSending;
+  }
+
+  beginAudioSend(): void {
+    this.audioSending = true;
+  }
+
+  endAudioSend(): void {
+    this.audioSending = false;
+    if (this.heartbeatPending) {
+      this.heartbeatPending = false;
+      this.sendEvent('heartBeat', {});
+    }
+  }
+
   private handleMessage(ev: MessageEvent): void {
     if (typeof ev.data !== 'string') {
       // 协议中服务端不发送二进制
@@ -203,6 +224,11 @@ class TrainingWsClient {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
+      if (this.audioSending) {
+        this.heartbeatPending = true;
+        console.log('[voice-ws] heartBeat deferred: audio frames in flight');
+        return;
+      }
       this.sendEvent('heartBeat', {});
     }, HEARTBEAT_INTERVAL_MS);
   }
@@ -212,6 +238,7 @@ class TrainingWsClient {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    this.heartbeatPending = false;
   }
 }
 

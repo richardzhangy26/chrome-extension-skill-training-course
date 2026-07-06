@@ -43,6 +43,8 @@ type VoiceState =
 
 const TRAINING_DOMAIN = 'hike-teaching-center.polymas.com';
 const FRAME_INTERVAL_MS = 100;
+// 对齐 auto_audio_train.py _send_next_step_safely 的 10s 排空等待
+const NEXT_STEP_DRAIN_TIMEOUT_MS = 10_000;
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
@@ -341,12 +343,16 @@ const useVoiceAgentChat = () => {
             stepJustStartedRef.current = true;
             pendingUserTextRef.current = null;
             addMessage('system', `进入下一个阶段——${nextStepName}`);
-            const drainPromise = new Promise<void>(resolve => {
-              audioDrainResolveRef.current = resolve;
-            });
-            Promise.race([drainPromise, sleep(2000)]).finally(() => {
+            if (wsRef.current?.isAudioSending) {
+              const drainPromise = new Promise<void>(resolve => {
+                audioDrainResolveRef.current = resolve;
+              });
+              Promise.race([drainPromise, sleep(NEXT_STEP_DRAIN_TIMEOUT_MS)]).finally(() => {
+                wsRef.current?.sendEvent('nextStep', { stepId: nextStepId });
+              });
+            } else {
               wsRef.current?.sendEvent('nextStep', { stepId: nextStepId });
-            });
+            }
           } else {
             isTaskCompleteRef.current = true;
             setVoiceState('COMPLETED');
@@ -407,26 +413,31 @@ const useVoiceAgentChat = () => {
     if (!ws) {
       throw new Error('WebSocket 未连接');
     }
-    for (const frame of frames) {
-      if (signal.aborted) {
-        return false;
+    ws.beginAudioSend();
+    try {
+      for (const frame of frames) {
+        if (signal.aborted) {
+          return false;
+        }
+        if (!ws.sendBinary(frame)) {
+          return false;
+        }
+        await sleep(FRAME_INTERVAL_MS);
       }
-      if (!ws.sendBinary(frame)) {
-        return false;
+      const silence = buildSilenceFrame();
+      for (let i = 0; i < SILENCE_TAIL_COUNT; i += 1) {
+        if (signal.aborted) {
+          return false;
+        }
+        if (!ws.sendBinary(silence)) {
+          return false;
+        }
+        await sleep(FRAME_INTERVAL_MS);
       }
-      await sleep(FRAME_INTERVAL_MS);
+      return true;
+    } finally {
+      ws.endAudioSend();
     }
-    const silence = buildSilenceFrame();
-    for (let i = 0; i < SILENCE_TAIL_COUNT; i += 1) {
-      if (signal.aborted) {
-        return false;
-      }
-      if (!ws.sendBinary(silence)) {
-        return false;
-      }
-      await sleep(FRAME_INTERVAL_MS);
-    }
-    return true;
   }, []);
 
   const sendUserText = useCallback(

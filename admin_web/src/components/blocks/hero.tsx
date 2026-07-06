@@ -3,6 +3,7 @@ import Container from '@/components/layout/container';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { IconArrowRight } from '@tabler/icons-react';
+import { getR2AssetUrl } from '@/config/r2-assets';
 import { DOWNLOAD_URL, REPO_URL } from '@/config/links';
 export default function HeroSection() {
   return (
@@ -72,7 +73,7 @@ export default function HeroSection() {
             <div className="inset-shadow-2xs ring-muted/50 dark:inset-shadow-white/20 bg-muted/50 relative mx-auto max-w-6xl overflow-hidden rounded-2xl border p-2 shadow-2xl shadow-cyan-950/20 ring-1 sm:p-4">
               <img
                 className="relative w-full rounded-xl bg-black"
-                src="/polymas-hero.png"
+                src={getR2AssetUrl('polymas-hero.webp')}
                 alt={m.block_hero_image_alt({ mode: 'dark' })}
                 fetchPriority="high"
                 width={1568}

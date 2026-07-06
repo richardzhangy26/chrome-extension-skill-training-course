@@ -86,6 +86,7 @@ const config = defineConfig({
     }),
     // https://developers.cloudflare.com/workers/framework-guides/web-apps/tanstack-start/
     cloudflare({
+      remoteBindings: false,
       viteEnvironment: {
         name: 'ssr',
       },

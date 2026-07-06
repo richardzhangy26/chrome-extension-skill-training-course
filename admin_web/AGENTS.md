@@ -1,101 +1,136 @@
-# AGENTS.md
+# admin_web Agent Guide
 
-This file provides guidance to Code Agents (Codex, Cursor, etc.) when working with code in this repository.
+## Overview
+`admin_web/` is the Admin Web for the Polymas training extension. It is a standalone TanStack Start + React application deployed to Cloudflare Workers. In this repository it owns:
+- Better Auth login/register/session management.
+- The extension LLM configuration API (`/api/extension/config`).
+- The web settings page for extension configuration (`/settings/extension`).
+- D1/Drizzle persistence for per-user extension config.
+- Cloudflare Workers deployment settings and runtime adaptations.
 
-## Project Overview
-
-**TanStarter** (mkfast-template) — a full-stack SaaS boilerplate built with TanStack Start + React 19, deployed on Cloudflare Workers. Includes auth (Better Auth), payments (Stripe / Creem), email (Resend / Cloudflare Email), storage (Cloudflare R2), database (Cloudflare D1 via Drizzle ORM), blog (Content Collections), and admin dashboard.
+This subproject has its own `package.json`, lockfile, pnpm version, formatter, and deployment workflow. Treat it as separate from the root extension workspace.
 
 ## Commands
+Run from `admin_web/`.
 
 ```bash
 pnpm dev                    # Dev server on port 3000
-pnpm build                  # Production build
-pnpm deploy                 # Build + deploy to Cloudflare Workers
+pnpm build                  # Production Cloudflare Worker build
+pnpm deploy                 # Build + wrangler deploy
 
-pnpm lint                   # Biome lint + format with auto-fix
-pnpm check                  # Biome lint (read-only, no auto-fix)
-pnpm format                 # Biome format only
+pnpm check                  # Biome check, read-only
+pnpm lint                   # Biome check --write
+pnpm format                 # Biome format --write
 pnpm knip                   # Find unused exports/dependencies
 
-pnpm db:generate            # Generate Drizzle migrations from schema
+pnpm db:generate            # Generate Drizzle migrations
 pnpm db:migrate:local       # Apply migrations to local D1
 pnpm db:migrate:remote      # Apply migrations to remote D1
-pnpm db:studio:local        # Open Drizzle Studio (local)
-pnpm db:studio:remote       # Open Drizzle Studio (remote)
+pnpm db:studio:local        # Drizzle Studio for local D1
+pnpm db:studio:remote       # Drizzle Studio for remote D1
 
-pnpm auth:schema:generate   # Regenerate Better Auth schema → src/db/auth.schema.ts
+pnpm auth:schema:generate   # Regenerate Better Auth schema
 pnpm email:dev              # React Email preview on port 3333
-pnpm cf-typegen             # Generate Cloudflare Worker types (also runs on postinstall)
+pnpm cf-typegen             # Generate Cloudflare Worker types
+pnpm sync-github-secrets    # Sync GitHub Actions secrets
+pnpm sync-worker-secrets    # Bulk upload Worker secrets
 ```
-
-No test framework is configured. Manual testing via `pnpm dev` and test routes in `src/routes/(tests)/`.
 
 ## Architecture
 
+### Runtime
+- TanStack Start serves React routes and server routes from Cloudflare Workers.
+- The Worker entrypoint is `src/server.ts`.
+- File-based routes live in `src/routes/`; `src/routeTree.gen.ts` is generated and must not be edited manually.
+- Cloudflare bindings are configured in `wrangler.jsonc`.
+
+### Extension Integration
+- Extension login/register uses Better Auth email/password endpoints.
+- The extension reads the Better Auth bearer token from the `set-auth-token` response header.
+- Authenticated extension requests send `Authorization: Bearer <token>` through background `ADMIN_WEB_REQUEST`.
+- The extension config API route is `src/routes/api/extension/config.ts`.
+- The web config page is `src/routes/settings/extension.tsx`.
+- The D1 table is `userLlmConfig` in `src/db/app.schema.ts`, keyed uniquely by `userId`.
+- The config shape is mirrored in `src/lib/llm-config-schema.ts`; keep it aligned with root `packages/storage/lib/impl/llm-config-storage.ts`.
+
 ### Request Flow
-Incoming request → Cloudflare Worker (`src/server.ts`) → TanStack Start handler → server functions execute (auth, DB, email) → React SSR → response with hydration state → client-side React hydration via TanStack Router.
+User request -> Cloudflare Worker -> TanStack Start route/server function -> Better Auth middleware or bearer session lookup -> D1/Drizzle -> React/JSON response.
 
-### Key Architectural Patterns
+Two API styles coexist:
+- Browser web UI uses cookie-backed Better Auth and `createServerFn()` with `authApiMiddleware`.
+- Extension cross-origin requests use API routes and bearer auth.
 
-- **File-based routing**: `src/routes/` maps to URL paths. `[param]` for dynamic segments, `$` for catch-all, `(group)` for layout-only groups, `__root.tsx` for root layout. Route tree auto-generates into `src/routeTree.gen.ts` — never edit this file.
+Do not replace one with the other unless the caller changes.
 
-- **Server functions**: Defined with `createServerFn()` from `@tanstack/react-start`. Located in `src/api/`. Support `.inputValidator()` (Zod) and `.middleware()` chains. Called directly from client code.
-
-- **Provider pattern**: Mail, storage, newsletter, notification, and payment each use a provider abstraction (`src/*/provider/`) so implementations can be swapped (e.g., `src/mail/provider/resend.ts`, `src/storage/provider/r2.ts`).
-
-- **Middleware**: `src/middlewares/auth-middleware.ts` (requires login) and `src/middlewares/admin-middleware.ts` (requires admin role) used with server functions.
-
-- **Environment variables**: Client-side uses `VITE_` prefix (build-time, via `src/env/client.ts`). Server-side uses Cloudflare Worker bindings/secrets (runtime, via `src/env/server.ts`). Both validated with Zod via `@t3-oss/env-core`.
-
-### Key Source Directories
-
+## Key Directories
 | Directory | Purpose |
-|-----------|---------|
-| `src/routes/` | File-based routes (pages, API handlers, webhooks) |
-| `src/api/` | Server functions (payment, users, contact, newsletter, files) |
-| `src/auth/` | Better Auth config (`auth.ts` server, `client.ts` client) |
-| `src/db/` | Drizzle schemas (`auth.schema.ts` auto-generated, `app.schema.ts` app tables), migrations, types |
-| `src/payment/` | Stripe / Creem integration (checkout, portal, webhooks) |
-| `src/mail/` | Resend / Cloudflare Email — provider, templates (React components), rendering |
-| `src/storage/` | Cloudflare R2 file storage |
-| `src/newsletter/` | Resend and Beehiiv newsletter via API |
-| `src/notification/` | Discord/Feishu webhook notifications |
-| `src/components/ui/` | shadcn/ui components (auto-generated, excluded from linting) |
-| `src/config/` | Site configuration (website.ts is the main config for features, pricing, metadata) |
-| `src/lib/` | Utilities (routes, SEO, formatters, markdown parsing) |
-| `src/hooks/` | React hooks (auth, payment, files, etc.) |
-| `content/` | Markdown content (blog, pages, changelog) for Content Collections |
-| `docs/` | Module-specific documentation (auth, db, payment, mail, storage, env, design) |
+| --- | --- |
+| `src/routes/` | File-based pages and API routes |
+| `src/routes/api/extension/` | Extension-facing bearer-authenticated routes |
+| `src/routes/settings/` | Authenticated settings pages |
+| `src/components/settings/extension/` | Extension config form |
+| `src/api/` | Server functions and data access helpers |
+| `src/auth/` | Better Auth server/client setup |
+| `src/db/` | Drizzle schemas, migrations, inferred types |
+| `src/lib/llm-config-schema.ts` | Server mirror of extension LLMConfig |
+| `src/middlewares/` | Auth/admin/guest middleware |
+| `src/config/` | Website and asset configuration |
+| `project.inlang/messages/` | Locale message files |
 
-### Database
+## Database
+- `src/db/schema.ts` merges:
+  - `auth.schema.ts`: Better Auth tables, generated by Better Auth.
+  - `app.schema.ts`: application tables such as `userLlmConfig`.
+- Use `getDb()` from `src/db/index.ts`.
+- Generate migrations with `pnpm db:generate`.
+- Apply local migrations before debugging local auth/data issues.
+- Apply remote migrations only when deployment scope explicitly includes remote D1.
 
-Two schema files merged in `src/db/schema.ts`:
-- `auth.schema.ts` — auto-generated by Better Auth (user, session, account, verification, apiKey)
-- `app.schema.ts` — application tables (userFiles, payment, etc.)
+## Cloudflare Workers Constraints
+- This code runs in Cloudflare Workers, not Node.js.
+- Avoid top-level access to Worker env/bindings in modules that may be imported during build or client bundling.
+- PR #5 fixed Worker startup failures by moving some `@/db`, `@/auth/auth`, and related imports into function-local `await import(...)`. Preserve that pattern when touching routes or APIs that would otherwise touch env at module evaluation time.
+- `vite.config.ts` contains a `cloudflare:workers` client stub so client builds do not import Worker-only APIs. Keep Worker-only imports out of client components.
+- Do not use Node-only APIs unless they are supported by the Worker compatibility flags and already used safely.
 
-Types inferred from tables in `src/db/types.ts`. Access via `getDb()` from `src/db/index.ts`.
+## Better Auth Rules
+- `src/auth/auth.ts` includes the `bearer()` plugin for extension auth.
+- Email/password login requires email verification.
+- `trustedOrigins` currently allows extension origins for Better Auth origin checks; production should use a stable extension ID when available.
+- Extension API routes should derive `userId` from `auth.api.getSession({ headers })`; do not trust user ids sent in request bodies.
 
-### Cloudflare Bindings (wrangler.jsonc)
-- `DB` — D1 database binding
-- `BUCKET` — R2 storage binding
+## Extension Config Rules
+- `LLMConfig` is stored as a JSON blob in D1 for simple field evolution.
+- Admin Web is the source of truth when the extension user is logged in.
+- API Key is stored in D1 as decided for the internal teaching tool. Do not introduce ad hoc encryption unless a task explicitly changes the security model.
+- The web form may edit LLM, student profile, simulation, knowledge-base, and TTS fields. Keep schema changes mirrored in extension storage.
+
+## Deploy And CI
+- GitHub Actions workflow is at repository root `.github/workflows/deploy.yml`.
+- Workflow run steps use `working-directory: admin_web`.
+- `pnpm/action-setup` must read `admin_web/package.json` via `package_json_file`; do not also pin `version:`, because that conflicts with root `packageManager`.
+- `wrangler.jsonc` deploys Worker `polymas-ability` with custom domain `polymasability.agicoderbit.com`.
+- The workflow triggers on `admin_web/**` and `.github/workflows/deploy.yml`.
 
 ## Code Style
+- Biome is the formatter/linter for this subproject.
+- File names are kebab-case.
+- Components use PascalCase.
+- Hooks use camelCase with a `use` prefix.
+- Imports use the `@/` alias for `src`.
+- Forms generally use `react-hook-form`, `@hookform/resolvers`, and Zod.
+- UI uses Tailwind CSS v4 and the local component patterns.
+- Icons use `@tabler/icons-react` unless a nearby component uses another local icon source.
 
-Enforced by Biome (`biome.json`):
-- 2-space indent, 80-char line width, single quotes, semicolons always, ES5 trailing commas
-- Files excluded from linting: `src/components/ui/`, `src/components/data-table/`, `src/db/`, `src/routeTree.gen.ts`, type definition files
+## Testing
+- No full test framework is configured here.
+- For code changes, run `pnpm check` and usually `pnpm build`.
+- For DB/schema changes, run `pnpm db:generate` and at least local migration validation.
+- For docs-only changes, `git diff --check` is enough.
 
-### Conventions
-- **File names**: kebab-case (`use-auth.ts`, `data-table.tsx`)
-- **Components**: PascalCase (`DataTable`, `LoginForm`)
-- **Hooks**: camelCase with `use` prefix
-- **Constants**: SCREAMING_SNAKE_CASE
-- **Imports**: Use `@/` path alias for all src imports. Order: external → internal (`@/`) → relative
-- **Forms**: `react-hook-form` + `@hookform/resolvers` + Zod
-- **State**: TanStack Query for server state (query key factory pattern)
-- **Styling**: Tailwind CSS v4 with `cn()` from `src/lib/utils.ts`, class-based dark mode
-- **Icons**: `@tabler/icons-react`
-
-### Cloudflare Workers Constraint
-Avoid Node.js-specific APIs — this runs on Cloudflare Workers runtime, not Node.js.
+## Anti-Patterns
+- Do not edit `src/routeTree.gen.ts` manually.
+- Do not use root workspace lint/type-check commands as a substitute for `admin_web` checks.
+- Do not assume root `pnpm@10.11.0`; this subproject uses its own `packageManager`.
+- Do not put extension-only code, `chrome.*`, or `@extension/*` imports into `admin_web`.
+- Do not call D1 or auth globals at module top-level when a lazy import avoids Worker startup/build problems.

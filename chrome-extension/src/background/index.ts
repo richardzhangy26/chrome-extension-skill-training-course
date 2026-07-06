@@ -1,5 +1,6 @@
 import 'webextension-polyfill';
-import { exampleThemeStorage, authSessionStorage } from '@extension/storage';
+import { ADMIN_WEB_BASE_URLS, IS_DEV } from '@extension/env';
+import { exampleThemeStorage, authSessionStorage, normalizeAuthToken } from '@extension/storage';
 
 // ============ 类型定义 ============
 interface BackgroundMessage<T = unknown> {
@@ -42,8 +43,7 @@ interface AdminWebRequestPayload {
 const AUTH_COOKIE_URL = 'https://hike-teaching-center.polymas.com/';
 const AUTH_COOKIE_NAME = 'ai-poly';
 const API_BASE_URL = 'https://cloudapi.polymas.com';
-// Admin Web 基址：dev=本地，prod=部署域名（见计划「前置条件 3」，prod 待回填）
-const ADMIN_WEB_BASE_URL = 'http://localhost:3000';
+const ADMIN_WEB_BASE_URL = IS_DEV ? ADMIN_WEB_BASE_URLS.development : ADMIN_WEB_BASE_URLS.production;
 const RETRYABLE_HTTP_STATUS = new Set([502, 503, 504]);
 const MAX_RETRY_COUNT = 2;
 
@@ -234,8 +234,16 @@ const handleAdminWebRequest = async (
 
     if (auth) {
       const session = await authSessionStorage.get();
-      if (session.token) {
-        headers['Authorization'] = `Bearer ${session.token}`;
+      const token = normalizeAuthToken(session.token);
+      if (token) {
+        // token 是登录响应体里的原始 session token（纯字母数字，传输安全），直接作 bearer。
+        // 不要对它做 encode/decode：扩展 Service Worker 的 fetch 对请求头里的 `%xx` 有不稳定解码，
+        // 任何百分号编码都可能被损坏（这正是早期用百分号编码的 set-auth-token 报 401 的根因）。
+        // 服务端 Better Auth bearer 插件（requireSignature 默认 false）会自行对原始 token 签名校验。
+        headers['Authorization'] = `Bearer ${token}`;
+        if (session.user && token !== session.token) {
+          await authSessionStorage.setSession(token, session.user);
+        }
       }
     }
 
@@ -244,7 +252,14 @@ const handleAdminWebRequest = async (
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
+      // Admin Web extension APIs are bearer-authenticated. Do not let same-origin
+      // Better Auth cookies override the Authorization header in local/dev Chrome.
+      credentials: 'omit',
     });
+
+    if (!response.ok) {
+      console.warn(`[admin-web] ${method} ${path} -> ${response.status} (${ADMIN_WEB_BASE_URL})`);
+    }
 
     const setAuthToken = response.headers.get('set-auth-token');
     let json: unknown = null;

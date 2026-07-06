@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { getBrandAssetUrl } from '@/config/brand-assets';
 import { websiteConfig } from '@/config/website';
 
 /**
@@ -23,15 +24,19 @@ export const Route = createFileRoute('/manifest.json')({
           background_color: '#09090b',
           theme_color: '#09090b',
           icons: [
-            { src: '/favicon.ico', sizes: '48x48', type: 'image/x-icon' },
             {
-              src: '/android-chrome-192x192.png',
+              src: getBrandAssetUrl('favicon.ico'),
+              sizes: '48x48',
+              type: 'image/x-icon',
+            },
+            {
+              src: getBrandAssetUrl('android-chrome-192x192.png'),
               sizes: '192x192',
               type: 'image/png',
               purpose: 'maskable',
             },
             {
-              src: '/android-chrome-512x512.png',
+              src: getBrandAssetUrl('android-chrome-512x512.png'),
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

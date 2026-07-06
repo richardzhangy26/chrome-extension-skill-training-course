@@ -1,6 +1,7 @@
-import { useRef, useEffect } from 'react';
-import { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';
+import { MessageBubble } from './MessageBubble.js';
 import { cn } from '../../utils.js';
+import { useRef, useEffect } from 'react';
+import type { MessageBubbleProps } from './MessageBubble.js';
 
 export interface Message extends MessageBubbleProps {
   id: string;
@@ -12,7 +13,7 @@ export interface MessageListProps {
   className?: string;
 }
 
-export function MessageList({ messages, isLoading = false, className }: MessageListProps) {
+export const MessageList = ({ messages, isLoading = false, className }: MessageListProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -22,12 +23,12 @@ export function MessageList({ messages, isLoading = false, className }: MessageL
   }, [messages.length]);
 
   return (
-    <div ref={containerRef} className={cn('flex-1 overflow-y-auto p-4 bg-gray-50', className)}>
+    <div ref={containerRef} className={cn('flex-1 overflow-y-auto bg-gray-50 p-4', className)}>
       {messages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full text-gray-400">
-          <div className="text-4xl mb-2">💬</div>
+        <div className="flex h-full flex-col items-center justify-center text-gray-400">
+          <div className="mb-2 text-4xl">💬</div>
           <div className="text-sm">暂无消息</div>
-          <div className="text-xs mt-1">点击开始按钮开启对话</div>
+          <div className="mt-1 text-xs">点击开始按钮开启对话</div>
         </div>
       ) : (
         <>
@@ -43,16 +44,16 @@ export function MessageList({ messages, isLoading = false, className }: MessageL
 
           {/* 加载指示器 */}
           {isLoading && (
-            <div className="flex justify-start mb-3">
-              <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+            <div className="mb-3 flex justify-start">
+              <div className="rounded-2xl rounded-bl-md border border-gray-200 bg-white px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '0ms' }} />
                   <div
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
                     style={{ animationDelay: '150ms' }}
                   />
                   <div
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
                     style={{ animationDelay: '300ms' }}
                   />
                 </div>
@@ -66,4 +67,4 @@ export function MessageList({ messages, isLoading = false, className }: MessageL
       <div ref={bottomRef} />
     </div>
   );
-}
+};

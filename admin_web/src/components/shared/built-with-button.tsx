@@ -1,20 +1,24 @@
 import { buttonVariants } from '@/components/ui/button';
+import { REPO_URL } from '@/config/links';
+import { websiteConfig } from '@/config/website';
 import { cn } from '@/lib/utils';
 
 export default function BuiltWithButton() {
+  const name = websiteConfig.metadata?.name ?? 'Polymas 训练助手';
+  const logo = websiteConfig.metadata?.images?.logoLight ?? '/logo.png';
+
   return (
     <a
       target="_blank"
       rel="noopener noreferrer"
-      href="https://tanstarter.com?utm_source=built-with-tanstarter"
+      href={REPO_URL}
       className={cn(
         buttonVariants({ variant: 'outline', size: 'sm' }),
-        'border border-border px-4 py-4 rounded-md gap-2'
-      )}
-    >
-      <span>Built with</span>
-      <img src="/tanstarter.png" alt="TanStarter" className="size-5" />
-      <span className="font-semibold">TanStarter</span>
+        'border-border gap-2 rounded-md border px-4 py-4',
+      )}>
+      <span>开源项目</span>
+      <img src={logo} alt={`${name} logo`} className="size-5" />
+      <span className="font-semibold">{name}</span>
     </a>
   );
 }

@@ -34,6 +34,8 @@ const useHistorySync = (isLoggedIn: boolean, userId: string | null): void => {
       }
       if (!result.ok) {
         // 拉取失败：不动本地、不进入对账（避免把本地误当独有上传）。
+        const code = result.code ? ` (${result.code})` : '';
+        console.warn(`[history-sync] 拉取历史失败，跳过登录合并：${result.status} ${result.message}${code}`);
         return;
       }
       const cloud = new Map(result.sessions.map(s => [s.id, s]));
@@ -131,11 +133,11 @@ const useHistorySync = (isLoggedIn: boolean, userId: string | null): void => {
         clearTimeout(debounceRef.current);
       }
       debounceRef.current = setTimeout(() => {
-        reconcileChanges().catch(() => {});
+        reconcileChanges().catch(e => console.warn('[history-sync] 对账失败', e));
       }, DEBOUNCE_MS);
     };
 
-    mergeOnLogin().catch(() => {});
+    mergeOnLogin().catch(e => console.warn('[history-sync] 登录合并失败', e));
     const unsubscribe = agentLogStorage.subscribe(handleChange);
 
     return () => {

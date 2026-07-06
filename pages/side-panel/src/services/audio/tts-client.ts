@@ -3,6 +3,7 @@
  * 不走 apiRequest（避免响应被按 JSON 解析导致二进制损坏）
  */
 
+import { assertHostPermission } from '../host-permission-service';
 import { llmConfigStorage, normalizeLLMConfig } from '@extension/storage';
 
 interface TTSSynthesizeOptions {
@@ -84,6 +85,7 @@ const fetchTtsOnce = async (text: string, opts?: TTSSynthesizeOptions): Promise<
     response_format: config.ttsResponseFormat,
   });
 
+  await assertHostPermission(config.ttsApiUrl);
   const response = await fetch(config.ttsApiUrl, {
     method: 'POST',
     headers,

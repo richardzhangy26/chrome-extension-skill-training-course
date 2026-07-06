@@ -1,5 +1,6 @@
-import { useState, useCallback, type KeyboardEvent } from 'react';
 import { cn } from '../../utils.js';
+import { useState, useCallback } from 'react';
+import type { KeyboardEvent } from 'react';
 
 export interface ChatInputProps {
   onSend: (content: string) => void;
@@ -8,12 +9,12 @@ export interface ChatInputProps {
   placeholder?: string;
 }
 
-export function ChatInput({
+export const ChatInput = ({
   onSend,
   onAutoGenerate,
   disabled = false,
   placeholder = '输入回答...',
-}: ChatInputProps) {
+}: ChatInputProps) => {
   const [value, setValue] = useState('');
 
   const handleSend = useCallback(() => {
@@ -60,7 +61,7 @@ export function ChatInput({
           className={cn(
             'flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2',
             'focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500',
-            'disabled:bg-gray-100 disabled:cursor-not-allowed',
+            'disabled:cursor-not-allowed disabled:bg-gray-100',
             'text-sm',
           )}
         />
@@ -73,9 +74,9 @@ export function ChatInput({
             disabled={disabled}
             title="AI自动回答"
             className={cn(
-              'p-2 rounded-lg transition-colors',
+              'rounded-lg p-2 transition-colors',
               'bg-purple-500 text-white hover:bg-purple-600',
-              'disabled:bg-gray-300 disabled:cursor-not-allowed',
+              'disabled:cursor-not-allowed disabled:bg-gray-300',
             )}>
             🤖
           </button>
@@ -86,9 +87,9 @@ export function ChatInput({
             disabled={disabled || !value.trim()}
             title="发送消息"
             className={cn(
-              'p-2 rounded-lg transition-colors',
+              'rounded-lg p-2 transition-colors',
               'bg-blue-500 text-white hover:bg-blue-600',
-              'disabled:bg-gray-300 disabled:cursor-not-allowed',
+              'disabled:cursor-not-allowed disabled:bg-gray-300',
             )}>
             📤
           </button>
@@ -96,9 +97,9 @@ export function ChatInput({
       </div>
 
       {/* 快捷键提示 */}
-      <div className="mt-2 text-xs text-gray-400 text-center">
+      <div className="mt-2 text-center text-xs text-gray-400">
         💡 回车=发送 | 空输入+回车=AI自动回答 | Shift+回车=换行
       </div>
     </div>
   );
-}
+};

@@ -1,6 +1,6 @@
 import { cn } from '../../utils.js';
 
-export type WorkflowState =
+type WorkflowState =
   | 'IDLE'
   | 'FETCHING_STEPS'
   | 'FETCHING_FIRST_STEP'
@@ -9,7 +9,7 @@ export type WorkflowState =
   | 'COMPLETED'
   | 'ERROR';
 
-export interface StepIndicatorProps {
+interface StepIndicatorProps {
   state: WorkflowState;
   dialogueRound?: number;
   className?: string;
@@ -25,13 +25,13 @@ const STATE_CONFIG: Record<WorkflowState, { label: string; color: string; icon: 
   ERROR: { label: '出错了', color: 'bg-red-500', icon: '❌' },
 };
 
-export function StepIndicator({ state, dialogueRound = 0, className }: StepIndicatorProps) {
+const StepIndicator = ({ state, dialogueRound = 0, className }: StepIndicatorProps) => {
   const config = STATE_CONFIG[state];
 
   return (
-    <div className={cn('flex items-center gap-2 px-3 py-1.5 rounded-full text-xs', className)}>
+    <div className={cn('flex items-center gap-2 rounded-full px-3 py-1.5 text-xs', className)}>
       {/* 状态指示点 */}
-      <div className={cn('w-2 h-2 rounded-full', config.color, state === 'CHATTING' && 'animate-pulse')} />
+      <div className={cn('h-2 w-2 rounded-full', config.color, state === 'CHATTING' && 'animate-pulse')} />
 
       {/* 状态图标和文字 */}
       <span className="text-gray-600">
@@ -39,9 +39,10 @@ export function StepIndicator({ state, dialogueRound = 0, className }: StepIndic
       </span>
 
       {/* 对话轮次 */}
-      {state === 'CHATTING' && dialogueRound > 0 && (
-        <span className="text-gray-400 ml-1">第{dialogueRound}轮</span>
-      )}
+      {state === 'CHATTING' && dialogueRound > 0 && <span className="ml-1 text-gray-400">第{dialogueRound}轮</span>}
     </div>
   );
-}
+};
+
+export type { WorkflowState, StepIndicatorProps };
+export { StepIndicator };

@@ -48,6 +48,11 @@ const GENERATOR_PROFILE_OPTIONS: Array<{
     label: '差学生',
     description: '故意偏离，用于测试边界情况，不强制通关。',
   },
+  {
+    value: 'custom',
+    label: '自定义',
+    description: '用自定义提示词控制生成，例如「好学生走 A 路径」。',
+  },
 ];
 
 const SimulationConfigModal = ({
@@ -60,6 +65,7 @@ const SimulationConfigModal = ({
   const [draft, setDraft] = useState<SimulationConfigDraft>(createEmptyDraft);
   const [isSaving, setIsSaving] = useState(false);
   const [generatorProfile, setGeneratorProfile] = useState<GeneratorProfile>('good');
+  const [customInstruction, setCustomInstruction] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateProgress, setGenerateProgress] = useState<SimulationGenerationProgress | null>(null);
@@ -111,6 +117,12 @@ const SimulationConfigModal = ({
       return;
     }
 
+    const trimmedCustomInstruction = customInstruction.trim();
+    if (generatorProfile === 'custom' && !trimmedCustomInstruction) {
+      setGenerateError('请先填写自定义生成要求。');
+      return;
+    }
+
     setIsGenerating(true);
     setGenerateError(null);
     setGenerateProgress(null);
@@ -119,6 +131,7 @@ const SimulationConfigModal = ({
       const result = await generateSimulationDialogueRecord({
         trainTaskId,
         profile: generatorProfile,
+        customInstruction: generatorProfile === 'custom' ? trimmedCustomInstruction : undefined,
         onProgress: setGenerateProgress,
       });
 
@@ -250,7 +263,9 @@ const SimulationConfigModal = ({
                   <button
                     type="button"
                     onClick={handleGenerate}
-                    disabled={isGenerating || !trainTaskId}
+                    disabled={
+                      isGenerating || !trainTaskId || (generatorProfile === 'custom' && !customInstruction.trim())
+                    }
                     className="cursor-pointer rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 px-3 py-2 text-xs font-medium text-white transition-all hover:from-sky-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
                     {generateProgress
                       ? `生成中 ${generateProgress.current}/${generateProgress.total}`
@@ -260,7 +275,7 @@ const SimulationConfigModal = ({
                   </button>
                 </div>
 
-                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {GENERATOR_PROFILE_OPTIONS.map(option => {
                     const isSelected = generatorProfile === option.value;
                     return (
@@ -287,6 +302,28 @@ const SimulationConfigModal = ({
                     );
                   })}
                 </div>
+
+                {generatorProfile === 'custom' && (
+                  <div className="mt-3">
+                    <label
+                      htmlFor="customGeneratorInstruction"
+                      className="mb-1.5 block text-xs font-medium text-sky-900">
+                      自定义生成要求
+                    </label>
+                    <textarea
+                      id="customGeneratorInstruction"
+                      value={customInstruction}
+                      onChange={event => setCustomInstruction(event.target.value)}
+                      disabled={isGenerating}
+                      rows={3}
+                      placeholder="例如：生成一个好学生，在路由分支处选择 A 路径，其余阶段按最佳路线快速通关。"
+                      className="w-full resize-y rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    />
+                    <p className="mt-1 text-xs text-sky-700">
+                      剧本存在分支时，会先按你的要求在流程图中规划路径，再逐阶段生成对话；规划失败自动回退默认路径。
+                    </p>
+                  </div>
+                )}
 
                 {generateProgressText && (
                   <p className="mt-3 break-words text-xs text-sky-700">{generateProgressText}</p>

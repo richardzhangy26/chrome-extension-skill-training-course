@@ -9,7 +9,7 @@ import { MULTI_ROLE_POLL_INTERVAL_MS, MULTI_ROLE_RETRY_DELAY_MS } from '../types
 import { agentLogStorage, llmConfigStorage } from '@extension/storage';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ChatMessage, WorkflowState } from './useAgentChat';
-import type { RoleRunDraft, RoleRunState, MultiRoleRunBatch } from '../types/multi-role-types';
+import type { RoleRunDraft, RoleRunState, MultiRoleRunBatch, RoleRuntimeConfig } from '../types/multi-role-types';
 import type { AgentLogEntry, StudentProfile } from '@extension/storage';
 
 // ============ API 类型（复用 useAgentChat 中同构的定义） ============
@@ -71,7 +71,11 @@ const shouldRetryRequestError = (error: unknown) => {
 
 const isRoleTerminalState = (state: WorkflowState) => state === 'COMPLETED' || state === 'ERROR';
 
-const createRoleRunState = (draft: RoleRunDraft, profile: StudentProfile): RoleRunState => ({
+const createRoleRunState = (
+  draft: RoleRunDraft,
+  profile: StudentProfile,
+  runtimeConfigOverride: RoleRuntimeConfig | null = null,
+): RoleRunState => ({
   profileId: draft.profileId,
   profileLabel: draft.profileLabel,
   profile,
@@ -82,6 +86,7 @@ const createRoleRunState = (draft: RoleRunDraft, profile: StudentProfile): RoleR
   dialogueRound: 0,
   logSessionId: null,
   error: null,
+  runtimeConfigOverride,
 });
 
 const addRoleMessage = (
@@ -268,6 +273,13 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
     [updateRole],
   );
 
+  const updateRoleRuntimeConfig = useCallback(
+    (roleIndex: number, override: RoleRuntimeConfig | null) => {
+      updateRole(roleIndex, role => ({ ...role, runtimeConfigOverride: override }));
+    },
+    [updateRole],
+  );
+
   const isTerminalStepId = useCallback((stepId: string) => stepNodeTypeByIdRef.current[stepId] === 'SCRIPT_END', []);
 
   const updateBatchState = useCallback(() => {
@@ -433,9 +445,10 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
         }
       }
 
-      // 调用 LLM 生成（传入角色 profile override）
+      // 调用 LLM 生成（传入角色 profile + runtimeConfig override）
       const llmResult = await generateStudentAnswer(lastAssistant.content, conversationHistory, {
         profile: role.profile,
+        runtimeConfigOverride: role.runtimeConfigOverride ?? undefined,
       });
 
       if (!llmResult.success) {
@@ -521,7 +534,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
         if (isTerminalStepId(data.nextStepId)) {
           updateRole(roleIndex, r =>
             addRoleMessage(
-              { ...r, currentStepId: data.nextStepId, workflowState: 'COMPLETED' },
+              { ...r, currentStepId: data.nextStepId ?? null, workflowState: 'COMPLETED' },
               'system',
               '✅ 训练已完成！',
             ),
@@ -550,7 +563,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
   // ============ 公开 API ============
 
   const startMultiRoleRun = useCallback(
-    async (drafts: RoleRunDraft[]) => {
+    async (drafts: RoleRunDraft[], initialOverrides?: Record<string, RoleRuntimeConfig | null>) => {
       if (!trainTaskId || drafts.length === 0) return;
 
       setIsLoading(true);
@@ -627,7 +640,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
             console.warn(`⚠️ 角色 ${draft.profileLabel} 日志初始化失败`);
           }
 
-          const roleState = createRoleRunState(draft, profile);
+          const roleState = createRoleRunState(draft, profile, initialOverrides?.[draft.profileId] ?? null);
           roleState.logSessionId = logSessionId;
           roles.push(roleState);
         }
@@ -756,7 +769,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
             if (isTerminalStepId(data.nextStepId)) {
               updateRole(roleIndex, r =>
                 addRoleMessage(
-                  { ...r, currentStepId: data.nextStepId, workflowState: 'COMPLETED' },
+                  { ...r, currentStepId: data.nextStepId ?? null, workflowState: 'COMPLETED' },
                   'system',
                   '✅ 训练已完成！',
                 ),
@@ -880,6 +893,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
     startBatchAutoRun,
     stopBatchAutoRun,
     resetMultiRole,
+    updateRoleRuntimeConfig,
   };
 };
 

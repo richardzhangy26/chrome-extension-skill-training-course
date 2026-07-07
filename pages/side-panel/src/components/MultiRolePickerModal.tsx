@@ -3,21 +3,32 @@
  * 从 studentProfiles 中多选角色，确认后触发多人运行
  */
 
+import { RoleRuntimeConfigEditor } from './RoleRuntimeConfigEditor';
 import { MAX_MULTI_ROLE_COUNT } from '../types/multi-role-types';
 import { llmConfigStorage } from '@extension/storage';
 import { useEffect, useState } from 'react';
-import type { RoleRunDraft } from '../types/multi-role-types';
+import type { RoleRunDraft, RoleRuntimeConfig } from '../types/multi-role-types';
 import type { StudentProfile } from '@extension/storage';
 
 interface MultiRolePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (drafts: RoleRunDraft[]) => void;
+  onConfirm: (drafts: RoleRunDraft[], overrides: Record<string, RoleRuntimeConfig | null>) => void;
+  readOnly?: boolean;
 }
 
-const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerModalProps) => {
+const EMPTY_GLOBAL_RUNTIME_CONFIG: RoleRuntimeConfig = {
+  dialogueSimulationEnabled: false,
+  dialogueSimulationContent: '',
+  knowledgeBaseEnabled: false,
+  knowledgeBaseContent: '',
+};
+
+const MultiRolePickerModal = ({ isOpen, onClose, onConfirm, readOnly = false }: MultiRolePickerModalProps) => {
   const [profiles, setProfiles] = useState<StudentProfile[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [overrides, setOverrides] = useState<Record<string, RoleRuntimeConfig | null>>({});
+  const [globalRuntimeConfig, setGlobalRuntimeConfig] = useState<RoleRuntimeConfig>(EMPTY_GLOBAL_RUNTIME_CONFIG);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -28,6 +39,13 @@ const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerMod
       if (!isMounted) return;
       setProfiles(config.studentProfiles);
       setSelectedIds(new Set());
+      setOverrides({});
+      setGlobalRuntimeConfig({
+        dialogueSimulationEnabled: config.dialogueSimulationEnabled,
+        dialogueSimulationContent: config.dialogueSimulationContent,
+        knowledgeBaseEnabled: config.knowledgeBaseEnabled,
+        knowledgeBaseContent: config.knowledgeBaseContent,
+      });
     };
     void loadProfiles();
 
@@ -39,6 +57,7 @@ const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerMod
   if (!isOpen) return null;
 
   const handleToggle = (id: string) => {
+    const willSelect = !selectedIds.has(id) && selectedIds.size < MAX_MULTI_ROLE_COUNT;
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -48,6 +67,11 @@ const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerMod
       }
       return next;
     });
+    if (willSelect) {
+      // 首次选中该角色时，用当前全局配置的 4 个字段种子该角色的 override，
+      // 使编辑器打开时展示"生效中"的全局值；已存在的 override 不覆盖。
+      setOverrides(prev => (prev[id] !== undefined ? prev : { ...prev, [id]: globalRuntimeConfig }));
+    }
   };
 
   const handleConfirm = () => {
@@ -55,7 +79,7 @@ const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerMod
       .filter(p => selectedIds.has(p.id))
       .map(p => ({ profileId: p.id, profileLabel: p.label }));
     if (drafts.length > 0) {
-      onConfirm(drafts);
+      onConfirm(drafts, overrides);
       onClose();
     }
   };
@@ -100,30 +124,40 @@ const MultiRolePickerModal = ({ isOpen, onClose, onConfirm }: MultiRolePickerMod
                 const isDisabled = !isSelected && isAtLimit;
 
                 return (
-                  <label
-                    key={profile.id}
-                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
-                      isSelected
-                        ? 'border-blue-400 bg-white shadow-sm'
-                        : isDisabled
-                          ? 'cursor-not-allowed border-slate-100 bg-slate-50 opacity-50'
-                          : 'border-slate-200 bg-white hover:border-blue-200 hover:shadow-sm'
-                    }`}>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={isDisabled}
-                      onChange={() => handleToggle(profile.id)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-slate-800">{profile.label}</div>
-                      {profile.description && (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{profile.description}</p>
-                      )}
-                      {profile.style && <p className="mt-0.5 text-xs text-slate-400">风格: {profile.style}</p>}
-                    </div>
-                  </label>
+                  <div key={profile.id}>
+                    <label
+                      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
+                        isSelected
+                          ? 'border-blue-400 bg-white shadow-sm'
+                          : isDisabled
+                            ? 'cursor-not-allowed border-slate-100 bg-slate-50 opacity-50'
+                            : 'border-slate-200 bg-white hover:border-blue-200 hover:shadow-sm'
+                      }`}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={isDisabled}
+                        onChange={() => handleToggle(profile.id)}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-slate-800">{profile.label}</div>
+                        {profile.description && (
+                          <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{profile.description}</p>
+                        )}
+                        {profile.style && <p className="mt-0.5 text-xs text-slate-400">风格: {profile.style}</p>}
+                      </div>
+                    </label>
+                    {isSelected && (
+                      <div className="mt-2 pl-6">
+                        <RoleRuntimeConfigEditor
+                          value={overrides[profile.id] ?? null}
+                          onChange={value => setOverrides(prev => ({ ...prev, [profile.id]: value }))}
+                          readOnly={readOnly}
+                        />
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

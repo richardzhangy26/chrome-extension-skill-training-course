@@ -6,6 +6,7 @@
 import { apiRequest, API_ENDPOINTS } from './background-bridge';
 import { assertHostPermission } from './host-permission-service';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_PROFILE_ID, llmConfigStorage, normalizeLLMConfig } from '@extension/storage';
+import type { RoleRuntimeConfig } from '../types/multi-role-types';
 import type { LLMConfig, StudentProfile } from '@extension/storage';
 
 interface ChatMessage {
@@ -77,10 +78,12 @@ interface ScriptStepFlow {
   isDefault?: number;
 }
 
-type GeneratorProfile = 'good' | 'medium' | 'poor';
+type PresetGeneratorProfile = 'good' | 'medium' | 'poor';
+type GeneratorProfile = PresetGeneratorProfile | 'custom';
 
 interface RuntimeProfileOverride {
   profile: StudentProfile;
+  runtimeConfigOverride?: RoleRuntimeConfig;
 }
 
 interface DialogueGeneratorStage {
@@ -96,6 +99,8 @@ interface DialogueGeneratorStage {
 interface SimulationDialogueGenerationParams {
   trainTaskId: string;
   profile: GeneratorProfile;
+  /** profile === 'custom' 时必填，例如「好学生走 A 路径」 */
+  customInstruction?: string;
   onProgress?: (progress: SimulationGenerationProgress) => void;
 }
 
@@ -114,6 +119,15 @@ interface StageDialogueGenerationParams {
   totalStages: number;
   modelsToTry: string[];
   isConciseRetry?: boolean;
+  customInstruction?: string;
+}
+
+interface CustomPathPlanningParams {
+  config: LLMConfig;
+  modelsToTry: string[];
+  steps: ScriptStepItem[];
+  flows: ScriptStepFlow[];
+  customInstruction: string;
 }
 
 const DIALOGUE_SIMULATION_LINE_PATTERN = /^(AI|用户)\s*[：:]\s*(.+)$/;
@@ -142,13 +156,13 @@ const GENERATOR_MODEL_PREFERENCES = [
   },
 ] as const;
 
-const GENERATOR_PROFILE_LABELS: Record<GeneratorProfile, string> = {
+const GENERATOR_PROFILE_LABELS: Record<PresetGeneratorProfile, string> = {
   good: '好学生',
   medium: '一般学生',
   poor: '差学生',
 };
 
-const GENERATOR_PROFILE_GUIDANCE: Record<GeneratorProfile, string> = {
+const GENERATOR_PROFILE_GUIDANCE: Record<PresetGeneratorProfile, string> = {
   good: '目标是最佳通关路线。学生基本回答正确，尽量用最少轮次满足阶段目标并触发进入下一阶段，不要故意绕路。',
   medium: '目标是可通关的真实引导过程。学生首轮通常只答对 60%-70%，需要 2-3 轮逐步补全，在阶段可用轮次内达标。',
   poor: '目标是边界测试。学生可偏题、误解或回答不完整，重点体现智能体如何把学生往回拉；如果轮次不足，允许该阶段仍未达标。',
@@ -318,6 +332,16 @@ const resolveGeneratorModelCandidates = async (
   return dedupeStrings([...preferredModels, config.model]);
 };
 
+const toDialogueGeneratorStage = (step: ScriptStepItem): DialogueGeneratorStage => ({
+  stepId: step.stepId,
+  stepName: step.stepDetailDTO?.stepName?.trim() || step.stepId,
+  interactiveRounds: Math.max(0, step.stepDetailDTO?.interactiveRounds ?? 0),
+  prologue: step.stepDetailDTO?.prologue?.trim() || '',
+  description: step.stepDetailDTO?.description?.trim() || '',
+  llmPrompt: step.stepDetailDTO?.llmPrompt?.trim() || '',
+  trainerName: step.stepDetailDTO?.trainerName?.trim() || '',
+});
+
 const resolveOrderedScriptStages = (steps: ScriptStepItem[], flows: ScriptStepFlow[]): DialogueGeneratorStage[] => {
   const stepMap = new Map(steps.map(step => [step.stepId, step]));
   const nodeStages: DialogueGeneratorStage[] = [];
@@ -350,15 +374,7 @@ const resolveOrderedScriptStages = (steps: ScriptStepItem[], flows: ScriptStepFl
 
       if (nodeType === 'SCRIPT_NODE') {
         visitedNodeIds.add(currentStepId);
-        nodeStages.push({
-          stepId: nextStep.stepId,
-          stepName: nextStep.stepDetailDTO?.stepName?.trim() || nextStep.stepId,
-          interactiveRounds: Math.max(0, nextStep.stepDetailDTO?.interactiveRounds ?? 0),
-          prologue: nextStep.stepDetailDTO?.prologue?.trim() || '',
-          description: nextStep.stepDetailDTO?.description?.trim() || '',
-          llmPrompt: nextStep.stepDetailDTO?.llmPrompt?.trim() || '',
-          trainerName: nextStep.stepDetailDTO?.trainerName?.trim() || '',
-        });
+        nodeStages.push(toDialogueGeneratorStage(nextStep));
       }
     }
   }
@@ -374,15 +390,113 @@ const resolveOrderedScriptStages = (steps: ScriptStepItem[], flows: ScriptStepFl
         (left.stepDetailDTO?.stepOrder ?? Number.MAX_SAFE_INTEGER) -
         (right.stepDetailDTO?.stepOrder ?? Number.MAX_SAFE_INTEGER),
     )
-    .map(step => ({
-      stepId: step.stepId,
-      stepName: step.stepDetailDTO?.stepName?.trim() || step.stepId,
-      interactiveRounds: Math.max(0, step.stepDetailDTO?.interactiveRounds ?? 0),
-      prologue: step.stepDetailDTO?.prologue?.trim() || '',
-      description: step.stepDetailDTO?.description?.trim() || '',
-      llmPrompt: step.stepDetailDTO?.llmPrompt?.trim() || '',
-      trainerName: step.stepDetailDTO?.trainerName?.trim() || '',
-    }));
+    .map(toDialogueGeneratorStage);
+};
+
+const hasBranchingFlows = (flows: ScriptStepFlow[]) => {
+  const outgoingCounts = new Map<string, number>();
+  for (const flow of flows) {
+    outgoingCounts.set(flow.scriptStepStartId, (outgoingCounts.get(flow.scriptStepStartId) ?? 0) + 1);
+  }
+
+  return [...outgoingCounts.values()].some(count => count > 1);
+};
+
+const buildFlowGraphDescription = (steps: ScriptStepItem[], flows: ScriptStepFlow[]) => {
+  const stepLines = steps.map(step => {
+    const detail = step.stepDetailDTO;
+    const description = detail?.description?.trim().slice(0, 60) || '(无描述)';
+
+    return `- ${step.stepId} | ${detail?.stepName?.trim() || '(未命名)'} | 类型: ${detail?.nodeType ?? 'UNKNOWN'} | 描述: ${description}`;
+  });
+  const flowLines = flows.map(
+    flow => `- ${flow.scriptStepStartId} -> ${flow.scriptStepEndId}${flow.isDefault === 1 ? ' (默认连线)' : ''}`,
+  );
+
+  return ['节点列表：', ...stepLines, '', '连线列表：', ...flowLines].join('\n');
+};
+
+const buildPathPlanningMessages = (graphDescription: string, customInstruction: string): ChatMessage[] => [
+  {
+    role: 'system',
+    content: [
+      '你是训练剧本路径规划器。',
+      '给你一个剧本流程图（节点列表 + 有向连线列表）和一条自定义生成要求。',
+      '请从 SCRIPT_START 节点出发，沿连线方向选出一条最符合自定义要求的完整路径。',
+      '只输出一个 JSON 数组：路径上按顺序排列的 SCRIPT_NODE 节点 stepId，不包含 SCRIPT_START 和 SCRIPT_END。',
+      '不要输出解释、代码块标记或其他任何内容。',
+    ].join('\n'),
+  },
+  {
+    role: 'user',
+    content: [`自定义生成要求：${customInstruction}`, '', graphDescription].join('\n'),
+  },
+];
+
+const parsePlannedStepIds = (content: string): string[] | null => {
+  try {
+    const parsed = JSON.parse(normalizeGeneratedDialogueBlock(content)) as unknown;
+    if (!Array.isArray(parsed) || !parsed.length) {
+      return null;
+    }
+    if (!parsed.every((item): item is string => typeof item === 'string' && Boolean(item.trim()))) {
+      return null;
+    }
+
+    const ids = parsed.map(item => item.trim());
+    return new Set(ids).size === ids.length ? ids : null;
+  } catch {
+    return null;
+  }
+};
+
+const resolveCustomScriptStages = async ({
+  config,
+  modelsToTry,
+  steps,
+  flows,
+  customInstruction,
+}: CustomPathPlanningParams): Promise<DialogueGeneratorStage[] | null> => {
+  const stepMap = new Map(steps.map(step => [step.stepId, step]));
+  const startStepId = steps.find(step => step.stepDetailDTO?.nodeType === 'SCRIPT_START')?.stepId;
+  const endStepId = steps.find(step => step.stepDetailDTO?.nodeType === 'SCRIPT_END')?.stepId;
+  if (!startStepId) {
+    return null;
+  }
+
+  const adjacency = new Set(flows.map(flow => `${flow.scriptStepStartId}->${flow.scriptStepEndId}`));
+  const messages = buildPathPlanningMessages(buildFlowGraphDescription(steps, flows), customInstruction);
+
+  for (const model of modelsToTry) {
+    const result = await callChatCompletion(config, model, messages, { temperature: 0, maxTokens: 1024 });
+    if (!result.success || !result.content) {
+      continue;
+    }
+
+    const plannedStepIds = parsePlannedStepIds(result.content);
+    if (!plannedStepIds) {
+      continue;
+    }
+
+    const allNodesValid = plannedStepIds.every(
+      stepId => stepMap.get(stepId)?.stepDetailDTO?.nodeType === 'SCRIPT_NODE',
+    );
+    const lastPlannedStepId = plannedStepIds[plannedStepIds.length - 1];
+    const pathConnected =
+      adjacency.has(`${startStepId}->${plannedStepIds[0]}`) &&
+      plannedStepIds.slice(1).every((stepId, index) => adjacency.has(`${plannedStepIds[index]}->${stepId}`)) &&
+      (!endStepId || adjacency.has(`${lastPlannedStepId}->${endStepId}`));
+
+    if (allNodesValid && pathConnected) {
+      return plannedStepIds.flatMap(stepId => {
+        const step = stepMap.get(stepId);
+        return step ? [toDialogueGeneratorStage(step)] : [];
+      });
+    }
+  }
+
+  console.warn('自定义路径规划失败，回退默认通关路径。');
+  return null;
 };
 
 const buildSimulationStageDialogueMessages = (
@@ -391,11 +505,33 @@ const buildSimulationStageDialogueMessages = (
   stageIndex: number,
   totalStages: number,
   isConciseRetry = false,
+  customInstruction = '',
 ): ChatMessage[] => {
   const maxRounds = Math.max(1, stage.interactiveRounds);
   const roundInstruction = isConciseRetry
     ? `只生成 1 轮。AI 和用户回答都必须非常短，优先保证完整闭合，不要超过 ${maxRounds} 轮上限。`
     : `生成 1 到 ${maxRounds} 轮，不要超过 interactiveRounds 上限；如果 interactiveRounds 为 0，也生成 1 轮用于保留阶段记录。`;
+
+  const profileLines =
+    profile === 'custom'
+      ? ['当前生成模式：自定义提示词', `自定义生成要求：${customInstruction.trim() || '(未提供)'}`]
+      : [
+          `当前要生成的学生档位：${GENERATOR_PROFILE_LABELS[profile]} (${profile})`,
+          GENERATOR_PROFILE_GUIDANCE[profile],
+        ];
+
+  const constraintLines =
+    profile === 'custom'
+      ? [
+          '1. 学生行为、答题质量与路径选择必须严格符合上面的自定义生成要求。',
+          '2. AI 话术必须贴合该阶段的 llmPrompt、角色设定和开场白。',
+          '3. 用户回答必须符合自定义生成要求，且围绕阶段目标推进。',
+        ]
+      : [
+          '1. 好学生走最佳通关路线，尽量用最少轮次达标；一般学生保留被引导过程；差学生可用于边界测试，不强制通关。',
+          '2. AI 话术必须贴合该阶段的 llmPrompt、角色设定和开场白。',
+          '3. 用户回答必须符合档位特点，且围绕阶段目标推进。',
+        ];
 
   return [
     {
@@ -415,16 +551,13 @@ const buildSimulationStageDialogueMessages = (
     {
       role: 'user',
       content: [
-        `当前要生成的学生档位：${GENERATOR_PROFILE_LABELS[profile]} (${profile})`,
-        GENERATOR_PROFILE_GUIDANCE[profile],
+        ...profileLines,
         '',
         `当前只生成第 ${stageIndex + 1}/${totalStages} 阶段，禁止输出其他阶段。`,
         `轮次要求：${roundInstruction}`,
         '',
         '生成约束：',
-        '1. 好学生走最佳通关路线，尽量用最少轮次达标；一般学生保留被引导过程；差学生可用于边界测试，不强制通关。',
-        '2. AI 话术必须贴合该阶段的 llmPrompt、角色设定和开场白。',
-        '3. 用户回答必须符合档位特点，且围绕阶段目标推进。',
+        ...constraintLines,
         '4. 输出中不要使用 Markdown 标题、列表、代码块或解释性文字。',
         '5. 每一轮 Step 行中的 stepName 与 step_id 必须使用下方真实值。',
         ...(isConciseRetry ? ['6. 这是截断后的精简重试：压缩表达，只保留达标所需的最短问答。'] : []),
@@ -448,7 +581,7 @@ const buildSimulationStageDialogueMessages = (
 const normalizeGeneratedDialogueBlock = (content: string) =>
   content
     .trim()
-    .replace(/^```(?:text|txt|markdown)?\s*/i, '')
+    .replace(/^```(?:json|text|txt|markdown)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
 
@@ -463,8 +596,16 @@ const generateSimulationDialogueStage = async ({
   totalStages,
   modelsToTry,
   isConciseRetry = false,
+  customInstruction = '',
 }: StageDialogueGenerationParams): Promise<LLMResponse> => {
-  const messages = buildSimulationStageDialogueMessages(profile, stage, stageIndex, totalStages, isConciseRetry);
+  const messages = buildSimulationStageDialogueMessages(
+    profile,
+    stage,
+    stageIndex,
+    totalStages,
+    isConciseRetry,
+    customInstruction,
+  );
   let lastError = '未找到可用模型';
   let truncatedResult: LLMResponse | null = null;
 
@@ -500,9 +641,15 @@ const buildStudentRoleSystemPrompt = (
     LLMConfig,
     'dialogueSimulationEnabled' | 'dialogueSimulationContent' | 'knowledgeBaseEnabled' | 'knowledgeBaseContent'
   >,
+  runtimeConfigOverride?: RoleRuntimeConfig,
 ) => {
-  const dialogueSimulationContent = config.dialogueSimulationEnabled
-    ? normalizeDialogueSimulationContent(config.dialogueSimulationContent)
+  const effectiveDialogueEnabled = runtimeConfigOverride?.dialogueSimulationEnabled ?? config.dialogueSimulationEnabled;
+  const effectiveDialogueContent = runtimeConfigOverride?.dialogueSimulationContent ?? config.dialogueSimulationContent;
+  const effectiveKnowledgeEnabled = runtimeConfigOverride?.knowledgeBaseEnabled ?? config.knowledgeBaseEnabled;
+  const effectiveKnowledgeContent = runtimeConfigOverride?.knowledgeBaseContent ?? config.knowledgeBaseContent;
+
+  const dialogueSimulationContent = effectiveDialogueEnabled
+    ? normalizeDialogueSimulationContent(effectiveDialogueContent)
     : '';
   const fallbackHint = profile.fallbackHint?.trim();
 
@@ -529,7 +676,7 @@ const buildStudentRoleSystemPrompt = (
     );
   }
 
-  const knowledgeBaseContent = config.knowledgeBaseEnabled ? config.knowledgeBaseContent.trim() : '';
+  const knowledgeBaseContent = effectiveKnowledgeEnabled ? effectiveKnowledgeContent.trim() : '';
   if (knowledgeBaseContent) {
     sections.push(
       '## 参考知识库（次优先级）',
@@ -660,7 +807,12 @@ const generateStudentAnswer = async (
   try {
     const systemPrompt = resolveSystemPrompt(config);
     const profile = runtimeOverride?.profile ?? resolveStudentProfile(config);
-    const roleSystemPrompt = buildStudentRoleSystemPrompt(systemPrompt, profile, config);
+    const roleSystemPrompt = buildStudentRoleSystemPrompt(
+      systemPrompt,
+      profile,
+      config,
+      runtimeOverride?.runtimeConfigOverride,
+    );
 
     const historyMessages: ChatMessage[] = [];
     for (const turn of conversationHistory.slice(-config.maxHistoryRounds)) {
@@ -691,12 +843,18 @@ const generateStudentAnswer = async (
 const generateSimulationDialogueRecord = async ({
   trainTaskId,
   profile,
+  customInstruction,
   onProgress,
 }: SimulationDialogueGenerationParams): Promise<LLMResponse> => {
   const config = normalizeLLMConfig(await llmConfigStorage.get());
 
   if (!config.apiKey.trim()) {
     return { success: false, error: '请先配置 LLM API Key' };
+  }
+
+  const trimmedCustomInstruction = customInstruction?.trim() ?? '';
+  if (profile === 'custom' && !trimmedCustomInstruction) {
+    return { success: false, error: '自定义生成模式需要填写生成要求。' };
   }
 
   try {
@@ -724,12 +882,27 @@ const generateSimulationDialogueRecord = async ({
       return { success: false, error: '未获取到剧本步骤，无法生成模拟对话' };
     }
 
-    const orderedStages = resolveOrderedScriptStages(steps, flowResponse?.data ?? []);
+    const flows = flowResponse?.data ?? [];
+    const modelsToTry = await resolveGeneratorModelCandidates(config);
+
+    let orderedStages = resolveOrderedScriptStages(steps, flows);
+    if (profile === 'custom' && hasBranchingFlows(flows)) {
+      const plannedStages = await resolveCustomScriptStages({
+        config,
+        modelsToTry,
+        steps,
+        flows,
+        customInstruction: trimmedCustomInstruction,
+      });
+      if (plannedStages?.length) {
+        orderedStages = plannedStages;
+      }
+    }
+
     if (!orderedStages.length) {
       return { success: false, error: '未识别到默认通关路径上的有效阶段' };
     }
 
-    const modelsToTry = await resolveGeneratorModelCandidates(config);
     const generatedBlocks: string[] = [];
 
     for (const [stageIndex, stage] of orderedStages.entries()) {
@@ -746,6 +919,7 @@ const generateSimulationDialogueRecord = async ({
         stageIndex,
         totalStages: orderedStages.length,
         modelsToTry,
+        customInstruction: trimmedCustomInstruction,
       });
 
       if (stageResult.finishReason === 'length') {
@@ -764,6 +938,7 @@ const generateSimulationDialogueRecord = async ({
           totalStages: orderedStages.length,
           modelsToTry,
           isConciseRetry: true,
+          customInstruction: trimmedCustomInstruction,
         });
 
         if (stageResult.finishReason === 'length') {

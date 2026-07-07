@@ -5,6 +5,7 @@ import { HistoryModal, HistoryIcon } from './components/HistoryModal';
 import { ModelBrandIcon } from './components/ModelBrandIcon';
 import { ModeToggle } from './components/ModeToggle';
 import { MultiRolePickerModal } from './components/MultiRolePickerModal';
+import { RoleRuntimeConfigEditor } from './components/RoleRuntimeConfigEditor';
 import { SettingsModal, ConfigPromptModal, SettingsIcon } from './components/SettingsModal';
 import { SimulationConfigBar } from './components/SimulationConfigBar';
 import { SimulationConfigModal } from './components/SimulationConfigModal';
@@ -18,7 +19,7 @@ import { useRef, useEffect, useState } from 'react';
 import type { TrainingMode } from './components/ModeToggle';
 import type { SimulationModeState } from './components/SimulationConfigBar';
 import type { ChatMessage } from './hooks/useAgentChat';
-import type { MultiRoleRunBatch, RoleRunDraft } from './types/multi-role-types';
+import type { MultiRoleRunBatch, RoleRunDraft, RoleRuntimeConfig } from './types/multi-role-types';
 
 // ============ SVG图标组件 ============
 const Icons = {
@@ -673,12 +674,14 @@ const MultiRoleView = ({
   isBatchAutoRunning,
   onSetActiveRole,
   onViewHistory,
+  onUpdateRoleRuntimeConfig,
 }: {
   batch: MultiRoleRunBatch;
   isLoading: boolean;
   isBatchAutoRunning: boolean;
   onSetActiveRole: (index: number) => void;
   onViewHistory: (logSessionId: string) => void;
+  onUpdateRoleRuntimeConfig: (roleIndex: number, override: RoleRuntimeConfig | null) => void;
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -784,6 +787,15 @@ const MultiRoleView = ({
                   )}
 
                   {role.error && <p className="mt-2 text-xs text-red-500">{role.error}</p>}
+
+                  {/* 该角色运行配置 */}
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <h4 className="mb-2 text-xs font-semibold text-slate-600">该角色运行配置</h4>
+                    <RoleRuntimeConfigEditor
+                      value={role.runtimeConfigOverride}
+                      onChange={value => onUpdateRoleRuntimeConfig(index, value)}
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -1243,8 +1255,11 @@ const SidePanel = () => {
   };
 
   // 多角色处理
-  const handleMultiRoleConfirm = async (drafts: RoleRunDraft[]) => {
-    await multiRole.startMultiRoleRun(drafts);
+  const handleMultiRoleConfirm = async (
+    drafts: RoleRunDraft[],
+    overrides: Record<string, RoleRuntimeConfig | null>,
+  ) => {
+    await multiRole.startMultiRoleRun(drafts, overrides);
   };
 
   const handleMultiRoleAutoRun = async () => {
@@ -1401,6 +1416,7 @@ const SidePanel = () => {
             isBatchAutoRunning={multiRole.isBatchAutoRunning}
             onSetActiveRole={multiRole.setActiveRoleIndex}
             onViewHistory={handleViewRoleHistory}
+            onUpdateRoleRuntimeConfig={multiRole.updateRoleRuntimeConfig}
           />
           <MultiRoleChatInput
             onSend={content => {
@@ -1503,8 +1519,8 @@ const SidePanel = () => {
       <MultiRolePickerModal
         isOpen={isMultiRolePickerOpen}
         onClose={() => setIsMultiRolePickerOpen(false)}
-        onConfirm={drafts => {
-          void handleMultiRoleConfirm(drafts);
+        onConfirm={(drafts, overrides) => {
+          void handleMultiRoleConfirm(drafts, overrides);
         }}
       />
 

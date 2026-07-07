@@ -459,6 +459,7 @@ const resolveCustomScriptStages = async ({
 }: CustomPathPlanningParams): Promise<DialogueGeneratorStage[] | null> => {
   const stepMap = new Map(steps.map(step => [step.stepId, step]));
   const startStepId = steps.find(step => step.stepDetailDTO?.nodeType === 'SCRIPT_START')?.stepId;
+  const endStepId = steps.find(step => step.stepDetailDTO?.nodeType === 'SCRIPT_END')?.stepId;
   if (!startStepId) {
     return null;
   }
@@ -480,9 +481,11 @@ const resolveCustomScriptStages = async ({
     const allNodesValid = plannedStepIds.every(
       stepId => stepMap.get(stepId)?.stepDetailDTO?.nodeType === 'SCRIPT_NODE',
     );
+    const lastPlannedStepId = plannedStepIds[plannedStepIds.length - 1];
     const pathConnected =
       adjacency.has(`${startStepId}->${plannedStepIds[0]}`) &&
-      plannedStepIds.slice(1).every((stepId, index) => adjacency.has(`${plannedStepIds[index]}->${stepId}`));
+      plannedStepIds.slice(1).every((stepId, index) => adjacency.has(`${plannedStepIds[index]}->${stepId}`)) &&
+      (!endStepId || adjacency.has(`${lastPlannedStepId}->${endStepId}`));
 
     if (allNodesValid && pathConnected) {
       return plannedStepIds.flatMap(stepId => {
@@ -578,7 +581,7 @@ const buildSimulationStageDialogueMessages = (
 const normalizeGeneratedDialogueBlock = (content: string) =>
   content
     .trim()
-    .replace(/^```(?:text|txt|markdown)?\s*/i, '')
+    .replace(/^```(?:json|text|txt|markdown)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
 

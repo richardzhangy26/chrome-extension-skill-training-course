@@ -5,7 +5,7 @@
 
 import { adminWebRequest } from './background-bridge';
 import { authSessionStorage, normalizeAuthToken } from '@extension/storage';
-import type { AuthUser, LLMConfig, AgentLogSession } from '@extension/storage';
+import type { AuthUser, SyncedLLMConfig, AgentLogSession } from '@extension/storage';
 
 interface AuthResult {
   ok: boolean;
@@ -119,7 +119,7 @@ const getSession = async (): Promise<AuthUser | null> => {
   return user;
 };
 
-type FetchConfigResult = { ok: true; config: LLMConfig | null } | AdminWebFailure;
+type FetchConfigResult = { ok: true; config: SyncedLLMConfig | null } | AdminWebFailure;
 
 const fetchLlmConfig = async (): Promise<FetchConfigResult> => {
   const res = await adminWebRequest({ path: '/api/extension/config', method: 'GET', auth: true });
@@ -129,10 +129,10 @@ const fetchLlmConfig = async (): Promise<FetchConfigResult> => {
     }
     return toFailure(res, `拉取配置失败(${res.status})`);
   }
-  return { ok: true, config: (res.json as { config?: LLMConfig | null }).config ?? null };
+  return { ok: true, config: (res.json as { config?: SyncedLLMConfig | null }).config ?? null };
 };
 
-const pushLlmConfig = async (config: LLMConfig): Promise<boolean> => {
+const pushLlmConfig = async (config: SyncedLLMConfig): Promise<boolean> => {
   const res = await adminWebRequest({
     path: '/api/extension/config',
     method: 'POST',

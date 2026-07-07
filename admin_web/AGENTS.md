@@ -100,10 +100,16 @@ Do not replace one with the other unless the caller changes.
 - Extension API routes should derive `userId` from `auth.api.getSession({ headers })`; do not trust user ids sent in request bodies.
 
 ## Extension Config Rules
-- `LLMConfig` is stored as a JSON blob in D1 for simple field evolution.
-- Admin Web is the source of truth when the extension user is logged in.
+- Only the account-level subset of `LLMConfig` is persisted in D1 and editable here. `src/lib/llm-config-schema.ts` declares exactly these fields (see also `SYNCED_LLM_CONFIG_KEYS`):
+  - `apiKey`, `apiUrl`, `model`
+  - `systemPrompt`
+  - `studentProfiles`
+  - `dialogueSimulationContent`
+  - `knowledgeBaseContent`
+- Everything else (sampling params, TTS settings, enabled toggles, `systemPromptMode`, `studentProfileId`, `voiceModeEnabled`, etc.) is extension-local. Do not add these to the zod schema, `defaultLlmConfig`, or the settings form.
+- The config is stored as a JSON blob in D1 for simple field evolution. Zod strips unknown keys, so legacy 22-field blobs are read as the 7-field subset with no migration.
 - API Key is stored in D1 as decided for the internal teaching tool. Do not introduce ad hoc encryption unless a task explicitly changes the security model.
-- The web form may edit LLM, student profile, simulation, knowledge-base, and TTS fields. Keep schema changes mirrored in extension storage.
+- Keep the field list mirrored with root `packages/storage/lib/impl/llm-config-storage.ts` (`SYNCED_LLM_CONFIG_KEYS` / `pickSyncedConfig`).
 
 ## Deploy And CI
 - GitHub Actions workflow is at repository root `.github/workflows/deploy.yml`.

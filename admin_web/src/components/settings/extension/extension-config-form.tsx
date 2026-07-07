@@ -15,18 +15,9 @@ const FIELDS: FieldDef[] = [
   { name: 'apiKey', label: 'API Key', type: 'password' },
   { name: 'apiUrl', label: 'Base URL', type: 'text' },
   { name: 'model', label: '模型', type: 'text' },
-  { name: 'temperature', label: 'Temperature', type: 'number' },
-  { name: 'topK', label: 'Top K', type: 'number' },
-  { name: 'maxTokens', label: 'Max Tokens', type: 'number' },
-  { name: 'maxHistoryRounds', label: '最大历史轮数', type: 'number' },
-  { name: 'serviceCode', label: 'Service Code', type: 'text' },
   { name: 'systemPrompt', label: '系统提示词', type: 'textarea' },
   { name: 'dialogueSimulationContent', label: '模拟对话内容', type: 'textarea' },
   { name: 'knowledgeBaseContent', label: '知识库内容', type: 'textarea' },
-  { name: 'ttsApiUrl', label: 'TTS Base URL', type: 'text' },
-  { name: 'ttsModel', label: 'TTS 模型', type: 'text' },
-  { name: 'voice', label: '音色', type: 'text' },
-  { name: 'speed', label: '语速', type: 'number' },
 ];
 
 export function ExtensionConfigForm() {
@@ -49,9 +40,7 @@ export function ExtensionConfigForm() {
 
   const onSubmit = async (data: LlmConfigInput) => {
     setSaved(false);
-    // enabled 随 apiKey 派生
-    const payload = { ...data, enabled: data.apiKey.trim().length > 0 };
-    await saveMyLlmConfig({ data: payload });
+    await saveMyLlmConfig({ data });
     setSaved(true);
   };
 

@@ -194,10 +194,11 @@ const SimulationConfigModal = ({
         <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 p-5">
           {readOnly && (
             <div className="rounded-lg bg-cyan-50 p-3 text-xs text-cyan-700">
-              已登录：配置由 Admin Web 统一管理，请前往网页「设置 → 插件配置」修改。
+              已登录：模拟对话内容与知识库内容由 Admin Web 统一管理，可前往网页「设置 →
+              插件配置」修改；启用开关与生成按钮仍可在此本地使用。
             </div>
           )}
-          <fieldset disabled={readOnly} className="m-0 space-y-4 border-0 p-0">
+          <div className="space-y-4">
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -237,10 +238,11 @@ const SimulationConfigModal = ({
                     }))
                   }
                   rows={10}
+                  disabled={readOnly}
                   placeholder={
                     '例如：\nStep: 开场确认 | step_id: demo-step | 第 1 轮 | 来源: chat\nAI: 你准备好了吗？\n用户: 准备好了。\n----------------------------------------'
                   }
-                  className="min-h-[220px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  className="min-h-[220px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                 />
                 {showDialogueEmptyHint && (
                   <p className="mt-2 text-xs text-amber-600">当前已启用，但内容为空，运行时不会注入模拟对话片段。</p>
@@ -372,8 +374,9 @@ const SimulationConfigModal = ({
                     }))
                   }
                   rows={10}
+                  disabled={readOnly}
                   placeholder="例如：课程要点、标准答案、评分口径、背景资料等。"
-                  className="min-h-[220px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                  className="min-h-[220px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                 />
                 {showKnowledgeBaseEmptyHint && (
                   <p className="mt-2 text-xs text-amber-600">当前已启用，但内容为空，运行时不会注入知识库片段。</p>
@@ -398,7 +401,7 @@ const SimulationConfigModal = ({
                 </div>
               </section>
             )}
-          </fieldset>
+          </div>
         </div>
 
         <div className="flex gap-3 border-t border-slate-200 bg-white px-5 py-4">
@@ -413,6 +416,14 @@ const SimulationConfigModal = ({
               disabled={isSaving}
               className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-sky-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
               {isSaving ? '保存中...' : '保存'}
+            </button>
+          )}
+          {readOnly && (
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-sky-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
+              {isSaving ? '保存中...' : '保存本地开关'}
             </button>
           )}
         </div>

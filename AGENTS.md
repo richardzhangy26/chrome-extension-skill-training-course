@@ -87,7 +87,8 @@ const storage = createStorage<DataType>('key', defaultValue, {
 - Admin Web config is stored in D1 table `userLlmConfig` as a JSON string validated by `admin_web/src/lib/llm-config-schema.ts`.
 - The extension route is `GET/POST /api/extension/config`, authenticated by `Authorization: Bearer <token>`.
 - The web editing page is `/settings/extension`.
-- Login state makes extension config modals read-only; logged-out mode remains local-editable.
+- Only 7 fields are synced across devices via Admin Web (see `SYNCED_LLM_CONFIG_KEYS` in `packages/storage/lib/impl/llm-config-storage.ts`): `apiKey`, `apiUrl`, `model`, `systemPrompt`, `studentProfiles`, `dialogueSimulationContent`, `knowledgeBaseContent`. Every other field (采样参数、TTS、各类开关、当前选中项等) is local-only.
+- When logged in, only those 7 synced fields are locked inside `SettingsModal` / `SimulationConfigModal`; everything else stays editable in the extension.
 - A 401 from Admin Web should clear local auth session and make the user log in again.
 
 ## Framework Quirks & Important Conventions

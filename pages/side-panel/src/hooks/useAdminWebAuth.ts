@@ -4,7 +4,7 @@
  */
 
 import { signIn, signUp, signOut, getSession, fetchLlmConfig, pushLlmConfig } from '../services/admin-web-service';
-import { authSessionStorage, llmConfigStorage } from '@extension/storage';
+import { authSessionStorage, llmConfigStorage, pickSyncedConfig } from '@extension/storage';
 import { useCallback, useEffect, useState } from 'react';
 import type { AuthSession } from '@extension/storage';
 
@@ -26,33 +26,28 @@ const useAdminWebAuth = () => {
     };
   }, []);
 
-  // 配置同步（admin_web 为准）：服务端有「有效」配置则下行覆盖本地；
-  // 服务端无有效配置但本地有效则上传一次 seed；两边都无效则不动，
-  // 从源头杜绝「空配置上传 → 反过来覆盖本地真实 key」。
+  // 配置同步（admin_web 为账号级字段的权威源）：
+  // 只同步 SYNCED_LLM_CONFIG_KEYS 覆盖的 7 个字段（API Key / Base URL / Model /
+  // 系统提示词 / 学生档位 / 模拟对话内容 / 知识库内容）。
+  // 其它本地字段（temperature、TTS、各类开关、当前选中项等）不受服务端影响。
   const syncConfigDown = useCallback(async () => {
     const result = await fetchLlmConfig();
     if (!result.ok) {
-      // 请求失败（网络/401 等）：不种子、不覆盖本地配置
       const code = result.code ? ` (${result.code})` : '';
       console.warn(`[admin-web] 拉取配置失败，跳过本次同步：${result.status} ${result.message}${code}`);
       return;
     }
     const local = await llmConfigStorage.get();
     if (result.config) {
-      // 服务端有 key → 完全以服务端为准（含 simulation/知识库/TTS/档位等）；
-      // 服务端无 key 但本地有 → 仅保留本地 key、其余仍取服务端，
-      // 避免历史遗留的空 key 配置把本地真实 key 覆盖掉，也不丢网页侧的其它配置。
+      // 服务端 apiKey 为空时不覆盖本地 apiKey，避免历史遗留空配置把本地真实 key 冲掉。
       const server = result.config;
-      const merged =
-        server.apiKey.trim().length > 0
-          ? server
-          : { ...server, apiKey: local.apiKey, enabled: local.apiKey.trim().length > 0 };
-      await llmConfigStorage.setConfig(merged);
+      const serverPatch = server.apiKey.trim().length > 0 ? server : { ...server, apiKey: local.apiKey };
+      await llmConfigStorage.setConfig({ ...local, ...serverPatch });
       return;
     }
-    // 服务端确认无配置（config:null）：仅当本地有有效 key 时才上传一次 seed（默认/空配置绝不上传）
+    // 服务端确认无配置（config:null）：本地有有效 key 时上传一次 seed。
     if (local.apiKey.trim().length > 0) {
-      const ok = await pushLlmConfig(local);
+      const ok = await pushLlmConfig(pickSyncedConfig(local));
       if (!ok) {
         console.warn('[admin-web] 本地配置上传失败');
       }

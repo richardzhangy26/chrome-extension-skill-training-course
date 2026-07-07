@@ -949,7 +949,6 @@ interface VoiceChatAreaProps {
   onToggleSimulation: (enabled: boolean) => void;
   onToggleKnowledge: (enabled: boolean) => void;
   onOpenSimulationConfig: () => void;
-  isLoggedIn: boolean;
 }
 
 const VoiceChatArea = ({
@@ -964,7 +963,6 @@ const VoiceChatArea = ({
   onToggleSimulation,
   onToggleKnowledge,
   onOpenSimulationConfig,
-  isLoggedIn,
 }: VoiceChatAreaProps) => {
   const [input, setInput] = useState('');
   const handleSend = () => {
@@ -988,7 +986,7 @@ const VoiceChatArea = ({
               onToggleSimulation={onToggleSimulation}
               onToggleKnowledge={onToggleKnowledge}
               onOpenConfig={onOpenSimulationConfig}
-              disabled={voice.isLoading || isLoggedIn}
+              disabled={voice.isLoading}
             />
           </div>
           <button
@@ -1007,7 +1005,7 @@ const VoiceChatArea = ({
               onToggleSimulation={onToggleSimulation}
               onToggleKnowledge={onToggleKnowledge}
               onOpenConfig={onOpenSimulationConfig}
-              disabled={voice.isLoading || isLoggedIn}
+              disabled={voice.isLoading}
             />
           </div>
           <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
@@ -1406,7 +1404,6 @@ const SidePanel = () => {
             void handleToggleKnowledgeBase(enabled);
           }}
           onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
-          isLoggedIn={isLoggedIn}
         />
       ) : multiRole.isMultiRoleMode && multiRole.batch ? (
         <>
@@ -1465,7 +1462,7 @@ const SidePanel = () => {
               onToggleKnowledgeBase={enabled => {
                 void handleToggleKnowledgeBase(enabled);
               }}
-              toggleDisabled={isLoading || isLoggedIn}
+              toggleDisabled={isLoading}
               debugDisabled={isLoading}
               disabled={isLoading || isCompleted}
             />

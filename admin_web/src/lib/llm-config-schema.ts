@@ -10,50 +10,38 @@ const studentProfileSchema = z.object({
 });
 
 /**
- * 扩展 LLMConfig 的服务端镜像（与
- * packages/storage/lib/impl/llm-config-storage.ts 的 LLMConfig 一一对应）。
+ * 扩展 LLMConfig 的服务端镜像。
+ * 仅保存需要跨设备同步的字段（与
+ * packages/storage/lib/impl/llm-config-storage.ts 的 SYNCED_LLM_CONFIG_KEYS 对齐）。
+ * 采样参数、开关、TTS 等本地字段不再入库，由插件本地保存。
  */
 export const llmConfigSchema = z.object({
   apiKey: z.string(),
   apiUrl: z.string(),
   model: z.string(),
-  temperature: z.number(),
-  topK: z.number().int(),
-  maxTokens: z.number().int(),
-  maxHistoryRounds: z.number().int(),
-  serviceCode: z.string(),
-  enabled: z.boolean(),
-  systemPromptMode: z.enum(['default', 'custom']),
   systemPrompt: z.string(),
-  studentProfileId: z.string(),
   studentProfiles: z.array(studentProfileSchema),
-  dialogueSimulationEnabled: z.boolean(),
   dialogueSimulationContent: z.string(),
-  knowledgeBaseEnabled: z.boolean(),
   knowledgeBaseContent: z.string(),
-  voiceModeEnabled: z.boolean(),
-  ttsApiUrl: z.string(),
-  ttsModel: z.string(),
-  voice: z.string(),
-  speed: z.number(),
-  ttsResponseFormat: z.enum(['mp3', 'wav', 'opus']),
 });
 
 export type LlmConfigInput = z.infer<typeof llmConfigSchema>;
+
+export const SYNCED_LLM_CONFIG_KEYS = [
+  'apiKey',
+  'apiUrl',
+  'model',
+  'systemPrompt',
+  'studentProfiles',
+  'dialogueSimulationContent',
+  'knowledgeBaseContent',
+] as const satisfies readonly (keyof LlmConfigInput)[];
 
 export const defaultLlmConfig: LlmConfigInput = {
   apiKey: '',
   apiUrl: 'http://llm-service.polymas.com/api/openai/v1/chat/completions',
   model: 'Doubao-1.5-pro-32k',
-  temperature: 0.7,
-  topK: 50,
-  maxTokens: 200,
-  maxHistoryRounds: 5,
-  serviceCode: 'SI_Ability',
-  enabled: false,
-  systemPromptMode: 'default',
   systemPrompt: '',
-  studentProfileId: 'medium',
   studentProfiles: [
     {
       id: 'good',
@@ -77,14 +65,6 @@ export const defaultLlmConfig: LlmConfigInput = {
       fallbackHint: '',
     },
   ],
-  dialogueSimulationEnabled: false,
   dialogueSimulationContent: '',
-  knowledgeBaseEnabled: false,
   knowledgeBaseContent: '',
-  voiceModeEnabled: false,
-  ttsApiUrl: 'https://llm-service.polymas.com/api/openai/v1/audio/speech/stream',
-  ttsModel: 'cosyvoice-v1',
-  voice: 'loongstella',
-  speed: 1.0,
-  ttsResponseFormat: 'mp3',
 };

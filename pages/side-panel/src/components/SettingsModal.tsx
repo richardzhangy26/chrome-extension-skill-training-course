@@ -380,10 +380,11 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
         <div className="max-h-[calc(80vh-180px)] overflow-y-auto p-5">
           {readOnly && (
             <div className="mb-3 rounded-lg bg-cyan-50 p-3 text-xs text-cyan-700">
-              已登录：配置由 Admin Web 统一管理，请前往网页「设置 → 插件配置」修改。
+              已登录：API Key / Base URL / Model / 系统提示词 / 学生档位内容由 Admin Web 统一管理，可前往网页「设置 →
+              插件配置」修改；其它参数仍可在此本地调整。
             </div>
           )}
-          <fieldset disabled={readOnly} className="m-0 border-0 p-0">
+          <div>
             {activeTab === 'llm' && (
               <div className="space-y-4">
                 {/* API Key */}
@@ -397,7 +398,8 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                     value={config.apiKey}
                     onChange={e => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
                     placeholder="请输入豆包 API Key"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    disabled={readOnly}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                   />
                   <p className="mt-1 text-xs text-slate-400">需要企业微信申请 llm-service 获取</p>
                 </div>
@@ -422,18 +424,21 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                     value={config.model}
                     onChange={e => setConfig(prev => ({ ...prev, model: e.target.value }))}
                     placeholder={DEFAULT_LLM_MODEL}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    disabled={readOnly}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                   />
                   <div className="mt-2">
                     <p id="modelPresetLabel" className="mb-1 text-xs font-medium text-slate-600">
                       从动态文本模型列表中选择
                     </p>
-                    <ModelSelector
-                      options={availableModels}
-                      value={normalizedConfig.model}
-                      onChange={model => setConfig(prev => ({ ...prev, model }))}
-                      labelId="modelPresetLabel"
-                    />
+                    <fieldset disabled={readOnly} className="m-0 border-0 p-0 disabled:opacity-60">
+                      <ModelSelector
+                        options={availableModels}
+                        value={normalizedConfig.model}
+                        onChange={model => setConfig(prev => ({ ...prev, model }))}
+                        labelId="modelPresetLabel"
+                      />
+                    </fieldset>
                   </div>
                   <p className="mt-1 text-xs text-slate-400">
                     支持输入任意模型名；下拉框会从当前 API 动态拉取，仅显示 text 模型，当前共 {availableModels.length}
@@ -531,7 +536,8 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                     value={config.apiUrl}
                     onChange={e => setConfig(prev => ({ ...prev, apiUrl: e.target.value }))}
                     placeholder="API 地址"
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-xs transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    disabled={readOnly}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-sm text-xs transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                   />
                 </div>
 
@@ -617,7 +623,7 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                       id="systemPrompt"
                       value={systemPromptValue}
                       onChange={e => setConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
-                      disabled={config.systemPromptMode !== 'custom'}
+                      disabled={readOnly || config.systemPromptMode !== 'custom'}
                       placeholder="输入自定义系统提示词"
                       className="min-h-[140px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                     />
@@ -638,13 +644,15 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                     <button
                       type="button"
                       onClick={handleAddProfile}
-                      className="rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-cyan-600">
+                      disabled={readOnly}
+                      className="rounded-md bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-cyan-600 disabled:cursor-not-allowed disabled:bg-slate-300">
                       添加档位
                     </button>
                     <button
                       type="button"
                       onClick={handleResetProfiles}
-                      className="text-xs font-medium text-cyan-600 hover:text-cyan-700">
+                      disabled={readOnly}
+                      className="text-xs font-medium text-cyan-600 hover:text-cyan-700 disabled:cursor-not-allowed disabled:text-slate-300">
                       恢复默认档位
                     </button>
                   </div>
@@ -677,12 +685,12 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                             <button
                               type="button"
                               onClick={() => handleDeleteProfile(profile.id)}
-                              disabled={studentProfileEntries.length <= 1}
+                              disabled={readOnly || studentProfileEntries.length <= 1}
                               className="text-xs font-medium text-rose-500 hover:text-rose-600 disabled:cursor-not-allowed disabled:text-slate-300">
                               删除
                             </button>
                           </div>
-                          <div className="mt-3 space-y-2">
+                          <fieldset disabled={readOnly} className="m-0 mt-3 space-y-2 border-0 p-0 disabled:opacity-70">
                             <div>
                               <label htmlFor={labelId} className="mb-1 block text-xs font-medium text-slate-600">
                                 档位名称
@@ -692,7 +700,7 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                                 type="text"
                                 value={profile.label}
                                 onChange={event => handleProfileChange(profile.id, { label: event.target.value })}
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                               />
                             </div>
                             <div>
@@ -703,7 +711,7 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                                 id={descriptionId}
                                 value={profile.description}
                                 onChange={event => handleProfileChange(profile.id, { description: event.target.value })}
-                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                               />
                             </div>
                             <div>
@@ -714,7 +722,7 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                                 id={styleId}
                                 value={profile.style}
                                 onChange={event => handleProfileChange(profile.id, { style: event.target.value })}
-                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                               />
                             </div>
                             <div>
@@ -728,10 +736,10 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                                 onChange={event =>
                                   handleProfileChange(profile.id, { fallbackHint: event.target.value })
                                 }
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                               />
                             </div>
-                          </div>
+                          </fieldset>
                         </div>
                       );
                     })}
@@ -741,41 +749,32 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
             )}
 
             {activeTab === 'voice' && <VoiceModeSettings config={config} setConfig={setConfig} />}
-          </fieldset>
+          </div>
         </div>
 
         {/* 底部按钮 */}
-        {readOnly ? (
-          <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-            <button
-              onClick={handleTest}
-              disabled={isTesting || !config.apiKey.trim()}
-              className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
-              {isTesting ? '测试中...' : '测试连接'}
-            </button>
+        <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+          <button
+            onClick={handleTest}
+            disabled={isTesting || !config.apiKey.trim()}
+            className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
+            {isTesting ? '测试中...' : '测试连接'}
+          </button>
+          {readOnly && (
             <button
               onClick={handleGrantHostAccess}
               disabled={isTesting}
               className="flex-1 cursor-pointer rounded-lg border border-cyan-300 bg-white py-2.5 text-sm font-medium text-cyan-700 transition-colors hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-50">
               授权当前 API 域名
             </button>
-          </div>
-        ) : (
-          <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-            <button
-              onClick={handleTest}
-              disabled={isTesting || !config.apiKey.trim()}
-              className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
-              {isTesting ? '测试中...' : '测试连接'}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving || !canSave}
-              className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
-              {isSaving ? '保存中...' : '保存配置'}
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={handleSave}
+            disabled={isSaving || !canSave}
+            className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
+            {isSaving ? '保存中...' : '保存配置'}
+          </button>
+        </div>
       </div>
     </div>
   );

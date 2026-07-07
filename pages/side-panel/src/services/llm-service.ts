@@ -78,7 +78,8 @@ interface ScriptStepFlow {
   isDefault?: number;
 }
 
-type GeneratorProfile = 'good' | 'medium' | 'poor';
+type PresetGeneratorProfile = 'good' | 'medium' | 'poor';
+type GeneratorProfile = PresetGeneratorProfile | 'custom';
 
 interface RuntimeProfileOverride {
   profile: StudentProfile;
@@ -98,6 +99,8 @@ interface DialogueGeneratorStage {
 interface SimulationDialogueGenerationParams {
   trainTaskId: string;
   profile: GeneratorProfile;
+  /** profile === 'custom' 时必填，例如「好学生走 A 路径」 */
+  customInstruction?: string;
   onProgress?: (progress: SimulationGenerationProgress) => void;
 }
 
@@ -116,6 +119,7 @@ interface StageDialogueGenerationParams {
   totalStages: number;
   modelsToTry: string[];
   isConciseRetry?: boolean;
+  customInstruction?: string;
 }
 
 const DIALOGUE_SIMULATION_LINE_PATTERN = /^(AI|用户)\s*[：:]\s*(.+)$/;
@@ -144,13 +148,13 @@ const GENERATOR_MODEL_PREFERENCES = [
   },
 ] as const;
 
-const GENERATOR_PROFILE_LABELS: Record<GeneratorProfile, string> = {
+const GENERATOR_PROFILE_LABELS: Record<PresetGeneratorProfile, string> = {
   good: '好学生',
   medium: '一般学生',
   poor: '差学生',
 };
 
-const GENERATOR_PROFILE_GUIDANCE: Record<GeneratorProfile, string> = {
+const GENERATOR_PROFILE_GUIDANCE: Record<PresetGeneratorProfile, string> = {
   good: '目标是最佳通关路线。学生基本回答正确，尽量用最少轮次满足阶段目标并触发进入下一阶段，不要故意绕路。',
   medium: '目标是可通关的真实引导过程。学生首轮通常只答对 60%-70%，需要 2-3 轮逐步补全，在阶段可用轮次内达标。',
   poor: '目标是边界测试。学生可偏题、误解或回答不完整，重点体现智能体如何把学生往回拉；如果轮次不足，允许该阶段仍未达标。',
@@ -393,18 +397,40 @@ const buildSimulationStageDialogueMessages = (
   stageIndex: number,
   totalStages: number,
   isConciseRetry = false,
+  customInstruction = '',
 ): ChatMessage[] => {
   const maxRounds = Math.max(1, stage.interactiveRounds);
   const roundInstruction = isConciseRetry
     ? `只生成 1 轮。AI 和用户回答都必须非常短，优先保证完整闭合，不要超过 ${maxRounds} 轮上限。`
     : `生成 1 到 ${maxRounds} 轮，不要超过 interactiveRounds 上限；如果 interactiveRounds 为 0，也生成 1 轮用于保留阶段记录。`;
 
+  const profileLines =
+    profile === 'custom'
+      ? ['当前生成模式：自定义提示词', `自定义生成要求：${customInstruction.trim() || '(未提供)'}`]
+      : [
+          `当前要生成的学生档位：${GENERATOR_PROFILE_LABELS[profile]} (${profile})`,
+          GENERATOR_PROFILE_GUIDANCE[profile],
+        ];
+
+  const constraintLines =
+    profile === 'custom'
+      ? [
+          '1. 学生行为、答题质量与路径选择必须严格符合上面的自定义生成要求。',
+          '2. AI 话术必须贴合该阶段的 llmPrompt、角色设定和开场白。',
+          '3. 用户回答必须符合自定义生成要求，且围绕阶段目标推进。',
+        ]
+      : [
+          '1. 好学生走最佳通关路线，尽量用最少轮次达标；一般学生保留被引导过程；差学生可用于边界测试，不强制通关。',
+          '2. AI 话术必须贴合该阶段的 llmPrompt、角色设定和开场白。',
+          '3. 用户回答必须符合档位特点，且围绕阶段目标推进。',
+        ];
+
   return [
     {
       role: 'system',
       content: [
         '你是训练剧本模拟对话生成器。',
-        '你的唯一任务是根据剧本配置生成“历史对话日志风格”的纯净文本。',
+        '你的唯一任务是根据剧本配置生成”历史对话日志风格”的纯净文本。',
         '只允许输出日志内容，不要输出解释、标题、代码块、分析或额外说明。',
         '每条对话块必须严格使用以下格式：',
         'Step: <stepName> | step_id: <stepId> | 第 <n> 轮 | 来源: chat',
@@ -417,16 +443,13 @@ const buildSimulationStageDialogueMessages = (
     {
       role: 'user',
       content: [
-        `当前要生成的学生档位：${GENERATOR_PROFILE_LABELS[profile]} (${profile})`,
-        GENERATOR_PROFILE_GUIDANCE[profile],
+        ...profileLines,
         '',
         `当前只生成第 ${stageIndex + 1}/${totalStages} 阶段，禁止输出其他阶段。`,
         `轮次要求：${roundInstruction}`,
         '',
         '生成约束：',
-        '1. 好学生走最佳通关路线，尽量用最少轮次达标；一般学生保留被引导过程；差学生可用于边界测试，不强制通关。',
-        '2. AI 话术必须贴合该阶段的 llmPrompt、角色设定和开场白。',
-        '3. 用户回答必须符合档位特点，且围绕阶段目标推进。',
+        ...constraintLines,
         '4. 输出中不要使用 Markdown 标题、列表、代码块或解释性文字。',
         '5. 每一轮 Step 行中的 stepName 与 step_id 必须使用下方真实值。',
         ...(isConciseRetry ? ['6. 这是截断后的精简重试：压缩表达，只保留达标所需的最短问答。'] : []),
@@ -465,8 +488,16 @@ const generateSimulationDialogueStage = async ({
   totalStages,
   modelsToTry,
   isConciseRetry = false,
+  customInstruction = '',
 }: StageDialogueGenerationParams): Promise<LLMResponse> => {
-  const messages = buildSimulationStageDialogueMessages(profile, stage, stageIndex, totalStages, isConciseRetry);
+  const messages = buildSimulationStageDialogueMessages(
+    profile,
+    stage,
+    stageIndex,
+    totalStages,
+    isConciseRetry,
+    customInstruction,
+  );
   let lastError = '未找到可用模型';
   let truncatedResult: LLMResponse | null = null;
 
@@ -704,12 +735,18 @@ const generateStudentAnswer = async (
 const generateSimulationDialogueRecord = async ({
   trainTaskId,
   profile,
+  customInstruction,
   onProgress,
 }: SimulationDialogueGenerationParams): Promise<LLMResponse> => {
   const config = normalizeLLMConfig(await llmConfigStorage.get());
 
   if (!config.apiKey.trim()) {
     return { success: false, error: '请先配置 LLM API Key' };
+  }
+
+  const trimmedCustomInstruction = customInstruction?.trim() ?? '';
+  if (profile === 'custom' && !trimmedCustomInstruction) {
+    return { success: false, error: '自定义生成模式需要填写生成要求。' };
   }
 
   try {
@@ -759,6 +796,7 @@ const generateSimulationDialogueRecord = async ({
         stageIndex,
         totalStages: orderedStages.length,
         modelsToTry,
+        customInstruction: trimmedCustomInstruction,
       });
 
       if (stageResult.finishReason === 'length') {
@@ -777,6 +815,7 @@ const generateSimulationDialogueRecord = async ({
           totalStages: orderedStages.length,
           modelsToTry,
           isConciseRetry: true,
+          customInstruction: trimmedCustomInstruction,
         });
 
         if (stageResult.finishReason === 'length') {

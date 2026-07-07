@@ -430,7 +430,7 @@ const buildSimulationStageDialogueMessages = (
       role: 'system',
       content: [
         '你是训练剧本模拟对话生成器。',
-        '你的唯一任务是根据剧本配置生成”历史对话日志风格”的纯净文本。',
+        '你的唯一任务是根据剧本配置生成“历史对话日志风格”的纯净文本。',
         '只允许输出日志内容，不要输出解释、标题、代码块、分析或额外说明。',
         '每条对话块必须严格使用以下格式：',
         'Step: <stepName> | step_id: <stepId> | 第 <n> 轮 | 来源: chat',

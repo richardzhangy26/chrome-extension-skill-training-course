@@ -122,6 +122,14 @@ interface StageDialogueGenerationParams {
   customInstruction?: string;
 }
 
+interface CustomPathPlanningParams {
+  config: LLMConfig;
+  modelsToTry: string[];
+  steps: ScriptStepItem[];
+  flows: ScriptStepFlow[];
+  customInstruction: string;
+}
+
 const DIALOGUE_SIMULATION_LINE_PATTERN = /^(AI|用户)\s*[：:]\s*(.+)$/;
 const DIALOGUE_LOG_SEPARATOR = '-'.repeat(40);
 
@@ -324,6 +332,16 @@ const resolveGeneratorModelCandidates = async (
   return dedupeStrings([...preferredModels, config.model]);
 };
 
+const toDialogueGeneratorStage = (step: ScriptStepItem): DialogueGeneratorStage => ({
+  stepId: step.stepId,
+  stepName: step.stepDetailDTO?.stepName?.trim() || step.stepId,
+  interactiveRounds: Math.max(0, step.stepDetailDTO?.interactiveRounds ?? 0),
+  prologue: step.stepDetailDTO?.prologue?.trim() || '',
+  description: step.stepDetailDTO?.description?.trim() || '',
+  llmPrompt: step.stepDetailDTO?.llmPrompt?.trim() || '',
+  trainerName: step.stepDetailDTO?.trainerName?.trim() || '',
+});
+
 const resolveOrderedScriptStages = (steps: ScriptStepItem[], flows: ScriptStepFlow[]): DialogueGeneratorStage[] => {
   const stepMap = new Map(steps.map(step => [step.stepId, step]));
   const nodeStages: DialogueGeneratorStage[] = [];
@@ -356,15 +374,7 @@ const resolveOrderedScriptStages = (steps: ScriptStepItem[], flows: ScriptStepFl
 
       if (nodeType === 'SCRIPT_NODE') {
         visitedNodeIds.add(currentStepId);
-        nodeStages.push({
-          stepId: nextStep.stepId,
-          stepName: nextStep.stepDetailDTO?.stepName?.trim() || nextStep.stepId,
-          interactiveRounds: Math.max(0, nextStep.stepDetailDTO?.interactiveRounds ?? 0),
-          prologue: nextStep.stepDetailDTO?.prologue?.trim() || '',
-          description: nextStep.stepDetailDTO?.description?.trim() || '',
-          llmPrompt: nextStep.stepDetailDTO?.llmPrompt?.trim() || '',
-          trainerName: nextStep.stepDetailDTO?.trainerName?.trim() || '',
-        });
+        nodeStages.push(toDialogueGeneratorStage(nextStep));
       }
     }
   }
@@ -380,15 +390,110 @@ const resolveOrderedScriptStages = (steps: ScriptStepItem[], flows: ScriptStepFl
         (left.stepDetailDTO?.stepOrder ?? Number.MAX_SAFE_INTEGER) -
         (right.stepDetailDTO?.stepOrder ?? Number.MAX_SAFE_INTEGER),
     )
-    .map(step => ({
-      stepId: step.stepId,
-      stepName: step.stepDetailDTO?.stepName?.trim() || step.stepId,
-      interactiveRounds: Math.max(0, step.stepDetailDTO?.interactiveRounds ?? 0),
-      prologue: step.stepDetailDTO?.prologue?.trim() || '',
-      description: step.stepDetailDTO?.description?.trim() || '',
-      llmPrompt: step.stepDetailDTO?.llmPrompt?.trim() || '',
-      trainerName: step.stepDetailDTO?.trainerName?.trim() || '',
-    }));
+    .map(toDialogueGeneratorStage);
+};
+
+const hasBranchingFlows = (flows: ScriptStepFlow[]) => {
+  const outgoingCounts = new Map<string, number>();
+  for (const flow of flows) {
+    outgoingCounts.set(flow.scriptStepStartId, (outgoingCounts.get(flow.scriptStepStartId) ?? 0) + 1);
+  }
+
+  return [...outgoingCounts.values()].some(count => count > 1);
+};
+
+const buildFlowGraphDescription = (steps: ScriptStepItem[], flows: ScriptStepFlow[]) => {
+  const stepLines = steps.map(step => {
+    const detail = step.stepDetailDTO;
+    const description = detail?.description?.trim().slice(0, 60) || '(无描述)';
+
+    return `- ${step.stepId} | ${detail?.stepName?.trim() || '(未命名)'} | 类型: ${detail?.nodeType ?? 'UNKNOWN'} | 描述: ${description}`;
+  });
+  const flowLines = flows.map(
+    flow => `- ${flow.scriptStepStartId} -> ${flow.scriptStepEndId}${flow.isDefault === 1 ? ' (默认连线)' : ''}`,
+  );
+
+  return ['节点列表：', ...stepLines, '', '连线列表：', ...flowLines].join('\n');
+};
+
+const buildPathPlanningMessages = (graphDescription: string, customInstruction: string): ChatMessage[] => [
+  {
+    role: 'system',
+    content: [
+      '你是训练剧本路径规划器。',
+      '给你一个剧本流程图（节点列表 + 有向连线列表）和一条自定义生成要求。',
+      '请从 SCRIPT_START 节点出发，沿连线方向选出一条最符合自定义要求的完整路径。',
+      '只输出一个 JSON 数组：路径上按顺序排列的 SCRIPT_NODE 节点 stepId，不包含 SCRIPT_START 和 SCRIPT_END。',
+      '不要输出解释、代码块标记或其他任何内容。',
+    ].join('\n'),
+  },
+  {
+    role: 'user',
+    content: [`自定义生成要求：${customInstruction}`, '', graphDescription].join('\n'),
+  },
+];
+
+const parsePlannedStepIds = (content: string): string[] | null => {
+  try {
+    const parsed = JSON.parse(normalizeGeneratedDialogueBlock(content)) as unknown;
+    if (!Array.isArray(parsed) || !parsed.length) {
+      return null;
+    }
+    if (!parsed.every((item): item is string => typeof item === 'string' && Boolean(item.trim()))) {
+      return null;
+    }
+
+    const ids = parsed.map(item => item.trim());
+    return new Set(ids).size === ids.length ? ids : null;
+  } catch {
+    return null;
+  }
+};
+
+const resolveCustomScriptStages = async ({
+  config,
+  modelsToTry,
+  steps,
+  flows,
+  customInstruction,
+}: CustomPathPlanningParams): Promise<DialogueGeneratorStage[] | null> => {
+  const stepMap = new Map(steps.map(step => [step.stepId, step]));
+  const startStepId = steps.find(step => step.stepDetailDTO?.nodeType === 'SCRIPT_START')?.stepId;
+  if (!startStepId) {
+    return null;
+  }
+
+  const adjacency = new Set(flows.map(flow => `${flow.scriptStepStartId}->${flow.scriptStepEndId}`));
+  const messages = buildPathPlanningMessages(buildFlowGraphDescription(steps, flows), customInstruction);
+
+  for (const model of modelsToTry) {
+    const result = await callChatCompletion(config, model, messages, { temperature: 0, maxTokens: 1024 });
+    if (!result.success || !result.content) {
+      continue;
+    }
+
+    const plannedStepIds = parsePlannedStepIds(result.content);
+    if (!plannedStepIds) {
+      continue;
+    }
+
+    const allNodesValid = plannedStepIds.every(
+      stepId => stepMap.get(stepId)?.stepDetailDTO?.nodeType === 'SCRIPT_NODE',
+    );
+    const pathConnected =
+      adjacency.has(`${startStepId}->${plannedStepIds[0]}`) &&
+      plannedStepIds.slice(1).every((stepId, index) => adjacency.has(`${plannedStepIds[index]}->${stepId}`));
+
+    if (allNodesValid && pathConnected) {
+      return plannedStepIds.flatMap(stepId => {
+        const step = stepMap.get(stepId);
+        return step ? [toDialogueGeneratorStage(step)] : [];
+      });
+    }
+  }
+
+  console.warn('自定义路径规划失败，回退默认通关路径。');
+  return null;
 };
 
 const buildSimulationStageDialogueMessages = (
@@ -774,12 +879,27 @@ const generateSimulationDialogueRecord = async ({
       return { success: false, error: '未获取到剧本步骤，无法生成模拟对话' };
     }
 
-    const orderedStages = resolveOrderedScriptStages(steps, flowResponse?.data ?? []);
+    const flows = flowResponse?.data ?? [];
+    const modelsToTry = await resolveGeneratorModelCandidates(config);
+
+    let orderedStages = resolveOrderedScriptStages(steps, flows);
+    if (profile === 'custom' && hasBranchingFlows(flows)) {
+      const plannedStages = await resolveCustomScriptStages({
+        config,
+        modelsToTry,
+        steps,
+        flows,
+        customInstruction: trimmedCustomInstruction,
+      });
+      if (plannedStages?.length) {
+        orderedStages = plannedStages;
+      }
+    }
+
     if (!orderedStages.length) {
       return { success: false, error: '未识别到默认通关路径上的有效阶段' };
     }
 
-    const modelsToTry = await resolveGeneratorModelCandidates(config);
     const generatedBlocks: string[] = [];
 
     for (const [stageIndex, stage] of orderedStages.entries()) {

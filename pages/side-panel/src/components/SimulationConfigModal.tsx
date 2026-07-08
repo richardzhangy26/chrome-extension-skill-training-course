@@ -18,7 +18,8 @@ interface SimulationConfigModalProps {
   onClose: () => void;
   trainTaskId: string | null;
   onOpenMultiRole?: () => void;
-  readOnly?: boolean;
+  isLoggedIn?: boolean;
+  onSyncConfig?: () => Promise<boolean>;
 }
 
 const createEmptyDraft = (): SimulationConfigDraft => ({
@@ -60,10 +61,12 @@ const SimulationConfigModal = ({
   onClose,
   trainTaskId,
   onOpenMultiRole,
-  readOnly = false,
+  isLoggedIn = false,
+  onSyncConfig,
 }: SimulationConfigModalProps) => {
   const [draft, setDraft] = useState<SimulationConfigDraft>(createEmptyDraft);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [generatorProfile, setGeneratorProfile] = useState<GeneratorProfile>('good');
   const [customInstruction, setCustomInstruction] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -91,6 +94,7 @@ const SimulationConfigModal = ({
       });
       setGenerateError(null);
       setGenerateProgress(null);
+      setSaveError(null);
     };
 
     void loadConfig();
@@ -106,9 +110,20 @@ const SimulationConfigModal = ({
 
   const handleSave = async () => {
     setIsSaving(true);
-    await llmConfigStorage.setConfig(draft);
-    setIsSaving(false);
-    onClose();
+    setSaveError(null);
+    try {
+      await llmConfigStorage.setConfig(draft);
+      if (isLoggedIn && onSyncConfig) {
+        const ok = await onSyncConfig();
+        if (!ok) {
+          setSaveError('已保存到本地，但云端同步失败，可稍后重试。');
+          return;
+        }
+      }
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -192,10 +207,9 @@ const SimulationConfigModal = ({
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 p-5">
-          {readOnly && (
+          {isLoggedIn && (
             <div className="rounded-lg bg-cyan-50 p-3 text-xs text-cyan-700">
-              已登录：模拟对话内容与知识库内容由 Admin Web 统一管理，可前往网页「设置 →
-              插件配置」修改；启用开关与生成按钮仍可在此本地使用。
+              已登录：模拟对话与知识库内容会在保存后自动同步到云端，可在 Admin Web「设置 → 插件配置」查看。
             </div>
           )}
           <div className="space-y-4">
@@ -238,7 +252,6 @@ const SimulationConfigModal = ({
                     }))
                   }
                   rows={10}
-                  disabled={readOnly}
                   placeholder={
                     '例如：\nStep: 开场确认 | step_id: demo-step | 第 1 轮 | 来源: chat\nAI: 你准备好了吗？\n用户: 准备好了。\n----------------------------------------'
                   }
@@ -374,7 +387,6 @@ const SimulationConfigModal = ({
                     }))
                   }
                   rows={10}
-                  disabled={readOnly}
                   placeholder="例如：课程要点、标准答案、评分口径、背景资料等。"
                   className="min-h-[220px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                 />
@@ -404,28 +416,21 @@ const SimulationConfigModal = ({
           </div>
         </div>
 
-        <div className="flex gap-3 border-t border-slate-200 bg-white px-5 py-4">
-          <button
-            onClick={onClose}
-            className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100">
-            取消
-          </button>
-          {!readOnly && (
+        <div className="border-t border-slate-200 bg-white px-5 py-4">
+          {saveError && <p className="mb-2 text-xs text-amber-600">{saveError}</p>}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100">
+              取消
+            </button>
             <button
               onClick={handleSave}
               disabled={isSaving}
               className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-sky-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
               {isSaving ? '保存中...' : '保存'}
             </button>
-          )}
-          {readOnly && (
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-sky-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
-              {isSaving ? '保存中...' : '保存本地开关'}
-            </button>
-          )}
+          </div>
         </div>
       </div>
     </div>

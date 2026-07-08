@@ -42,17 +42,11 @@ export async function writeUserLlmConfig(userId: string, config: LlmConfigInput)
     });
 }
 
+// 网页仅供查看配置，编辑入口在插件；写入由 bearer 的
+// POST /api/extension/config 经 writeUserLlmConfig 完成，此处不再暴露 cookie 侧保存。
 export const getMyLlmConfig = createServerFn({ method: 'GET' })
   .middleware([authApiMiddleware])
   .handler(async ({ context }) => {
     const config = await readUserLlmConfig(context.userId);
     return { config };
-  });
-
-export const saveMyLlmConfig = createServerFn({ method: 'POST' })
-  .inputValidator(llmConfigSchema)
-  .middleware([authApiMiddleware])
-  .handler(async ({ data, context }) => {
-    await writeUserLlmConfig(context.userId, data);
-    return { ok: true as const };
   });

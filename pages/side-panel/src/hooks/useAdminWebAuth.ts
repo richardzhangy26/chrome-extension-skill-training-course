@@ -42,7 +42,10 @@ const useAdminWebAuth = () => {
       // 服务端 apiKey 为空时不覆盖本地 apiKey，避免历史遗留空配置把本地真实 key 冲掉。
       const server = result.config;
       const serverPatch = server.apiKey.trim().length > 0 ? server : { ...server, apiKey: local.apiKey };
-      await llmConfigStorage.setConfig({ ...local, ...serverPatch });
+      const merged = { ...local, ...serverPatch };
+      // enabled 为本地字段、不在同步集内；下拉后按合并结果的 apiKey 重新派生，
+      // 保持「enabled === apiKey 非空」的不变式（换设备登录后同样成立）。
+      await llmConfigStorage.setConfig({ ...merged, enabled: merged.apiKey.trim().length > 0 });
       return;
     }
     // 服务端确认无配置（config:null）：本地有有效 key 时上传一次 seed。
@@ -54,25 +57,40 @@ const useAdminWebAuth = () => {
     }
   }, []);
 
-  // 启动时校验既有 token 是否仍有效
+  // 配置上行（保存即上传）：把本地已保存的同步字段推到服务端。
+  // 插件是唯一编辑入口，故保存后主动上传；未登录时视为成功（仅本地保存）。
+  // 返回是否上传成功，供保存 UI 做非阻塞提示。
+  const syncConfigUp = useCallback(async (): Promise<boolean> => {
+    const current = await authSessionStorage.get();
+    if (!current.isLoggedIn) {
+      return true;
+    }
+    const local = await llmConfigStorage.get();
+    const ok = await pushLlmConfig(pickSyncedConfig(local));
+    if (!ok) {
+      console.warn('[admin-web] 配置上传失败');
+    }
+    return ok;
+  }, []);
+
+  // 启动时仅校验既有 token 是否仍有效，不再下拉配置：
+  // 下拉（server→local 覆盖）只在显式登录时发生，避免用服务端旧值
+  // 覆盖插件里已保存但尚未上传的本地配置。
   useEffect(() => {
     (async () => {
       try {
         const current = await authSessionStorage.get();
         if (current.isLoggedIn) {
-          const user = await getSession();
-          if (user) {
-            await syncConfigDown();
-          }
+          await getSession();
           // getSession 内部在 401 时已 clear()，订阅会刷新 UI
         }
       } catch (error) {
-        console.warn('[admin-web] 启动同步失败', error);
+        console.warn('[admin-web] 启动校验会话失败', error);
       } finally {
         setLoading(false);
       }
     })();
-  }, [syncConfigDown]);
+  }, []);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -109,7 +127,7 @@ const useAdminWebAuth = () => {
     login,
     register,
     logout,
-    refreshConfig: syncConfigDown,
+    syncConfigUp,
   };
 };
 

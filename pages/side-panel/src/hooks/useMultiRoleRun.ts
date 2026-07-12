@@ -5,6 +5,7 @@
 
 import { apiRequest, API_ENDPOINTS } from '../services/background-bridge';
 import { generateStudentAnswer } from '../services/llm-service';
+import { resolveTrainingMetadata } from '../services/training-metadata-service';
 import { MULTI_ROLE_POLL_INTERVAL_MS, MULTI_ROLE_RETRY_DELAY_MS } from '../types/multi-role-types';
 import { agentLogStorage, llmConfigStorage } from '@extension/storage';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -588,7 +589,8 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
         const displayName = taskName || `${trainTaskId.substring(0, 8)}...`;
 
         // 获取步骤列表 + flowList
-        const [stepsResponse, flowResponse] = await Promise.all([
+        const [trainingMeta, stepsResponse, flowResponse] = await Promise.all([
+          resolveTrainingMetadata(),
           apiRequest<ApiResponse<ScriptStepItem[]>>({
             endpoint: API_ENDPOINTS.QUERY_SCRIPT_STEP_LIST,
             method: 'POST',
@@ -633,6 +635,7 @@ const useMultiRoleRun = (trainTaskId: string | null) => {
             const session = await agentLogStorage.createSession({
               taskId: trainTaskId,
               taskName: logSessionName,
+              trainingMeta,
               stepNameMapping: stepMapping,
             });
             logSessionId = session.id;

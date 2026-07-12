@@ -646,12 +646,14 @@ const StartButton = ({
   onClick,
   disabled,
   trainTaskId,
+  embedded = false,
 }: {
   onClick: () => void;
   disabled: boolean;
   trainTaskId: string | null;
+  embedded?: boolean;
 }) => (
-  <div className="border-t border-slate-200 bg-white p-5">
+  <div className={embedded ? '' : 'border-t border-slate-200 bg-white p-5'}>
     <button
       onClick={onClick}
       disabled={disabled || !trainTaskId}
@@ -1425,7 +1427,22 @@ const SidePanel = () => {
 
           {/* 底部操作区 */}
           {isIdle ? (
-            <StartButton onClick={startConversation} disabled={isLoading} trainTaskId={trainTaskId} />
+            <div className="border-t border-slate-200 bg-white p-5">
+              <div className="mb-3">
+                <SimulationConfigBar
+                  config={simulationConfig}
+                  onToggleSimulation={enabled => {
+                    void handleToggleDialogueSimulation(enabled);
+                  }}
+                  onToggleKnowledge={enabled => {
+                    void handleToggleKnowledgeBase(enabled);
+                  }}
+                  onOpenConfig={() => setIsSimulationConfigOpen(true)}
+                  disabled={isLoading}
+                />
+              </div>
+              <StartButton onClick={startConversation} disabled={isLoading} trainTaskId={trainTaskId} embedded />
+            </div>
           ) : isChatting || isCompleted ? (
             <ChatInput
               onSend={sendMessage}

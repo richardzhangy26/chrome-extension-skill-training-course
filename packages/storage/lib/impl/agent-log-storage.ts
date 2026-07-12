@@ -26,11 +26,20 @@ interface AgentLogSession {
   id: string;
   taskId: string;
   taskName?: string;
+  trainingMeta?: AgentTrainingMeta;
   createdAt: number;
   updatedAt: number;
   stepNameMapping?: Record<string, string>;
   entries: AgentLogEntry[];
   ownerUserId?: string;
+}
+
+interface AgentTrainingMeta {
+  courseId?: string;
+  courseName?: string;
+  schoolName?: string;
+  regionName?: string;
+  agentName?: string;
 }
 
 const STORAGE_KEY_AGENT_LOGS = 'agent-log-sessions';
@@ -46,6 +55,7 @@ interface AgentLogStorageType extends BaseStorageType<AgentLogSession[]> {
   createSession: (payload: {
     taskId: string;
     taskName?: string;
+    trainingMeta?: AgentTrainingMeta;
     stepNameMapping?: Record<string, string>;
   }) => Promise<AgentLogSession>;
   addEntry: (sessionId: string, entry: AgentLogEntry) => Promise<void>;
@@ -66,13 +76,14 @@ const mergeStepNameMapping = (
 const agentLogStorage: AgentLogStorageType = {
   ...storage,
 
-  createSession: async ({ taskId, taskName, stepNameMapping }) => {
+  createSession: async ({ taskId, taskName, trainingMeta, stepNameMapping }) => {
     const now = Date.now();
     const auth = await authSessionStorage.get();
     const session: AgentLogSession = {
       id: generateSessionId(),
       taskId,
       taskName,
+      ...(trainingMeta ? { trainingMeta } : {}),
       createdAt: now,
       updatedAt: now,
       stepNameMapping,
@@ -155,4 +166,12 @@ const selectVisibleSessions = (sessions: AgentLogSession[], currentUserId: strin
 };
 
 export { agentLogStorage, selectVisibleSessions };
-export type { AgentLogEntryType, AgentLogSource, ChatLogEntry, AgentLogEntry, AgentLogSession, AgentLogStorageType };
+export type {
+  AgentLogEntryType,
+  AgentLogSource,
+  ChatLogEntry,
+  AgentLogEntry,
+  AgentTrainingMeta,
+  AgentLogSession,
+  AgentLogStorageType,
+};

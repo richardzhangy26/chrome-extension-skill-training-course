@@ -1,3 +1,4 @@
+import { m } from '@/locale/paraglide/messages';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { ExtensionHistoryView } from '@/components/settings/history/extension-history-view';
 import { createFileRoute } from '@tanstack/react-router';
@@ -8,11 +9,14 @@ export const Route = createFileRoute('/settings/history')({
 
 function ExtensionHistoryPage() {
   const breadcrumbs = [
-    { label: '设置', isCurrentPage: false },
-    { label: '插件历史', isCurrentPage: true },
+    { label: m.common_settings(), isCurrentPage: false },
+    { label: m.settings_history_title(), isCurrentPage: true },
   ];
   return (
-    <DashboardLayout breadcrumbs={breadcrumbs} title="插件历史" description="查看插件上传的训练对话历史（只读）。">
+    <DashboardLayout
+      breadcrumbs={breadcrumbs}
+      title={m.settings_history_title()}
+      description={m.settings_history_description()}>
       <ExtensionHistoryView />
     </DashboardLayout>
   );

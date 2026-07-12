@@ -405,10 +405,12 @@ const SettingsModal = ({ isOpen, onClose, isLoggedIn = false, onSyncConfig }: Se
                     type="password"
                     value={config.apiKey}
                     onChange={e => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                    placeholder="请输入豆包 API Key"
+                    placeholder="请输入 API Key"
                     className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
                   />
-                  <p className="mt-1 text-xs text-slate-400">需要企业微信申请 llm-service 获取</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    支持 OpenRouter、OpenAI 等标准 OpenAI 格式服务；Polymas 用户可填企业微信申请的 llm-service Key
+                  </p>
                 </div>
 
                 {/* 模型设置 */}

@@ -1,10 +1,7 @@
 import { m } from '@/locale/paraglide/messages';
 import {
-  IconBell,
   IconCreditCard,
-  IconFileUpload,
   IconHistory,
-  IconKey,
   IconLayoutDashboard,
   IconLock,
   IconPuzzle,
@@ -67,35 +64,13 @@ export function getSidebarLinks(): MenuItemConfig[] {
           external: false,
         },
         {
-          title: m.dashboard_sidebar_files(),
-          icon: IconFileUpload,
-          href: Routes.SettingsFiles,
-          external: false,
-        },
-        {
-          title: m.dashboard_sidebar_api_keys(),
-          icon: IconKey,
-          href: Routes.SettingsApiKeys,
-          external: false,
-        },
-        ...(websiteConfig.newsletter?.enable
-          ? [
-              {
-                title: m.dashboard_sidebar_notifications(),
-                icon: IconBell,
-                href: Routes.SettingsNotifications,
-                external: false,
-              },
-            ]
-          : []),
-        {
-          title: '插件配置',
+          title: m.dashboard_sidebar_extension_config(),
           icon: IconPuzzle,
           href: Routes.SettingsExtension,
           external: false,
         },
         {
-          title: '插件历史',
+          title: m.dashboard_sidebar_extension_history(),
           icon: IconHistory,
           href: Routes.SettingsHistory,
           external: false,

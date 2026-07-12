@@ -1,25 +1,34 @@
+import { m } from '@/locale/paraglide/messages';
 import { useEffect, useState } from 'react';
 import { getMyLlmConfig } from '@/api/extension-config';
 import { defaultLlmConfig, type LlmConfigInput } from '@/lib/llm-config-schema';
 
 type FieldDef = {
   name: keyof LlmConfigInput;
-  label: string;
+  label: () => string;
   type: 'text' | 'password' | 'textarea';
 };
 
 // 只读展示：配置的编辑入口在插件，网页仅供查看。
 const FIELDS: FieldDef[] = [
-  { name: 'apiKey', label: 'API Key', type: 'password' },
-  { name: 'apiUrl', label: 'Base URL', type: 'text' },
-  { name: 'model', label: '模型', type: 'text' },
-  { name: 'systemPrompt', label: '系统提示词', type: 'textarea' },
+  { name: 'apiKey', label: m.settings_extension_api_key, type: 'password' },
+  { name: 'apiUrl', label: m.settings_extension_base_url, type: 'text' },
+  { name: 'model', label: m.settings_extension_model, type: 'text' },
   {
-    name: 'dialogueSimulationContent',
-    label: '模拟对话内容',
+    name: 'systemPrompt',
+    label: m.settings_extension_system_prompt,
     type: 'textarea',
   },
-  { name: 'knowledgeBaseContent', label: '知识库内容', type: 'textarea' },
+  {
+    name: 'dialogueSimulationContent',
+    label: m.settings_extension_dialogue_simulation_content,
+    type: 'textarea',
+  },
+  {
+    name: 'knowledgeBaseContent',
+    label: m.settings_extension_knowledge_base_content,
+    type: 'textarea',
+  },
 ];
 
 export function ExtensionConfigForm() {
@@ -34,7 +43,7 @@ export function ExtensionConfigForm() {
   }, []);
 
   if (!loaded) {
-    return <p className="text-muted-foreground text-sm">加载中…</p>;
+    return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>;
   }
 
   const profilesText = JSON.stringify(config.studentProfiles, null, 2);
@@ -42,14 +51,14 @@ export function ExtensionConfigForm() {
   return (
     <div className="flex max-w-xl flex-col gap-4">
       <div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-800">
-        配置请在插件中修改，此处仅供查看。插件保存后会自动同步到这里。
+        {m.settings_extension_config_note()}
       </div>
       {FIELDS.map(f => {
         const value = (config[f.name] as string) ?? '';
         return (
           <div key={f.name} className="flex flex-col gap-1">
             <label htmlFor={f.name} className="text-sm font-medium">
-              {f.label}
+              {f.label()}
             </label>
             {f.type === 'textarea' ? (
               <textarea
@@ -73,7 +82,7 @@ export function ExtensionConfigForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="studentProfiles" className="text-sm font-medium">
-          学生档位（JSON 数组）
+          {m.settings_extension_student_profiles()}
         </label>
         <textarea
           id="studentProfiles"

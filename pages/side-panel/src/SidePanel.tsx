@@ -204,6 +204,12 @@ const createSimulationModeState = (): SimulationModeState => ({
   knowledgeBaseContent: '',
 });
 
+const TRAINING_MODE_TITLES: Record<TrainingMode, string> = {
+  text: '能力训练助手',
+  voice: '口语训练助手',
+  pro: '能力训练助手 Pro',
+};
+
 // ============ Header组件 ============
 const Header = ({
   trainTaskId,
@@ -240,12 +246,14 @@ const Header = ({
   const isProcessing = ['FETCHING_STEPS', 'FETCHING_FIRST_STEP', 'RUNNING_CARD'].includes(workflowState);
 
   return (
-    <div className="relative overflow-hidden">
-      {/* 渐变背景 */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-cyan-500 to-emerald-400" />
-      {/* 装饰性光晕 */}
-      <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
-      <div className="absolute -bottom-10 -left-10 h-24 w-24 rounded-full bg-white/10 blur-xl" />
+    <div className="relative">
+      <div className="absolute inset-0 overflow-hidden">
+        {/* 渐变背景 */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-cyan-500 to-emerald-400" />
+        {/* 装饰性光晕 */}
+        <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute -bottom-10 -left-10 h-24 w-24 rounded-full bg-white/10 blur-xl" />
+      </div>
 
       <div className="relative px-4 py-4">
         {/* 标题行 */}
@@ -254,9 +262,7 @@ const Header = ({
             <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-sm">
               <Icons.Logo />
             </div>
-            <h1 className="text-lg font-semibold tracking-tight text-white">
-              {mode === 'voice' ? '口语训练助手' : '能力训练助手'}
-            </h1>
+            <h1 className="text-lg font-semibold tracking-tight text-white">{TRAINING_MODE_TITLES[mode]}</h1>
             <ModeToggle mode={mode} onChange={onChangeMode} disabled={modeToggleDisabled} />
           </div>
           <div className="flex items-center gap-2">
@@ -1306,7 +1312,7 @@ const SidePanel = () => {
 
   const voiceBusy = voice.voiceState !== 'IDLE' && voice.voiceState !== 'COMPLETED' && voice.voiceState !== 'ERROR';
   const textBusy = workflowState !== 'IDLE' || multiRole.isMultiRoleMode;
-  const modeToggleDisabled = mode === 'text' ? textBusy : voiceBusy;
+  const modeToggleDisabled = mode === 'voice' ? voiceBusy : textBusy;
   const canStartVoice = voice.voiceState === 'IDLE' || voice.voiceState === 'ERROR';
   const voiceStateLabel: Record<typeof voice.voiceState, string> = {
     IDLE: '未连接',

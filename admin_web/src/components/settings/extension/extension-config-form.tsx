@@ -1,112 +1,96 @@
+import { m } from '@/locale/paraglide/messages';
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { getMyLlmConfig, saveMyLlmConfig } from '@/api/extension-config';
-import { defaultLlmConfig, llmConfigSchema, type LlmConfigInput } from '@/lib/llm-config-schema';
+import { getMyLlmConfig } from '@/api/extension-config';
+import { defaultLlmConfig, type LlmConfigInput } from '@/lib/llm-config-schema';
 
 type FieldDef = {
   name: keyof LlmConfigInput;
-  label: string;
-  type: 'text' | 'password' | 'number' | 'textarea' | 'checkbox';
+  label: () => string;
+  type: 'text' | 'password' | 'textarea';
 };
 
-// 仅列出适合直接表单编辑的字段；studentProfiles 用 JSON 文本编辑（见下）。
+// 只读展示：配置的编辑入口在插件，网页仅供查看。
 const FIELDS: FieldDef[] = [
-  { name: 'apiKey', label: 'API Key', type: 'password' },
-  { name: 'apiUrl', label: 'Base URL', type: 'text' },
-  { name: 'model', label: '模型', type: 'text' },
-  { name: 'temperature', label: 'Temperature', type: 'number' },
-  { name: 'topK', label: 'Top K', type: 'number' },
-  { name: 'maxTokens', label: 'Max Tokens', type: 'number' },
-  { name: 'maxHistoryRounds', label: '最大历史轮数', type: 'number' },
-  { name: 'serviceCode', label: 'Service Code', type: 'text' },
-  { name: 'systemPrompt', label: '系统提示词', type: 'textarea' },
-  { name: 'dialogueSimulationContent', label: '模拟对话内容', type: 'textarea' },
-  { name: 'knowledgeBaseContent', label: '知识库内容', type: 'textarea' },
-  { name: 'ttsApiUrl', label: 'TTS Base URL', type: 'text' },
-  { name: 'ttsModel', label: 'TTS 模型', type: 'text' },
-  { name: 'voice', label: '音色', type: 'text' },
-  { name: 'speed', label: '语速', type: 'number' },
+  { name: 'apiKey', label: m.settings_extension_api_key, type: 'password' },
+  { name: 'apiUrl', label: m.settings_extension_base_url, type: 'text' },
+  { name: 'model', label: m.settings_extension_model, type: 'text' },
+  {
+    name: 'systemPrompt',
+    label: m.settings_extension_system_prompt,
+    type: 'textarea',
+  },
+  {
+    name: 'dialogueSimulationContent',
+    label: m.settings_extension_dialogue_simulation_content,
+    type: 'textarea',
+  },
+  {
+    name: 'knowledgeBaseContent',
+    label: m.settings_extension_knowledge_base_content,
+    type: 'textarea',
+  },
 ];
 
 export function ExtensionConfigForm() {
   const [loaded, setLoaded] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [profilesText, setProfilesText] = useState('[]');
-  const { register, handleSubmit, reset, setValue } = useForm<LlmConfigInput>({
-    resolver: zodResolver(llmConfigSchema),
-    defaultValues: defaultLlmConfig,
-  });
+  const [config, setConfig] = useState<LlmConfigInput>(defaultLlmConfig);
 
   useEffect(() => {
     getMyLlmConfig().then(({ config }) => {
-      const value = config ?? defaultLlmConfig;
-      reset(value);
-      setProfilesText(JSON.stringify(value.studentProfiles, null, 2));
+      setConfig(config ?? defaultLlmConfig);
       setLoaded(true);
     });
-  }, [reset]);
-
-  const onSubmit = async (data: LlmConfigInput) => {
-    setSaved(false);
-    // enabled 随 apiKey 派生
-    const payload = { ...data, enabled: data.apiKey.trim().length > 0 };
-    await saveMyLlmConfig({ data: payload });
-    setSaved(true);
-  };
+  }, []);
 
   if (!loaded) {
-    return <p className="text-muted-foreground text-sm">加载中…</p>;
+    return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>;
   }
 
+  const profilesText = JSON.stringify(config.studentProfiles, null, 2);
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex max-w-xl flex-col gap-4">
-      {FIELDS.map(f => (
-        <div key={f.name} className="flex flex-col gap-1">
-          <label htmlFor={f.name} className="text-sm font-medium">
-            {f.label}
-          </label>
-          {f.type === 'textarea' ? (
-            <textarea id={f.name} className="min-h-24 rounded-md border px-3 py-2 text-sm" {...register(f.name)} />
-          ) : (
-            <input
-              id={f.name}
-              type={f.type}
-              className="rounded-md border px-3 py-2 text-sm"
-              {...register(f.name, {
-                valueAsNumber: f.type === 'number',
-              })}
-            />
-          )}
-        </div>
-      ))}
+    <div className="flex max-w-xl flex-col gap-4">
+      <div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-800">
+        {m.settings_extension_config_note()}
+      </div>
+      {FIELDS.map(f => {
+        const value = (config[f.name] as string) ?? '';
+        return (
+          <div key={f.name} className="flex flex-col gap-1">
+            <label htmlFor={f.name} className="text-sm font-medium">
+              {f.label()}
+            </label>
+            {f.type === 'textarea' ? (
+              <textarea
+                id={f.name}
+                readOnly
+                value={value}
+                className="bg-muted min-h-24 rounded-md border px-3 py-2 text-sm"
+              />
+            ) : (
+              <input
+                id={f.name}
+                type={f.type}
+                readOnly
+                value={value}
+                className="bg-muted rounded-md border px-3 py-2 text-sm"
+              />
+            )}
+          </div>
+        );
+      })}
 
       <div className="flex flex-col gap-1">
         <label htmlFor="studentProfiles" className="text-sm font-medium">
-          学生档位（JSON 数组）
+          {m.settings_extension_student_profiles()}
         </label>
         <textarea
           id="studentProfiles"
-          className="min-h-40 rounded-md border px-3 py-2 font-mono text-xs"
+          readOnly
           value={profilesText}
-          onChange={e => {
-            setProfilesText(e.target.value);
-            try {
-              setValue('studentProfiles', JSON.parse(e.target.value));
-            } catch {
-              // 非法 JSON 暂不更新表单值，提交时由 zod 校验拦截
-            }
-          }}
+          className="bg-muted min-h-40 rounded-md border px-3 py-2 font-mono text-xs"
         />
-        <p className="text-muted-foreground text-xs">每项：{'{ id, label, description, style, fallbackHint }'}</p>
       </div>
-
-      <div className="flex items-center gap-3">
-        <button type="submit" className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-medium">
-          保存
-        </button>
-        {saved && <span className="text-sm text-emerald-600">已保存</span>}
-      </div>
-    </form>
+    </div>
   );
 }

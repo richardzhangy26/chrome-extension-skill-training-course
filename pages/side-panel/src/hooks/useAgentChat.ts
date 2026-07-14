@@ -11,6 +11,7 @@ import {
   API_ENDPOINTS,
 } from '../services/background-bridge';
 import { generateStudentAnswer } from '../services/llm-service';
+import { resolveTrainingMetadata } from '../services/training-metadata-service';
 import { agentLogStorage, agentSessionStorage, llmConfigStorage } from '@extension/storage';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { AgentLogEntry } from '@extension/storage';
@@ -462,9 +463,10 @@ const useAgentChat = () => {
 
     try {
       // 步骤1: 获取任务配置（用于日志命名）
-      const [taskName, profileLabel] = await Promise.all([
+      const [taskName, profileLabel, trainingMeta] = await Promise.all([
         fetchTrainTaskName(trainTaskId),
         resolveCurrentProfileLabel(),
+        resolveTrainingMetadata(),
       ]);
       const displayName = taskName?.trim() || `${trainTaskId.substring(0, 8)}...`;
       const logSessionName = buildLogSessionName(displayName, profileLabel);
@@ -484,6 +486,7 @@ const useAgentChat = () => {
         const newSession = await agentLogStorage.createSession({
           taskId: trainTaskId,
           taskName: logSessionName,
+          trainingMeta,
           stepNameMapping: stepNameMappingRef.current,
         });
         setActiveLogSessionId(newSession.id);
@@ -595,9 +598,10 @@ const useAgentChat = () => {
         }
 
         if (!activeLogSessionIdRef.current) {
-          const [taskName, profileLabel] = await Promise.all([
+          const [taskName, profileLabel, trainingMeta] = await Promise.all([
             fetchTrainTaskName(trainTaskId),
             resolveCurrentProfileLabel(),
+            resolveTrainingMetadata(),
           ]);
           const displayName = taskName?.trim() || `${trainTaskId.substring(0, 8)}...`;
           const logSessionName = buildLogSessionName(displayName, profileLabel);
@@ -606,6 +610,7 @@ const useAgentChat = () => {
             const newSession = await agentLogStorage.createSession({
               taskId: trainTaskId,
               taskName: logSessionName,
+              trainingMeta,
               stepNameMapping: stepNameMappingRef.current,
             });
             setActiveLogSessionId(newSession.id);

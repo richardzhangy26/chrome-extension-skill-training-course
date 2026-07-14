@@ -391,7 +391,40 @@ const llmConfigStorage = {
   },
 };
 
-export type { LLMConfig, LLMConfigInput, StudentProfile, StudentProfileId, SystemPromptMode, TTSResponseFormat };
+const SYNCED_LLM_CONFIG_KEYS = [
+  'apiKey',
+  'apiUrl',
+  'model',
+  'systemPrompt',
+  'studentProfiles',
+  'dialogueSimulationContent',
+  'knowledgeBaseContent',
+] as const satisfies readonly (keyof LLMConfig)[];
+
+type SyncedLLMConfigKey = (typeof SYNCED_LLM_CONFIG_KEYS)[number];
+
+type SyncedLLMConfig = Pick<LLMConfig, SyncedLLMConfigKey>;
+
+const pickSyncedConfig = (config: LLMConfig): SyncedLLMConfig => ({
+  apiKey: config.apiKey,
+  apiUrl: config.apiUrl,
+  model: config.model,
+  systemPrompt: config.systemPrompt,
+  studentProfiles: config.studentProfiles,
+  dialogueSimulationContent: config.dialogueSimulationContent,
+  knowledgeBaseContent: config.knowledgeBaseContent,
+});
+
+export type {
+  LLMConfig,
+  LLMConfigInput,
+  StudentProfile,
+  StudentProfileId,
+  SyncedLLMConfig,
+  SyncedLLMConfigKey,
+  SystemPromptMode,
+  TTSResponseFormat,
+};
 export {
   AVAILABLE_MODELS,
   DEFAULT_LLM_MAX_HISTORY_ROUNDS,
@@ -410,6 +443,8 @@ export {
   SUPPORTED_TTS_RESPONSE_FORMATS,
   SPEED_MIN,
   SPEED_MAX,
+  SYNCED_LLM_CONFIG_KEYS,
   llmConfigStorage,
   normalizeLLMConfig,
+  pickSyncedConfig,
 };

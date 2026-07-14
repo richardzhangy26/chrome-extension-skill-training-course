@@ -108,6 +108,17 @@ const AuthPanel = ({ isOpen, onClose, onLogin, onRegister }: AuthPanelProps) => 
             className="w-full text-center text-xs text-cyan-600 hover:text-cyan-700">
             {mode === 'login' ? '没有账号？去注册' : '已有账号？去登录'}
           </button>
+          <p className="text-center text-xs leading-relaxed text-slate-400">
+            登录后在插件里保存配置会自动同步到云端；可在
+            <a
+              href="https://polymasability.agicoderbit.com"
+              target="_blank"
+              rel="noreferrer"
+              className="text-cyan-600 hover:text-cyan-700">
+              控制台
+            </a>
+            查看历史记录与配置。
+          </p>
         </div>
       </div>
     </div>

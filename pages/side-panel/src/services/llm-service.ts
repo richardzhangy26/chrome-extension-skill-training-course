@@ -255,7 +255,7 @@ const dedupeStrings = (items: string[]) => {
 
 const buildTextModelHeaders = (config: Pick<LLMConfig, 'apiKey' | 'serviceCode'>) => ({
   'Content-Type': 'application/json',
-  ...(config.apiKey.trim() ? { 'api-key': config.apiKey } : {}),
+  ...(config.apiKey.trim() ? { 'api-key': config.apiKey, Authorization: `Bearer ${config.apiKey}` } : {}),
   ...(config.serviceCode.trim() ? { 'service-code': config.serviceCode } : {}),
 });
 
@@ -772,11 +772,7 @@ const fetchAvailableTextModels = async (
   await assertHostPermission(modelsUrl);
   const response = await fetch(modelsUrl, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(config.apiKey.trim() ? { 'api-key': config.apiKey } : {}),
-      ...(config.serviceCode.trim() ? { 'service-code': config.serviceCode } : {}),
-    },
+    headers: buildTextModelHeaders(config),
   });
 
   if (!response.ok) {

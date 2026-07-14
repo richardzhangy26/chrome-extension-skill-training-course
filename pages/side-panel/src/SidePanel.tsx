@@ -646,12 +646,14 @@ const StartButton = ({
   onClick,
   disabled,
   trainTaskId,
+  embedded = false,
 }: {
   onClick: () => void;
   disabled: boolean;
   trainTaskId: string | null;
+  embedded?: boolean;
 }) => (
-  <div className="border-t border-slate-200 bg-white p-5">
+  <div className={embedded ? '' : 'border-t border-slate-200 bg-white p-5'}>
     <button
       onClick={onClick}
       disabled={disabled || !trainTaskId}
@@ -949,7 +951,6 @@ interface VoiceChatAreaProps {
   onToggleSimulation: (enabled: boolean) => void;
   onToggleKnowledge: (enabled: boolean) => void;
   onOpenSimulationConfig: () => void;
-  isLoggedIn: boolean;
 }
 
 const VoiceChatArea = ({
@@ -964,7 +965,6 @@ const VoiceChatArea = ({
   onToggleSimulation,
   onToggleKnowledge,
   onOpenSimulationConfig,
-  isLoggedIn,
 }: VoiceChatAreaProps) => {
   const [input, setInput] = useState('');
   const handleSend = () => {
@@ -988,7 +988,7 @@ const VoiceChatArea = ({
               onToggleSimulation={onToggleSimulation}
               onToggleKnowledge={onToggleKnowledge}
               onOpenConfig={onOpenSimulationConfig}
-              disabled={voice.isLoading || isLoggedIn}
+              disabled={voice.isLoading}
             />
           </div>
           <button
@@ -1007,7 +1007,7 @@ const VoiceChatArea = ({
               onToggleSimulation={onToggleSimulation}
               onToggleKnowledge={onToggleKnowledge}
               onOpenConfig={onOpenSimulationConfig}
-              disabled={voice.isLoading || isLoggedIn}
+              disabled={voice.isLoading}
             />
           </div>
           <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
@@ -1108,28 +1108,9 @@ const SidePanel = () => {
   const voice = useVoiceAgentChat();
 
   // Admin Web 登录态 hook
-  const { isLoggedIn, session, login, register, logout, refreshConfig } = useAdminWebAuth();
+  const { isLoggedIn, session, login, register, logout, syncConfigUp } = useAdminWebAuth();
   const currentUserId = session.user?.id ?? null;
   useHistorySync(isLoggedIn, currentUserId);
-
-  // 登录态下，侧边栏重新可见/获得焦点时从 admin_web 拉取最新配置，
-  // 网页改完配置切回插件即生效（无需重开侧边栏）。
-  useEffect(() => {
-    if (!isLoggedIn) {
-      return;
-    }
-    const pull = () => {
-      if (document.visibilityState === 'visible') {
-        void refreshConfig();
-      }
-    };
-    document.addEventListener('visibilitychange', pull);
-    window.addEventListener('focus', pull);
-    return () => {
-      document.removeEventListener('visibilitychange', pull);
-      window.removeEventListener('focus', pull);
-    };
-  }, [isLoggedIn, refreshConfig]);
 
   // 训练模式：文字 / 口语
   const [mode, setMode] = useState<TrainingMode>('text');
@@ -1406,7 +1387,6 @@ const SidePanel = () => {
             void handleToggleKnowledgeBase(enabled);
           }}
           onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
-          isLoggedIn={isLoggedIn}
         />
       ) : multiRole.isMultiRoleMode && multiRole.batch ? (
         <>
@@ -1447,7 +1427,22 @@ const SidePanel = () => {
 
           {/* 底部操作区 */}
           {isIdle ? (
-            <StartButton onClick={startConversation} disabled={isLoading} trainTaskId={trainTaskId} />
+            <div className="border-t border-slate-200 bg-white p-5">
+              <div className="mb-3">
+                <SimulationConfigBar
+                  config={simulationConfig}
+                  onToggleSimulation={enabled => {
+                    void handleToggleDialogueSimulation(enabled);
+                  }}
+                  onToggleKnowledge={enabled => {
+                    void handleToggleKnowledgeBase(enabled);
+                  }}
+                  onOpenConfig={() => setIsSimulationConfigOpen(true)}
+                  disabled={isLoading}
+                />
+              </div>
+              <StartButton onClick={startConversation} disabled={isLoading} trainTaskId={trainTaskId} embedded />
+            </div>
           ) : isChatting || isCompleted ? (
             <ChatInput
               onSend={sendMessage}
@@ -1465,7 +1460,7 @@ const SidePanel = () => {
               onToggleKnowledgeBase={enabled => {
                 void handleToggleKnowledgeBase(enabled);
               }}
-              toggleDisabled={isLoading || isLoggedIn}
+              toggleDisabled={isLoading}
               debugDisabled={isLoading}
               disabled={isLoading || isCompleted}
             />
@@ -1482,7 +1477,12 @@ const SidePanel = () => {
       <AuthPanel isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLogin={login} onRegister={register} />
 
       {/* 设置弹窗 */}
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} readOnly={isLoggedIn} />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        isLoggedIn={isLoggedIn}
+        onSyncConfig={syncConfigUp}
+      />
 
       {/* 配置提示弹窗 */}
       <ConfigPromptModal
@@ -1505,7 +1505,8 @@ const SidePanel = () => {
         isOpen={isSimulationConfigOpen}
         onClose={() => setIsSimulationConfigOpen(false)}
         trainTaskId={mode === 'voice' ? (voice.trainTaskId ?? trainTaskId) : trainTaskId}
-        readOnly={isLoggedIn}
+        isLoggedIn={isLoggedIn}
+        onSyncConfig={syncConfigUp}
         onOpenMultiRole={
           mode === 'voice'
             ? undefined

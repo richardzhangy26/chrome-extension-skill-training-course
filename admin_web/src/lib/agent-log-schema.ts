@@ -12,6 +12,14 @@ const chatLogEntrySchema = z.object({
   aiText: z.string().optional(),
 });
 
+const agentTrainingMetaSchema = z.object({
+  courseId: z.string().optional(),
+  courseName: z.string().optional(),
+  schoolName: z.string().optional(),
+  regionName: z.string().optional(),
+  agentName: z.string().optional(),
+});
+
 /**
  * 扩展 AgentLogSession 的服务端镜像（与
  * packages/storage/lib/impl/agent-log-storage.ts 的 AgentLogSession 对应）。
@@ -22,6 +30,7 @@ export const agentLogSessionSchema = z.object({
   id: z.string(),
   taskId: z.string(),
   taskName: z.string().optional(),
+  trainingMeta: agentTrainingMetaSchema.optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
   stepNameMapping: z.record(z.string(), z.string()).optional(),

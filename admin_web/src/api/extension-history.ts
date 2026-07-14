@@ -3,6 +3,7 @@ import { agentLogSessionSchema, type AgentLogSessionInput, type Tombstone } from
 import { authApiMiddleware } from '@/middlewares/auth-middleware';
 import { createServerFn } from '@tanstack/react-start';
 import { and, eq } from 'drizzle-orm';
+import { z } from 'zod';
 
 /** 读取某用户的历史：active 行回 session，tombstone 行回 {sessionId, deletedAt}。 */
 export async function readUserHistory(
@@ -16,7 +17,10 @@ export async function readUserHistory(
   const tombstones: Tombstone[] = [];
   for (const row of rows) {
     if (row.deletedAt) {
-      tombstones.push({ sessionId: row.sessionId, deletedAt: row.deletedAt.getTime() });
+      tombstones.push({
+        sessionId: row.sessionId,
+        deletedAt: row.deletedAt.getTime(),
+      });
     } else if (row.session) {
       // 容错：库里坏数据时跳过该条而非整体抛错。
       const parsed = agentLogSessionSchema.safeParse(JSON.parse(row.session));
@@ -41,7 +45,10 @@ export async function upsertUserHistory(userId: string, sessions: AgentLogSessio
   for (const session of sessions) {
     const incoming = session.updatedAt;
     const [existing] = await db
-      .select({ updatedAt: userAgentLog.updatedAt, deletedAt: userAgentLog.deletedAt })
+      .select({
+        updatedAt: userAgentLog.updatedAt,
+        deletedAt: userAgentLog.deletedAt,
+      })
       .from(userAgentLog)
       .where(and(eq(userAgentLog.userId, userId), eq(userAgentLog.sessionId, session.id)))
       .limit(1);
@@ -57,7 +64,11 @@ export async function upsertUserHistory(userId: string, sessions: AgentLogSessio
       }
       await db
         .update(userAgentLog)
-        .set({ session: JSON.stringify(session), updatedAt: new Date(incoming), deletedAt: null })
+        .set({
+          session: JSON.stringify(session),
+          updatedAt: new Date(incoming),
+          deletedAt: null,
+        })
         .where(and(eq(userAgentLog.userId, userId), eq(userAgentLog.sessionId, session.id)));
     } else {
       await db.insert(userAgentLog).values({
@@ -95,4 +106,17 @@ export const getMyHistory = createServerFn({ method: 'GET' })
   .handler(async ({ context }) => {
     const { sessions } = await readUserHistory(context.userId);
     return { sessions };
+  });
+
+const deleteMyHistorySchema = z.object({
+  sessionIds: z.array(z.string()).min(1),
+});
+
+/** 网页删除本人历史：软删并留下 tombstone，避免插件同步复活。 */
+export const deleteMyHistory = createServerFn({ method: 'POST' })
+  .inputValidator(deleteMyHistorySchema)
+  .middleware([authApiMiddleware])
+  .handler(async ({ data, context }) => {
+    await deleteUserHistory(context.userId, data.sessionIds);
+    return { ok: true };
   });

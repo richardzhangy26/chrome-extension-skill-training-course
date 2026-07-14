@@ -16,6 +16,7 @@ import {
 } from '../services/background-bridge';
 import { generateStudentAnswer } from '../services/llm-service';
 import { fetchPolymasUserInfo, invalidatePolymasUserInfo } from '../services/polymas-user-service';
+import { resolveTrainingMetadata } from '../services/training-metadata-service';
 import { TrainingWsClient } from '../services/ws/training-ws-client';
 import { agentLogStorage, agentSessionStorage, llmConfigStorage } from '@extension/storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -251,7 +252,11 @@ const useVoiceAgentChat = () => {
     addMessage('system', '正在获取用户信息...');
 
     try {
-      const [userInfo, resolvedTaskName] = await Promise.all([fetchPolymasUserInfo(), fetchTrainTaskName(taskId)]);
+      const [userInfo, resolvedTaskName, trainingMeta] = await Promise.all([
+        fetchPolymasUserInfo(),
+        fetchTrainTaskName(taskId),
+        resolveTrainingMetadata(),
+      ]);
       const taskDisplayName = resolvedTaskName || trainTaskNameRef.current || taskId;
       if (resolvedTaskName && resolvedTaskName !== trainTaskNameRef.current) {
         setTrainTaskName(resolvedTaskName);
@@ -265,6 +270,7 @@ const useVoiceAgentChat = () => {
         const session = await agentLogStorage.createSession({
           taskId,
           taskName: `${taskDisplayName}-${profileLabel}-口语`,
+          trainingMeta,
           stepNameMapping: {},
         });
         activeLogSessionIdRef.current = session.id;

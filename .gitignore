@@ -27,3 +27,4 @@ tsconfig.tsbuildinfo
 .claude 
 
 .playwright-mcp/.worktrees/
+.worktrees/

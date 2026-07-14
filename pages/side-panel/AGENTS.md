@@ -66,11 +66,19 @@ pages/side-panel/src/
 - All authenticated Admin Web requests go through `background-bridge.adminWebRequest()` with `auth: true`.
 - `useAdminWebAuth` owns session state and config synchronization:
   - startup checks an existing token with `getSession`;
-  - login pulls config down;
-  - `GET /api/extension/config` returning `config:null` means seed the server once from local `llmConfigStorage`;
+  - login pulls the synced subset down and merges it onto local config;
+  - `GET /api/extension/config` returning `config:null` means seed the server once from local `llmConfigStorage` (only the synced subset is pushed);
   - any 401 clears local auth session.
-- When logged in, Admin Web is the config source of truth. `SettingsModal` and `SimulationConfigModal` should be read-only; users edit config at `/settings/extension`.
-- When logged out, local config remains editable.
+- Only these fields sync via Admin Web (see `SYNCED_LLM_CONFIG_KEYS` / `pickSyncedConfig` in `@extension/storage`):
+  - `apiKey`, `apiUrl`, `model`
+  - `systemPrompt`
+  - `studentProfiles`
+  - `dialogueSimulationContent`
+  - `knowledgeBaseContent`
+- All other `LLMConfig` fields (temperature, topK, maxTokens, maxHistoryRounds, serviceCode, enabled toggles, `systemPromptMode`, `studentProfileId`, `voiceModeEnabled`, all TTS fields) are local-only. Editing them logged-in must not push to Admin Web.
+- When logged in, `SettingsModal` / `SimulationConfigModal` / `SimulationConfigBar` lock only the synced-field inputs (per-field `disabled`); everything else stays editable and saves back to `llmConfigStorage`.
+- Users edit synced fields at `/settings/extension`; the banner in the extension modals should point them there.
+- When logged out, all fields remain locally editable as before.
 
 ## Conventions
 - Keep presentation in React components and stateful workflow logic in hooks.
@@ -85,4 +93,5 @@ pages/side-panel/src/
 - Do not mix Admin Web bearer tokens into Polymas `API_REQUEST` calls.
 - Do not mix Polymas `ai-poly` cookie auth into Admin Web requests.
 - Do not add duplicate simulation/knowledge-base state outside `llmConfigStorage`.
-- Do not make logged-in config editable in the extension; it should remain read-only until the sync model changes.
+- Do not lock non-synced fields (temperature, TTS, toggles, mode selectors, etc.) when logged in; only the fields in `SYNCED_LLM_CONFIG_KEYS` should be read-only.
+- Do not push non-synced fields to Admin Web from `useAdminWebAuth` / `admin-web-service`; always pipe writes through `pickSyncedConfig`.

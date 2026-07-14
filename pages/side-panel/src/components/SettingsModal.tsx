@@ -55,7 +55,8 @@ const createProfileId = () => {
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  readOnly?: boolean;
+  isLoggedIn?: boolean;
+  onSyncConfig?: () => Promise<boolean>;
 }
 
 interface LLMConfigDraft extends Omit<LLMConfig, 'temperature' | 'topK' | 'maxTokens' | 'maxHistoryRounds'> {
@@ -126,7 +127,7 @@ const createModelOption = (value: string): ModelOption => ({
   label: AVAILABLE_MODELS.find(model => model.value === value)?.label ?? value,
 });
 
-const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps) => {
+const SettingsModal = ({ isOpen, onClose, isLoggedIn = false, onSyncConfig }: SettingsModalProps) => {
   const [config, setConfig] = useState<LLMConfigDraft>(() => createConfigDraft(createDefaultConfig()));
   const [activeTab, setActiveTab] = useState<'llm' | 'system' | 'role' | 'voice'>('llm');
   const [isTesting, setIsTesting] = useState(false);
@@ -238,6 +239,13 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
         enabled: nextConfig.apiKey.trim().length > 0,
       });
       setConfig(createConfigDraft(nextConfig));
+      if (isLoggedIn && onSyncConfig) {
+        const ok = await onSyncConfig();
+        if (!ok) {
+          setTestResult({ success: false, message: '⚠️ 已保存到本地，但云端同步失败，可稍后重试' });
+          return;
+        }
+      }
       onClose();
     } catch (error) {
       setTestResult({ success: false, message: `❌ ${(error as Error).message}` });
@@ -378,12 +386,13 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
 
         {/* 内容 */}
         <div className="max-h-[calc(80vh-180px)] overflow-y-auto p-5">
-          {readOnly && (
+          {isLoggedIn && (
             <div className="mb-3 rounded-lg bg-cyan-50 p-3 text-xs text-cyan-700">
-              已登录：配置由 Admin Web 统一管理，请前往网页「设置 → 插件配置」修改。
+              已登录：API Key / Base URL / Model / 系统提示词 / 学生档位等配置会在保存后自动同步到云端，可在 Admin
+              Web「设置 → 插件配置」查看。
             </div>
           )}
-          <fieldset disabled={readOnly} className="m-0 border-0 p-0">
+          <div>
             {activeTab === 'llm' && (
               <div className="space-y-4">
                 {/* API Key */}
@@ -396,10 +405,12 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                     type="password"
                     value={config.apiKey}
                     onChange={e => setConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                    placeholder="请输入豆包 API Key"
+                    placeholder="请输入 API Key"
                     className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
                   />
-                  <p className="mt-1 text-xs text-slate-400">需要企业微信申请 llm-service 获取</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    支持 OpenRouter、OpenAI 等标准 OpenAI 格式服务；Polymas 用户可填企业微信申请的 llm-service Key
+                  </p>
                 </div>
 
                 {/* 模型设置 */}
@@ -692,7 +703,7 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                                 type="text"
                                 value={profile.label}
                                 onChange={event => handleProfileChange(profile.id, { label: event.target.value })}
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                               />
                             </div>
                             <div>
@@ -703,7 +714,7 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                                 id={descriptionId}
                                 value={profile.description}
                                 onChange={event => handleProfileChange(profile.id, { description: event.target.value })}
-                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                               />
                             </div>
                             <div>
@@ -714,7 +725,7 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                                 id={styleId}
                                 value={profile.style}
                                 onChange={event => handleProfileChange(profile.id, { style: event.target.value })}
-                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                                className="min-h-[80px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                               />
                             </div>
                             <div>
@@ -728,7 +739,7 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
                                 onChange={event =>
                                   handleProfileChange(profile.id, { fallbackHint: event.target.value })
                                 }
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition-all focus:border-cyan-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                               />
                             </div>
                           </div>
@@ -741,41 +752,30 @@ const SettingsModal = ({ isOpen, onClose, readOnly = false }: SettingsModalProps
             )}
 
             {activeTab === 'voice' && <VoiceModeSettings config={config} setConfig={setConfig} />}
-          </fieldset>
+          </div>
         </div>
 
         {/* 底部按钮 */}
-        {readOnly ? (
-          <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-            <button
-              onClick={handleTest}
-              disabled={isTesting || !config.apiKey.trim()}
-              className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
-              {isTesting ? '测试中...' : '测试连接'}
-            </button>
-            <button
-              onClick={handleGrantHostAccess}
-              disabled={isTesting}
-              className="flex-1 cursor-pointer rounded-lg border border-cyan-300 bg-white py-2.5 text-sm font-medium text-cyan-700 transition-colors hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-50">
-              授权当前 API 域名
-            </button>
-          </div>
-        ) : (
-          <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-            <button
-              onClick={handleTest}
-              disabled={isTesting || !config.apiKey.trim()}
-              className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
-              {isTesting ? '测试中...' : '测试连接'}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving || !canSave}
-              className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
-              {isSaving ? '保存中...' : '保存配置'}
-            </button>
-          </div>
-        )}
+        <div className="flex gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+          <button
+            onClick={handleTest}
+            disabled={isTesting || !config.apiKey.trim()}
+            className="flex-1 cursor-pointer rounded-lg border border-slate-300 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
+            {isTesting ? '测试中...' : '测试连接'}
+          </button>
+          <button
+            onClick={handleGrantHostAccess}
+            disabled={isTesting}
+            className="flex-1 cursor-pointer rounded-lg border border-cyan-300 bg-white py-2.5 text-sm font-medium text-cyan-700 transition-colors hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-50">
+            授权当前 API 域名
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || !canSave}
+            className="flex-1 cursor-pointer rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 py-2.5 text-sm font-medium text-white transition-all hover:from-teal-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-50">
+            {isSaving ? '保存中...' : '保存配置'}
+          </button>
+        </div>
       </div>
     </div>
   );

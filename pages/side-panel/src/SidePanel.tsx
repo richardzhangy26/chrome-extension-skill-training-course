@@ -1698,7 +1698,7 @@ const SidePanel = () => {
         isLoggedIn={isLoggedIn}
         onSyncConfig={syncConfigUp}
         onOpenMultiRole={
-          mode === 'voice'
+          mode !== 'text'
             ? undefined
             : () => {
                 setIsSimulationConfigOpen(false);

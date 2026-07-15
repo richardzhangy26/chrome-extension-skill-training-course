@@ -206,7 +206,7 @@ const createSimulationModeState = (): SimulationModeState => ({
 
 const TRAINING_MODE_TITLES: Record<TrainingMode, string> = {
   text: '能力训练助手',
-  voice: '口语训练助手',
+  voice: '能力训练助手',
   pro: '能力训练助手',
 };
 
@@ -675,6 +675,39 @@ const StartButton = ({
   </div>
 );
 
+interface IdleTrainingPanelProps {
+  simulationConfig: SimulationModeState;
+  onToggleSimulation: (enabled: boolean) => void;
+  onToggleKnowledge: (enabled: boolean) => void;
+  onOpenSimulationConfig: () => void;
+  onStart: () => void;
+  isLoading: boolean;
+  trainTaskId: string | null;
+}
+
+const IdleTrainingPanel = ({
+  simulationConfig,
+  onToggleSimulation,
+  onToggleKnowledge,
+  onOpenSimulationConfig,
+  onStart,
+  isLoading,
+  trainTaskId,
+}: IdleTrainingPanelProps) => (
+  <div className="border-t border-slate-200 bg-white p-5">
+    <div className="mb-3">
+      <SimulationConfigBar
+        config={simulationConfig}
+        onToggleSimulation={onToggleSimulation}
+        onToggleKnowledge={onToggleKnowledge}
+        onOpenConfig={onOpenSimulationConfig}
+        disabled={isLoading}
+      />
+    </div>
+    <StartButton onClick={onStart} disabled={isLoading} trainTaskId={trainTaskId} embedded />
+  </div>
+);
+
 // ============ 多角色折叠视图 ============
 const MultiRoleView = ({
   batch,
@@ -987,24 +1020,15 @@ const VoiceChatArea = ({
     <>
       <MessageList messages={voice.messages} isLoading={voice.isLoading} />
       {voice.voiceState === 'IDLE' || voice.voiceState === 'ERROR' ? (
-        <div className="border-t border-slate-200 bg-white p-5">
-          <div className="mb-3">
-            <SimulationConfigBar
-              config={simulationConfig}
-              onToggleSimulation={onToggleSimulation}
-              onToggleKnowledge={onToggleKnowledge}
-              onOpenConfig={onOpenSimulationConfig}
-              disabled={voice.isLoading}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={onStart}
-            disabled={!canStart || !trainTaskId}
-            className="w-full cursor-pointer rounded-xl bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 py-3.5 text-sm font-semibold text-white shadow-lg shadow-cyan-500/30 transition-all hover:shadow-cyan-500/40 disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-300 disabled:to-slate-300 disabled:shadow-none">
-            {trainTaskId ? '🎙️ 建立语音通道' : '请先进入含 trainTaskId 的训练页面'}
-          </button>
-        </div>
+        <IdleTrainingPanel
+          simulationConfig={simulationConfig}
+          onToggleSimulation={onToggleSimulation}
+          onToggleKnowledge={onToggleKnowledge}
+          onOpenSimulationConfig={onOpenSimulationConfig}
+          onStart={onStart}
+          isLoading={voice.isLoading || !canStart}
+          trainTaskId={trainTaskId}
+        />
       ) : (
         <div className="border-t border-slate-200 bg-white">
           <div className="px-4 pt-3">
@@ -1433,22 +1457,19 @@ const SidePanel = () => {
 
           {/* 底部操作区 */}
           {isIdle ? (
-            <div className="border-t border-slate-200 bg-white p-5">
-              <div className="mb-3">
-                <SimulationConfigBar
-                  config={simulationConfig}
-                  onToggleSimulation={enabled => {
-                    void handleToggleDialogueSimulation(enabled);
-                  }}
-                  onToggleKnowledge={enabled => {
-                    void handleToggleKnowledgeBase(enabled);
-                  }}
-                  onOpenConfig={() => setIsSimulationConfigOpen(true)}
-                  disabled={isLoading}
-                />
-              </div>
-              <StartButton onClick={startConversation} disabled={isLoading} trainTaskId={trainTaskId} embedded />
-            </div>
+            <IdleTrainingPanel
+              simulationConfig={simulationConfig}
+              onToggleSimulation={enabled => {
+                void handleToggleDialogueSimulation(enabled);
+              }}
+              onToggleKnowledge={enabled => {
+                void handleToggleKnowledgeBase(enabled);
+              }}
+              onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
+              onStart={startConversation}
+              isLoading={isLoading}
+              trainTaskId={trainTaskId}
+            />
           ) : isChatting || isCompleted ? (
             <ChatInput
               onSend={sendMessage}

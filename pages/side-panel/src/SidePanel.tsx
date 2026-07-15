@@ -207,7 +207,7 @@ const createSimulationModeState = (): SimulationModeState => ({
 const TRAINING_MODE_TITLES: Record<TrainingMode, string> = {
   text: '能力训练助手',
   voice: '口语训练助手',
-  pro: '能力训练助手 Pro',
+  pro: '能力训练助手',
 };
 
 // ============ Header组件 ============

@@ -13,12 +13,14 @@ import { useAdminWebAuth } from './hooks/useAdminWebAuth';
 import { useAgentChat } from './hooks/useAgentChat';
 import { useHistorySync } from './hooks/useHistorySync';
 import { useMultiRoleRun } from './hooks/useMultiRoleRun';
+import { useProAgentChat } from './hooks/useProAgentChat';
 import { useVoiceAgentChat } from './hooks/useVoiceAgentChat';
 import { llmConfigStorage } from '@extension/storage';
 import { useRef, useEffect, useState } from 'react';
 import type { TrainingMode } from './components/ModeToggle';
 import type { SimulationModeState } from './components/SimulationConfigBar';
 import type { ChatMessage } from './hooks/useAgentChat';
+import type { ProState } from './hooks/useProAgentChat';
 import type { MultiRoleRunBatch, RoleRunDraft, RoleRuntimeConfig } from './types/multi-role-types';
 
 // ============ SVG图标组件 ============
@@ -208,6 +210,15 @@ const TRAINING_MODE_TITLES: Record<TrainingMode, string> = {
   text: '能力训练助手',
   voice: '能力训练助手',
   pro: '能力训练助手',
+};
+
+// Pro 状态 → Header 状态条展示映射
+const PRO_HEADER_STATE: Record<ProState, WorkflowState> = {
+  IDLE: 'IDLE',
+  CONNECTING: 'FETCHING_STEPS',
+  RUNNING: 'CHATTING',
+  COMPLETED: 'COMPLETED',
+  ERROR: 'ERROR',
 };
 
 // ============ Header组件 ============
@@ -1125,6 +1136,96 @@ const VoiceChatArea = ({
   );
 };
 
+// ============ 能力训练 Pro 内容区 ============
+interface ProChatAreaProps {
+  pro: ReturnType<typeof useProAgentChat>;
+  trainTaskId: string | null;
+  simulationConfig: SimulationModeState;
+  onToggleSimulation: (enabled: boolean) => void;
+  onToggleKnowledge: (enabled: boolean) => void;
+  onOpenSimulationConfig: () => void;
+  onAutoGenerate: () => void;
+  onAutoRunToggle: () => void;
+  toggleDisabled: boolean;
+}
+
+const ProChatArea = ({
+  pro,
+  trainTaskId,
+  simulationConfig,
+  onToggleSimulation,
+  onToggleKnowledge,
+  onOpenSimulationConfig,
+  onAutoGenerate,
+  onAutoRunToggle,
+  toggleDisabled,
+}: ProChatAreaProps) => {
+  const isRunning = pro.proState === 'RUNNING';
+  const isConnecting = pro.proState === 'CONNECTING';
+  const waitingLabel = `等待${pro.currentRoleNickname ?? '对方'}发言…`;
+  const statusText = isConnecting
+    ? '连接中…'
+    : pro.turnPhase === 'USER_TURN'
+      ? '轮到你发言'
+      : pro.turnPhase === 'STAGE_ENTRY'
+        ? '阶段启动中…'
+        : waitingLabel;
+
+  return (
+    <>
+      {/* Pro 状态条：阶段序号 + 连接/回合状态 + 停止 */}
+      {(isRunning || isConnecting) && (
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
+          <span className="font-medium">阶段 #{Math.max(pro.stepIndex, 1)}</span>
+          <span className="text-slate-300">|</span>
+          <span>{statusText}</span>
+          <button
+            onClick={pro.stop}
+            className="ml-auto flex cursor-pointer items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-red-600 transition-all duration-200 hover:border-red-300 hover:bg-red-100">
+            停止
+          </button>
+        </div>
+      )}
+
+      <MessageList messages={pro.messages} isLoading={pro.isGenerating || isConnecting} />
+
+      {isRunning ? (
+        <ChatInput
+          onSend={pro.sendStudentText}
+          onAutoGenerate={onAutoGenerate}
+          onAutoRun={onAutoRunToggle}
+          onStopAutoRun={pro.stopAutoRun}
+          isAutoRunning={pro.isAutoRunning}
+          onOpenDebug={() => {}}
+          onOpenSimulationConfig={onOpenSimulationConfig}
+          onOpenMultiRole={() => {}}
+          simulationConfig={simulationConfig}
+          onToggleDialogueSimulation={onToggleSimulation}
+          onToggleKnowledgeBase={onToggleKnowledge}
+          toggleDisabled={toggleDisabled}
+          debugDisabled
+          disabled={pro.turnPhase !== 'USER_TURN' || pro.isGenerating}
+          showDebug={false}
+          showMultiRole={false}
+          placeholder={pro.turnPhase === 'USER_TURN' ? '输入你的回答...' : waitingLabel}
+        />
+      ) : (
+        <IdleTrainingPanel
+          simulationConfig={simulationConfig}
+          onToggleSimulation={onToggleSimulation}
+          onToggleKnowledge={onToggleKnowledge}
+          onOpenSimulationConfig={onOpenSimulationConfig}
+          onStart={() => {
+            void pro.start();
+          }}
+          isLoading={isConnecting}
+          trainTaskId={trainTaskId}
+        />
+      )}
+    </>
+  );
+};
+
 // ============ 主组件 ============
 const SidePanel = () => {
   const {
@@ -1152,6 +1253,9 @@ const SidePanel = () => {
 
   // 口语训练 hook
   const voice = useVoiceAgentChat();
+
+  // 能力训练 Pro hook
+  const pro = useProAgentChat(trainTaskId);
 
   // Admin Web 登录态 hook
   const { isLoggedIn, session, login, register, logout, syncConfigUp } = useAdminWebAuth();
@@ -1316,6 +1420,7 @@ const SidePanel = () => {
     }
     reset();
     voice.reset();
+    pro.reset();
   };
 
   const handleChangeMode = (nextMode: TrainingMode) => {
@@ -1328,6 +1433,7 @@ const SidePanel = () => {
     }
     reset();
     voice.reset();
+    pro.reset();
     setMode(nextMode);
     void llmConfigStorage.setConfig({ voiceModeEnabled: nextMode === 'voice' });
   };
@@ -1350,9 +1456,28 @@ const SidePanel = () => {
     }
   };
 
+  const handleProAutoGenerate = async () => {
+    const result = await pro.autoGenerate();
+    if (result.needConfig) {
+      setIsConfigPromptOpen(true);
+    }
+  };
+
+  const handleProAutoRunToggle = async () => {
+    if (pro.isAutoRunning) {
+      pro.stopAutoRun();
+      return;
+    }
+    const result = await pro.startAutoRun();
+    if (result.needConfig) {
+      setIsConfigPromptOpen(true);
+    }
+  };
+
   const voiceBusy = voice.voiceState !== 'IDLE' && voice.voiceState !== 'COMPLETED' && voice.voiceState !== 'ERROR';
+  const proBusy = pro.proState === 'CONNECTING' || pro.proState === 'RUNNING';
   const textBusy = workflowState !== 'IDLE' || multiRole.isMultiRoleMode;
-  const modeToggleDisabled = mode === 'voice' ? voiceBusy : textBusy;
+  const modeToggleDisabled = mode === 'voice' ? voiceBusy : mode === 'pro' ? proBusy : textBusy;
   const canStartVoice = voice.voiceState === 'IDLE' || voice.voiceState === 'ERROR';
   const voiceStateLabel: Record<typeof voice.voiceState, string> = {
     IDLE: '未连接',
@@ -1398,8 +1523,10 @@ const SidePanel = () => {
       ) : (
         <Header
           trainTaskId={trainTaskId}
-          workflowState={multiRole.isMultiRoleMode ? 'CHATTING' : workflowState}
-          dialogueRound={multiRole.isMultiRoleMode ? 0 : dialogueRound}
+          workflowState={
+            mode === 'pro' ? PRO_HEADER_STATE[pro.proState] : multiRole.isMultiRoleMode ? 'CHATTING' : workflowState
+          }
+          dialogueRound={mode === 'pro' ? pro.round : multiRole.isMultiRoleMode ? 0 : dialogueRound}
           onReset={handleResetAll}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenHistory={handleOpenHistory}
@@ -1433,6 +1560,26 @@ const SidePanel = () => {
             void handleToggleKnowledgeBase(enabled);
           }}
           onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
+        />
+      ) : mode === 'pro' ? (
+        <ProChatArea
+          pro={pro}
+          trainTaskId={trainTaskId}
+          simulationConfig={simulationConfig}
+          onToggleSimulation={enabled => {
+            void handleToggleDialogueSimulation(enabled);
+          }}
+          onToggleKnowledge={enabled => {
+            void handleToggleKnowledgeBase(enabled);
+          }}
+          onOpenSimulationConfig={() => setIsSimulationConfigOpen(true)}
+          onAutoGenerate={() => {
+            void handleProAutoGenerate();
+          }}
+          onAutoRunToggle={() => {
+            void handleProAutoRunToggle();
+          }}
+          toggleDisabled={pro.isGenerating}
         />
       ) : multiRole.isMultiRoleMode && multiRole.batch ? (
         <>

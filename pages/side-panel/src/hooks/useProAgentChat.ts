@@ -253,7 +253,7 @@ const useProAgentChat = (trainTaskId: string | null) => {
         if (!isRunningSeq(seq) || turnPhaseRef.current !== 'USER_TURN') {
           return { needConfig: false, ok: false };
         }
-        if (!result.success || !result.content) {
+        if (!result.success || !result.content || !result.content.trim()) {
           setError(result.error ?? 'AI 生成失败');
           addMessage('system', `⚠️ AI 生成失败：${result.error ?? '未知错误'}，请手动输入或重试`);
           return { needConfig: false, ok: false };
@@ -506,6 +506,10 @@ const useProAgentChat = (trainTaskId: string | null) => {
       addMessage('system', '连接成功，剧本已启动，等待角色分配...');
     } catch (err) {
       clientRef.current = null;
+      // 运行代际已推进（onClose 已 failRun，或用户 stop/reset/卸载）：跳过重复/覆盖性的 failRun
+      if (runSeqRef.current !== seq) {
+        return;
+      }
       failRun(err instanceof Error ? err.message : '连接失败');
     }
   }, [trainTaskId, addMessage, autoAnswer, endRun, failRun, recordTurn, runStageEntry, setProState, setTurnPhase]);

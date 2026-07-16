@@ -4,15 +4,16 @@
  * 独立于 useAgentChat / useVoiceAgentChat，不共享运行时状态。
  */
 
-import { apiRequest, API_ENDPOINTS } from '../services/background-bridge';
 import { generateStudentAnswer } from '../services/llm-service';
 import { fetchPolymasUserInfo } from '../services/polymas-user-service';
 import { buildStudentAnswerInput, formatProLogEntry } from '../services/pro-conversation';
+import { fetchProTrainingContext, toStagePromptContext } from '../services/pro-training-context-service';
 import { resolveTrainingMetadata } from '../services/training-metadata-service';
 import { TrainV2Client } from '../services/ws/train-v2-client';
 import { agentLogStorage, llmConfigStorage } from '@extension/storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProTurn } from '../services/pro-conversation';
+import type { ProTrainingContext, ProStagePromptContext } from '../services/pro-training-context-service';
 import type { TrainV2Handlers } from '../services/ws/train-v2-client';
 
 // 对齐 useAgentChat 的 ChatMessage 字段，追加 Pro 特有的角色昵称标签
@@ -55,32 +56,6 @@ const generateWsSessionId = (): string => {
     .slice(0, 21);
 };
 
-interface TrainConfigurationResponse {
-  trainTaskName?: string;
-}
-
-interface ApiResponse<T> {
-  code: number;
-  message: string;
-  data: T;
-}
-
-// 与 useVoiceAgentChat 中同构：仅用于日志会话命名，失败降级为 taskId
-const fetchTrainTaskName = async (taskId: string): Promise<string | null> => {
-  try {
-    const response = await apiRequest<ApiResponse<TrainConfigurationResponse>>({
-      endpoint: API_ENDPOINTS.QUERY_CONFIGURATION,
-      method: 'POST',
-      body: { trainTaskId: taskId },
-    });
-    const name = response?.data?.trainTaskName?.trim();
-    return name && name.length > 0 ? name : null;
-  } catch (error) {
-    console.warn('[pro] 获取 trainTaskName 失败', error);
-    return null;
-  }
-};
-
 const useProAgentChat = (trainTaskId: string | null) => {
   const [proState, setProStateRaw] = useState<ProState>('IDLE');
   const [turnPhase, setTurnPhaseRaw] = useState<ProTurnPhase>('WAITING_BOT');
@@ -105,6 +80,8 @@ const useProAgentChat = (trainTaskId: string | null) => {
   const botSpokeRef = useRef(false);
   const supersededRef = useRef(false);
   const stageEntryRunningRef = useRef(false);
+  const proContextRef = useRef<ProTrainingContext | null>(null);
+  const proContextErrorRef = useRef(false);
   // 会话代际号：teardown 后递增，使旧会话遗留的异步循环立即退出
   const runSeqRef = useRef(0);
 
@@ -246,10 +223,34 @@ const useProAgentChat = (trainTaskId: string | null) => {
       if (!config.apiKey) {
         return { needConfig: true, ok: false };
       }
+      if (proContextErrorRef.current) {
+        addMessage('system', '⚠️ 未获取到 Pro 训练上下文，AI 作答暂不可用，可手动作答或重试');
+        return { needConfig: false, ok: false };
+      }
       setIsGenerating(true);
       try {
         const { aiQuestion, history } = buildStudentAnswerInput(turnsRef.current);
-        const result = await generateStudentAnswer(aiQuestion, history);
+        const ctx = proContextRef.current;
+        let proContext: ProStagePromptContext | undefined;
+        if (ctx) {
+          const stage = stepIdRef.current ? ctx.stagesById.get(stepIdRef.current) : undefined;
+          if (stage) {
+            proContext = toStagePromptContext(stage, ctx.taskName, ctx.taskDescription);
+          } else {
+            // 阶段缺失：降级用任务级上下文（buildProContextSections 会只产出「实训任务」段）
+            console.warn('[pro] 当前阶段不在上下文缓存中，降级用任务级上下文', stepIdRef.current);
+            proContext = {
+              taskName: ctx.taskName,
+              taskDescription: ctx.taskDescription,
+              stepName: '',
+              stepDescription: '',
+              llmPrompt: '',
+              studentRole: { roleName: '', assignName: '', description: '' },
+              participantRoles: [],
+            };
+          }
+        }
+        const result = await generateStudentAnswer(aiQuestion, history, proContext ? { proContext } : undefined);
         if (!isRunningSeq(seq) || turnPhaseRef.current !== 'USER_TURN') {
           return { needConfig: false, ok: false };
         }
@@ -405,13 +406,22 @@ const useProAgentChat = (trainTaskId: string | null) => {
     setTurnPhase('WAITING_BOT');
     addMessage('system', '正在获取用户信息...');
 
+    proContextRef.current = null;
+    proContextErrorRef.current = false;
     try {
-      const [userInfo, resolvedTaskName, trainingMeta] = await Promise.all([
-        fetchPolymasUserInfo(),
-        fetchTrainTaskName(trainTaskId),
-        resolveTrainingMetadata(),
-      ]);
-      const taskDisplayName = resolvedTaskName || trainTaskId;
+      const [userInfo, trainingMeta] = await Promise.all([fetchPolymasUserInfo(), resolveTrainingMetadata()]);
+      let taskDisplayName = trainTaskId;
+      try {
+        const proContext = await fetchProTrainingContext(trainTaskId);
+        proContextRef.current = proContext;
+        if (proContext.taskName) {
+          taskDisplayName = proContext.taskName;
+        }
+      } catch (ctxError) {
+        proContextErrorRef.current = true;
+        console.warn('[pro] 训练上下文获取失败', ctxError);
+        addMessage('system', '⚠️ 未获取到 Pro 训练上下文，AI 作答暂不可用，可手动作答或重试');
+      }
 
       const config = await llmConfigStorage.get();
       const profile = config.studentProfiles.find(p => p.id === config.studentProfileId) ?? config.studentProfiles[0];
@@ -536,6 +546,8 @@ const useProAgentChat = (trainTaskId: string | null) => {
     setCurrentRoleNickname(null);
     setError(null);
     logSessionIdRef.current = null;
+    proContextRef.current = null;
+    proContextErrorRef.current = false;
   }, [setProState, setTurnPhase, teardown]);
 
   // 组件卸载时断开连接

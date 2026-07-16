@@ -41,6 +41,7 @@ const STAGE_ENTRY_QUIET_MS = 2_500;
 const POLL_INTERVAL_MS = 500;
 // 全自动轮数上限，防失控刷 LLM
 const MAX_AUTO_TURNS = 40;
+const PRO_CONTEXT_UNAVAILABLE_MESSAGE = '⚠️ 未获取到 Pro 训练上下文，AI 作答暂不可用，可手动作答或重试';
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
@@ -224,7 +225,7 @@ const useProAgentChat = (trainTaskId: string | null) => {
         return { needConfig: true, ok: false };
       }
       if (proContextErrorRef.current) {
-        addMessage('system', '⚠️ 未获取到 Pro 训练上下文，AI 作答暂不可用，可手动作答或重试');
+        addMessage('system', PRO_CONTEXT_UNAVAILABLE_MESSAGE);
         return { needConfig: false, ok: false };
       }
       setIsGenerating(true);
@@ -413,14 +414,20 @@ const useProAgentChat = (trainTaskId: string | null) => {
       let taskDisplayName = trainTaskId;
       try {
         const proContext = await fetchProTrainingContext(trainTaskId);
+        if (runSeqRef.current !== seq) {
+          return;
+        }
         proContextRef.current = proContext;
         if (proContext.taskName) {
           taskDisplayName = proContext.taskName;
         }
       } catch (ctxError) {
+        if (runSeqRef.current !== seq) {
+          return;
+        }
         proContextErrorRef.current = true;
         console.warn('[pro] 训练上下文获取失败', ctxError);
-        addMessage('system', '⚠️ 未获取到 Pro 训练上下文，AI 作答暂不可用，可手动作答或重试');
+        addMessage('system', PRO_CONTEXT_UNAVAILABLE_MESSAGE);
       }
 
       const config = await llmConfigStorage.get();

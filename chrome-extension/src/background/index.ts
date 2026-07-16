@@ -1,4 +1,5 @@
 import 'webextension-polyfill';
+import { readTaskIdFromUrl } from './extract-task-id';
 import { ADMIN_WEB_BASE_URLS, IS_DEV } from '@extension/env';
 import { exampleThemeStorage, authSessionStorage, normalizeAuthToken } from '@extension/storage';
 
@@ -149,8 +150,7 @@ const handleExtractTrainTaskId = async (url?: string): Promise<BackgroundRespons
       return { success: false, error: 'No URL available' };
     }
 
-    const urlObj = new URL(targetUrl);
-    const trainTaskId = urlObj.searchParams.get('trainTaskId');
+    const trainTaskId = readTaskIdFromUrl(targetUrl);
 
     if (!trainTaskId) {
       return { success: false, error: 'trainTaskId not found in URL' };

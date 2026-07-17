@@ -3,6 +3,7 @@ import type { PageWsController } from './page-ws-controller';
 
 interface WindowLike {
   location: { origin: string };
+  messageSource: unknown;
   addEventListener(type: 'message', listener: EventListener): void;
   removeEventListener(type: 'message', listener: EventListener): void;
 }
@@ -10,7 +11,7 @@ interface WindowLike {
 const startPageWindowAdapter = (windowRef: WindowLike, controller: PageWsController): (() => void) => {
   const onMessage = (event: Event): void => {
     const messageEvent = event as MessageEvent<unknown>;
-    if (messageEvent.source !== windowRef || messageEvent.origin !== windowRef.location.origin) return;
+    if (messageEvent.source !== windowRef.messageSource || messageEvent.origin !== windowRef.location.origin) return;
     if (isProTrainV2Command(messageEvent.data)) controller.handle(messageEvent.data);
   };
   windowRef.addEventListener('message', onMessage);

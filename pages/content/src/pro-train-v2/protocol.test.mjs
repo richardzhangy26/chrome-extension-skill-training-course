@@ -74,3 +74,28 @@ test('页面事件严格校验协议方向与消息形状', () => {
     false,
   );
 });
+
+test('envelope 与所有命令、页面事件 payload 都拒绝额外敏感字段', () => {
+  const validConnect = command('CONNECT', { taskId: 'PRO123', userId: 'u1', sessionId: 's1' });
+  assert.equal(isProTrainV2Command({ ...validConnect, Authorization: 'secret' }), false);
+  assert.equal(isProTrainV2Command(command('CONNECT', { ...validConnect.payload, cookie: 'secret' })), false);
+  assert.equal(isProTrainV2Command(command('SEND', { data: '{"event":"scriptStart"}', token: 'secret' })), false);
+  assert.equal(isProTrainV2Command(command('CLOSE', { code: 1000, reason: 'done', Cookie: 'secret' })), false);
+
+  const pageEvent = (type, payload) => ({
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'page-to-extension',
+    connectionId: 'connection-1',
+    type,
+    payload,
+  });
+  assert.equal(isProTrainV2PageEvent(pageEvent('OPEN', {})), false);
+  assert.equal(isProTrainV2PageEvent(pageEvent('ERROR', { Authorization: 'secret' })), false);
+  assert.equal(isProTrainV2PageEvent(pageEvent('TEXT', { data: 'hello', token: 'secret' })), false);
+  assert.equal(isProTrainV2PageEvent(pageEvent('BINARY', { byteLength: 1, audio: 'secret' })), false);
+  assert.equal(
+    isProTrainV2PageEvent(pageEvent('CLOSE', { code: 1000, reason: 'done', wasClean: true, Cookie: 'secret' })),
+    false,
+  );
+});

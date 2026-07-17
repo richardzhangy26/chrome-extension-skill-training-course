@@ -54,6 +54,7 @@ const isEnvelope = (
   direction: 'extension-to-page' | 'page-to-extension',
 ): value is Record<string, unknown> =>
   isRecord(value) &&
+  hasOnlyKeys(value, ['protocol', 'version', 'direction', 'connectionId', 'type', 'payload']) &&
   value.protocol === PROTOCOL &&
   value.version === VERSION &&
   value.direction === direction &&
@@ -115,14 +116,22 @@ const isProTrainV2Command = (value: unknown): value is ProTrainV2Command => {
     case 'CONNECT':
       return (
         isRecord(value.payload) &&
+        hasOnlyKeys(value.payload, ['taskId', 'userId', 'sessionId']) &&
         isProTaskId(value.payload.taskId) &&
         isNonEmptyString(value.payload.userId) &&
         isNonEmptyString(value.payload.sessionId)
       );
     case 'SEND':
-      return isRecord(value.payload) && isAllowedTrainV2Payload(value.payload.data);
+      return (
+        isRecord(value.payload) && hasOnlyKeys(value.payload, ['data']) && isAllowedTrainV2Payload(value.payload.data)
+      );
     case 'CLOSE':
-      return isRecord(value.payload) && isCloseCommandCode(value.payload.code) && isCloseReason(value.payload.reason);
+      return (
+        isRecord(value.payload) &&
+        hasOnlyKeys(value.payload, ['code', 'reason']) &&
+        isCloseCommandCode(value.payload.code) &&
+        isCloseReason(value.payload.reason)
+      );
     default:
       return false;
   }
@@ -136,12 +145,19 @@ const isProTrainV2PageEvent = (value: unknown): value is ProTrainV2PageEvent => 
     case 'ERROR':
       return value.payload === undefined;
     case 'TEXT':
-      return isRecord(value.payload) && typeof value.payload.data === 'string';
+      return isRecord(value.payload) && hasOnlyKeys(value.payload, ['data']) && typeof value.payload.data === 'string';
     case 'BINARY':
-      return isRecord(value.payload) && isFiniteNumber(value.payload.byteLength) && value.payload.byteLength >= 0;
+      return (
+        isRecord(value.payload) &&
+        hasOnlyKeys(value.payload, ['byteLength']) &&
+        isFiniteNumber(value.payload.byteLength) &&
+        Number.isInteger(value.payload.byteLength) &&
+        value.payload.byteLength >= 0
+      );
     case 'CLOSE':
       return (
         isRecord(value.payload) &&
+        hasOnlyKeys(value.payload, ['code', 'reason', 'wasClean']) &&
         isCloseEventCode(value.payload.code) &&
         isCloseReason(value.payload.reason) &&
         typeof value.payload.wasClean === 'boolean'

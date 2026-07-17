@@ -9,5 +9,8 @@ test('manifest 静态注入 MAIN 与 ISOLATED 两个 bridge entry', async () => 
   assert.match(source, /world:\s*'MAIN'/);
   assert.match(source, /world:\s*'ISOLATED'/);
   assert.match(source, /run_at:\s*'document_start'/);
+  assert.match(source, /matches:\s*\['https:\/\/hike-teaching-center\.polymas\.com\/\*'\]/);
+  assert.doesNotMatch(source, /all_frames:\s*true/);
   assert.doesNotMatch(source, /'scripting'/);
+  assert.doesNotMatch(source, /declarativeNetRequest|webRequest|web_accessible_resources/);
 });

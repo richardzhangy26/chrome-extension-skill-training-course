@@ -16,7 +16,7 @@ const connectCommand = () => ({
 const createFakeWindow = () => {
   const listeners = new Set();
   const posted = [];
-  return {
+  const windowRef = {
     location: { origin: 'https://hike-teaching-center.polymas.com' },
     addEventListener(type, listener) {
       if (type === 'message') listeners.add(listener);
@@ -33,6 +33,8 @@ const createFakeWindow = () => {
     listenerCount: () => listeners.size,
     posted,
   };
+  windowRef.messageSource = windowRef;
+  return windowRef;
 };
 
 const createFakePort = () => {
@@ -126,4 +128,97 @@ test('relay 仅将本 Port 所有的合法页面事件回传', () => {
   });
 
   assert.deepEqual(port.posted, [pageEvent]);
+});
+
+test('relay 使用原生 messageSource 校验从 wrapper 转发的页面事件', () => {
+  const nativeWindow = {};
+  const fakeWindow = createFakeWindow();
+  const onConnect = createConnectEvent();
+  const port = createFakePort();
+  const wrapper = { ...fakeWindow, messageSource: nativeWindow };
+  registerContentPortRelay(wrapper, onConnect);
+  onConnect.emit(port);
+  port.emitMessage(connectCommand());
+
+  const pageEvent = {
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'page-to-extension',
+    connectionId: 'connection-1',
+    type: 'OPEN',
+  };
+  fakeWindow.dispatch({ source: nativeWindow, origin: fakeWindow.location.origin, data: pageEvent });
+
+  assert.deepEqual(port.posted, [pageEvent]);
+});
+
+test('connectionId 跨 Port 安全转移所有权且仅 owner 能收发或关闭', () => {
+  const fakeWindow = createFakeWindow();
+  const onConnect = createConnectEvent();
+  const firstPort = createFakePort();
+  const secondPort = createFakePort();
+  registerContentPortRelay(fakeWindow, onConnect);
+  onConnect.emit(firstPort);
+  onConnect.emit(secondPort);
+
+  firstPort.emitMessage(connectCommand());
+  secondPort.emitMessage(connectCommand());
+  const pageTextEvent = {
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'page-to-extension',
+    connectionId: 'connection-1',
+    type: 'TEXT',
+    payload: { data: 'only second port' },
+  };
+  fakeWindow.dispatch({ source: fakeWindow.messageSource, origin: fakeWindow.location.origin, data: pageTextEvent });
+  firstPort.emitMessage({
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'extension-to-page',
+    connectionId: 'connection-1',
+    type: 'SEND',
+    payload: { data: '{"event":"scriptStart"}' },
+  });
+  firstPort.emitMessage({
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'extension-to-page',
+    connectionId: 'connection-1',
+    type: 'CLOSE',
+    payload: { code: 1000, reason: 'old port' },
+  });
+  firstPort.emitDisconnect();
+
+  assert.deepEqual(firstPort.posted, []);
+  assert.deepEqual(secondPort.posted, [pageTextEvent]);
+  assert.deepEqual(
+    fakeWindow.posted.map(({ data }) => data.type),
+    ['CONNECT', 'CONNECT'],
+  );
+
+  const pageCloseEvent = {
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'page-to-extension',
+    connectionId: 'connection-1',
+    type: 'CLOSE',
+    payload: { code: 1000, reason: 'done', wasClean: true },
+  };
+  fakeWindow.dispatch({ source: fakeWindow.messageSource, origin: fakeWindow.location.origin, data: pageCloseEvent });
+  secondPort.emitMessage({
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'extension-to-page',
+    connectionId: 'connection-1',
+    type: 'SEND',
+    payload: { data: '{"event":"scriptStart"}' },
+  });
+  secondPort.emitDisconnect();
+
+  assert.deepEqual(secondPort.posted, [pageTextEvent, pageCloseEvent]);
+  assert.deepEqual(
+    fakeWindow.posted.map(({ data }) => data.type),
+    ['CONNECT', 'CONNECT'],
+  );
 });

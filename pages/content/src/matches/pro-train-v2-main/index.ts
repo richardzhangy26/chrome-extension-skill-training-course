@@ -4,6 +4,7 @@ import type { WindowLike } from '@src/pro-train-v2/page-window-adapter';
 
 const pageWindow: WindowLike = {
   location: window.location,
+  messageSource: window,
   addEventListener: (_type, listener) => window.addEventListener('message', listener),
   removeEventListener: (_type, listener) => window.removeEventListener('message', listener),
 };

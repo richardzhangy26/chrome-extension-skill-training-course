@@ -15,7 +15,7 @@ const createCommand = () => ({
 
 const createFakeWindow = () => {
   const listeners = new Set();
-  return {
+  const windowRef = {
     location: { origin: 'https://hike-teaching-center.polymas.com' },
     addEventListener(type, listener) {
       if (type === 'message') listeners.add(listener);
@@ -28,6 +28,8 @@ const createFakeWindow = () => {
     },
     listenerCount: () => listeners.size,
   };
+  windowRef.messageSource = windowRef;
+  return windowRef;
 };
 
 test('window adapter 只接受同 window、同 origin 的合法命令', () => {
@@ -43,4 +45,16 @@ test('window adapter 只接受同 window、同 origin 的合法命令', () => {
   assert.equal(handled.length, 1);
   stop();
   assert.equal(fakeWindow.listenerCount(), 0);
+});
+
+test('window adapter 使用注入的原生 messageSource，而不是 WindowLike wrapper', () => {
+  const nativeWindow = {};
+  const fakeWindow = createFakeWindow();
+  const wrapper = { ...fakeWindow, messageSource: nativeWindow };
+  const handled = [];
+  startPageWindowAdapter(wrapper, { handle: command => handled.push(command), dispose: () => {} });
+
+  fakeWindow.dispatch({ source: nativeWindow, origin: fakeWindow.location.origin, data: createCommand() });
+
+  assert.equal(handled.length, 1);
 });

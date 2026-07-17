@@ -39,13 +39,36 @@ const closeSocket = (socket: SocketLike, code: number, reason: string): void => 
 const createPageWsController = ({ createSocket, emit, getCurrentPageUrl }: Dependencies): PageWsController => {
   const sockets = new Map<string, SocketLike>();
 
-  const emitEvent = (connectionId: string, event: ProTrainV2PageEvent): void => {
-    if (sockets.get(connectionId)) emit(event);
+  const emitTerminalFailure = (connectionId: string, reason: string): void => {
+    const existing = sockets.get(connectionId);
+    if (existing) {
+      sockets.delete(connectionId);
+      closeSocket(existing, 4000, reason);
+    }
+    emit({
+      protocol: PROTOCOL,
+      version: VERSION,
+      direction: 'page-to-extension',
+      connectionId,
+      type: 'ERROR',
+    });
+    emit({
+      protocol: PROTOCOL,
+      version: VERSION,
+      direction: 'page-to-extension',
+      connectionId,
+      type: 'CLOSE',
+      payload: { code: 4000, reason, wasClean: false },
+    });
+  };
+
+  const emitEvent = (socket: SocketLike, connectionId: string, event: ProTrainV2PageEvent): void => {
+    if (sockets.get(connectionId) === socket) emit(event);
   };
 
   const attachSocketEvents = (socket: SocketLike, connectionId: string): void => {
     socket.addEventListener('open', () => {
-      emitEvent(connectionId, {
+      emitEvent(socket, connectionId, {
         protocol: PROTOCOL,
         version: VERSION,
         direction: 'page-to-extension',
@@ -56,7 +79,7 @@ const createPageWsController = ({ createSocket, emit, getCurrentPageUrl }: Depen
     socket.addEventListener('message', event => {
       if (!isRecord(event)) return;
       if (typeof event.data === 'string') {
-        emitEvent(connectionId, {
+        emitEvent(socket, connectionId, {
           protocol: PROTOCOL,
           version: VERSION,
           direction: 'page-to-extension',
@@ -68,7 +91,7 @@ const createPageWsController = ({ createSocket, emit, getCurrentPageUrl }: Depen
       }
       const byteLength = getBinaryByteLength(event.data);
       if (byteLength !== null) {
-        emitEvent(connectionId, {
+        emitEvent(socket, connectionId, {
           protocol: PROTOCOL,
           version: VERSION,
           direction: 'page-to-extension',
@@ -79,7 +102,7 @@ const createPageWsController = ({ createSocket, emit, getCurrentPageUrl }: Depen
       }
     });
     socket.addEventListener('error', () => {
-      emitEvent(connectionId, {
+      emitEvent(socket, connectionId, {
         protocol: PROTOCOL,
         version: VERSION,
         direction: 'page-to-extension',
@@ -109,7 +132,10 @@ const createPageWsController = ({ createSocket, emit, getCurrentPageUrl }: Depen
   const handle = (command: ProTrainV2Command): void => {
     const existing = sockets.get(command.connectionId);
     if (command.type === 'CONNECT') {
-      if (readTaskIdFromPageUrl(getCurrentPageUrl()) !== command.payload.taskId) return;
+      if (readTaskIdFromPageUrl(getCurrentPageUrl()) !== command.payload.taskId) {
+        emitTerminalFailure(command.connectionId, 'task mismatch');
+        return;
+      }
       if (existing) {
         sockets.delete(command.connectionId);
         closeSocket(existing, 1000, 'replaced');
@@ -120,13 +146,7 @@ const createPageWsController = ({ createSocket, emit, getCurrentPageUrl }: Depen
         sockets.set(command.connectionId, socket);
         attachSocketEvents(socket, command.connectionId);
       } catch {
-        emit({
-          protocol: PROTOCOL,
-          version: VERSION,
-          direction: 'page-to-extension',
-          connectionId: command.connectionId,
-          type: 'ERROR',
-        });
+        emitTerminalFailure(command.connectionId, 'socket creation failed');
       }
       return;
     }

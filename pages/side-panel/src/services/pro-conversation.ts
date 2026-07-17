@@ -13,11 +13,28 @@ interface ProTurn {
   content: string;
 }
 
+interface ProRoleNameCandidates {
+  eventNickname?: string;
+  stageNickname?: string;
+  eventRoleName?: string;
+  currentRoleName?: string;
+}
+
 /** 学生发言之前没有任何对方发言时（如阶段开场应答）的 ai 侧占位 */
 const EMPTY_AI_PLACEHOLDER = '（阶段开始）';
 
 const formatOpponentLine = (turn: ProTurn): string =>
   turn.role === 'coach' ? `[教练点评] ${turn.content}` : `${turn.label}: ${turn.content}`;
+
+const normalizeLabel = (value: string | undefined): string => value?.trim() ?? '';
+
+const resolveProRoleName = ({
+  eventNickname,
+  stageNickname,
+  eventRoleName,
+  currentRoleName,
+}: ProRoleNameCandidates): string =>
+  [eventNickname, stageNickname, eventRoleName, currentRoleName].map(normalizeLabel).find(Boolean) || '对方';
 
 /**
  * history：每个学生发言与其之前累计的非学生发言拼接配对（对齐 generateStudentAnswer 的 {ai, student} 格式）；
@@ -42,9 +59,11 @@ const buildStudentAnswerInput = (
   return { aiQuestion: pendingOpponentLines.join('\n'), history };
 };
 
-/** 映射为 ChatLogEntry 的 userText / aiText 字段（bot 发言带角色名，教练点评带 [教练点评] 标记） */
-const formatProLogEntry = (turn: ProTurn): { userText?: string; aiText?: string } =>
-  turn.role === 'user' ? { userText: turn.content } : { aiText: formatOpponentLine(turn) };
+/** 映射为 ChatLogEntry 的 userText / aiText / aiRoleName 字段。 */
+const formatProLogEntry = (turn: ProTurn): { userText?: string; aiText?: string; aiRoleName?: string } =>
+  turn.role === 'user'
+    ? { userText: turn.content }
+    : { aiText: turn.content, aiRoleName: normalizeLabel(turn.label) || '对方' };
 
-export { buildStudentAnswerInput, formatProLogEntry, EMPTY_AI_PLACEHOLDER };
-export type { ProTurn, ProTurnRole };
+export { buildStudentAnswerInput, formatProLogEntry, resolveProRoleName, EMPTY_AI_PLACEHOLDER };
+export type { ProTurn, ProTurnRole, ProRoleNameCandidates };

@@ -18,6 +18,7 @@ interface ChatLogEntry {
   source: AgentLogSource;
   userText?: string;
   aiText?: string;
+  aiRoleName?: string;
 }
 
 type AgentLogEntry = ChatLogEntry;

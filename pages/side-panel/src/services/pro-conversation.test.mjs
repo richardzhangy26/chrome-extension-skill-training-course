@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildStudentAnswerInput, formatProLogEntry, EMPTY_AI_PLACEHOLDER } from './pro-conversation.ts';
+import {
+  buildStudentAnswerInput,
+  formatProLogEntry,
+  resolveProRoleName,
+  EMPTY_AI_PLACEHOLDER,
+} from './pro-conversation.ts';
 
 test('buildStudentAnswerInput: 对方发言聚合为 aiQuestion，既往回合成对进 history', () => {
   const { aiQuestion, history } = buildStudentAnswerInput([
@@ -28,10 +33,21 @@ test('buildStudentAnswerInput: 连续多条对方发言按换行拼接', () => {
   assert.deepEqual(history, [{ ai: '客户: 第一句\n[教练点评] 注意语气', student: '收到' }]);
 });
 
-test('formatProLogEntry: user→userText，bot/coach→aiText（带标签）', () => {
+test('formatProLogEntry: user→userText，bot/coach→纯 aiText + aiRoleName', () => {
   assert.deepEqual(formatProLogEntry({ role: 'user', label: '你(学生)', content: '你好' }), { userText: '你好' });
-  assert.deepEqual(formatProLogEntry({ role: 'bot', label: '客户', content: '在吗' }), { aiText: '客户: 在吗' });
-  assert.deepEqual(formatProLogEntry({ role: 'coach', label: '教练点评', content: '不错' }), {
-    aiText: '[教练点评] 不错',
+  assert.deepEqual(formatProLogEntry({ role: 'bot', label: '客户', content: '在吗' }), {
+    aiText: '在吗',
+    aiRoleName: '客户',
   });
+  assert.deepEqual(formatProLogEntry({ role: 'coach', label: '教练点评', content: '不错' }), {
+    aiText: '不错',
+    aiRoleName: '教练点评',
+  });
+});
+
+test('resolveProRoleName: 忽略空白并按事件昵称、阶段昵称、角色名、对方回退', () => {
+  assert.equal(resolveProRoleName({ eventNickname: ' 小研 ', stageNickname: '阶段小研' }), '小研');
+  assert.equal(resolveProRoleName({ eventNickname: ' ', stageNickname: ' 阶段小研 ' }), '阶段小研');
+  assert.equal(resolveProRoleName({ eventRoleName: ' 咨询顾问 ' }), '咨询顾问');
+  assert.equal(resolveProRoleName({}), '对方');
 });

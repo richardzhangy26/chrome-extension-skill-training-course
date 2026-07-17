@@ -8,6 +8,7 @@
 import { apiRequest } from './background-bridge';
 
 interface ProParticipantRole {
+  nid: string;
   roleName: string;
   nickname: string;
   description: string;
@@ -32,6 +33,12 @@ interface ProTrainingContext {
   taskName: string;
   taskDescription: string;
   stagesById: Map<string, ProStageContext>;
+}
+
+interface ProDebugStage {
+  stepId: string;
+  stepName: string;
+  description: string;
 }
 
 interface ProStagePromptContext {
@@ -92,6 +99,7 @@ const buildRolesById = (roles: ProRoleRaw[]): Map<string, ProParticipantRole> =>
       continue;
     }
     map.set(role.nid, {
+      nid: role.nid,
       roleName: str(role.roleName),
       nickname: str(role.nickname),
       description: str(role.description),
@@ -149,6 +157,13 @@ const toStagePromptContext = (
   studentRole: stage.studentRole,
   participantRoles: stage.participantRoles,
 });
+
+const toProDebugStages = (context: ProTrainingContext): ProDebugStage[] =>
+  [...context.stagesById.values()].map(stage => ({
+    stepId: stage.stepId,
+    stepName: stage.stepName || stage.stepId,
+    description: stage.description,
+  }));
 
 // 构造注入 buildStudentRoleSystemPrompt 的 Pro 段落；各子段按内容是否为空守卫，
 // 阶段缺失降级时（仅任务级字段有值）只产出「实训任务」段。
@@ -215,8 +230,16 @@ export {
   buildRolesById,
   buildParticipantRoles,
   assembleProContext,
+  toProDebugStages,
   toStagePromptContext,
   buildProContextSections,
   fetchProTrainingContext,
 };
-export type { ProParticipantRole, ProStudentRole, ProStageContext, ProTrainingContext, ProStagePromptContext };
+export type {
+  ProParticipantRole,
+  ProStudentRole,
+  ProStageContext,
+  ProTrainingContext,
+  ProStagePromptContext,
+  ProDebugStage,
+};

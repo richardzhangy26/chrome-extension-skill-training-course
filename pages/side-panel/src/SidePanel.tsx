@@ -17,6 +17,7 @@ import { useProAgentChat } from './hooks/useProAgentChat';
 import { useVoiceAgentChat } from './hooks/useVoiceAgentChat';
 import { llmConfigStorage } from '@extension/storage';
 import { useRef, useEffect, useState } from 'react';
+import type { DebugStepItem } from './components/DebugStepsModal';
 import type { TrainingMode } from './components/ModeToggle';
 import type { SimulationModeState } from './components/SimulationConfigBar';
 import type { ChatMessage } from './hooks/useAgentChat';
@@ -1146,6 +1147,7 @@ interface ProChatAreaProps {
   onOpenSimulationConfig: () => void;
   onAutoGenerate: () => void;
   onAutoRunToggle: () => void;
+  onOpenDebug: () => void;
   toggleDisabled: boolean;
 }
 
@@ -1158,6 +1160,7 @@ const ProChatArea = ({
   onOpenSimulationConfig,
   onAutoGenerate,
   onAutoRunToggle,
+  onOpenDebug,
   toggleDisabled,
 }: ProChatAreaProps) => {
   const isRunning = pro.proState === 'RUNNING';
@@ -1196,16 +1199,16 @@ const ProChatArea = ({
           onAutoRun={onAutoRunToggle}
           onStopAutoRun={pro.stopAutoRun}
           isAutoRunning={pro.isAutoRunning}
-          onOpenDebug={() => {}}
+          onOpenDebug={onOpenDebug}
           onOpenSimulationConfig={onOpenSimulationConfig}
           onOpenMultiRole={() => {}}
           simulationConfig={simulationConfig}
           onToggleDialogueSimulation={onToggleSimulation}
           onToggleKnowledgeBase={onToggleKnowledge}
           toggleDisabled={toggleDisabled}
-          debugDisabled
+          debugDisabled={pro.isGenerating || pro.isStageListLoading}
           disabled={pro.turnPhase !== 'USER_TURN' || pro.isGenerating}
-          showDebug={false}
+          showDebug={true}
           showMultiRole={false}
           placeholder={pro.turnPhase === 'USER_TURN' ? '输入你的回答...' : waitingLabel}
         />
@@ -1256,6 +1259,7 @@ const SidePanel = () => {
 
   // 能力训练 Pro hook
   const pro = useProAgentChat(trainTaskId);
+  const refreshProDebugStages = pro.refreshDebugStages;
 
   // Admin Web 登录态 hook
   const { isLoggedIn, session, login, register, logout, syncConfigUp } = useAdminWebAuth();
@@ -1279,6 +1283,19 @@ const SidePanel = () => {
   const isIdle = workflowState === 'IDLE';
   const isChatting = workflowState === 'CHATTING';
   const isCompleted = workflowState === 'COMPLETED';
+  const standardDebugSteps: DebugStepItem[] = scriptSteps.map(step => ({
+    stepId: step.stepId,
+    stepName: step.stepDetailDTO?.stepName?.trim() || step.stepId,
+    stepOrder: step.stepDetailDTO?.stepOrder,
+    nodeType: step.stepDetailDTO?.nodeType,
+  }));
+  const proDebugSteps: DebugStepItem[] = pro.debugStages.map((stage, index) => ({
+    stepId: stage.stepId,
+    stepName: stage.stepName,
+    stepOrder: index + 1,
+    nodeType: 'SCRIPT_NODE',
+    description: stage.description,
+  }));
 
   useEffect(() => {
     let isMounted = true;
@@ -1353,11 +1370,19 @@ const SidePanel = () => {
     if (!isDebugOpen) {
       return;
     }
-    fetchScriptSteps();
-  }, [fetchScriptSteps, isDebugOpen]);
+    if (mode === 'pro') {
+      void refreshProDebugStages();
+      return;
+    }
+    void fetchScriptSteps();
+  }, [fetchScriptSteps, isDebugOpen, mode, refreshProDebugStages]);
 
   const handleSelectDebugStep = async (stepId: string) => {
     setIsDebugOpen(false);
+    if (mode === 'pro') {
+      await pro.restartAtStage(stepId);
+      return;
+    }
     await runDebugStep(stepId);
   };
 
@@ -1579,6 +1604,7 @@ const SidePanel = () => {
           onAutoRunToggle={() => {
             void handleProAutoRunToggle();
           }}
+          onOpenDebug={() => setIsDebugOpen(true)}
           toggleDisabled={pro.isGenerating}
         />
       ) : multiRole.isMultiRoleMode && multiRole.batch ? (
@@ -1683,11 +1709,18 @@ const SidePanel = () => {
 
       <DebugStepsModal
         isOpen={isDebugOpen}
-        steps={scriptSteps}
-        isLoading={isStepListLoading}
-        error={stepListError}
+        steps={mode === 'pro' ? proDebugSteps : standardDebugSteps}
+        variant={mode === 'pro' ? 'pro' : 'standard'}
+        isLoading={mode === 'pro' ? pro.isStageListLoading : isStepListLoading}
+        error={mode === 'pro' ? pro.stageListError : stepListError}
         onClose={() => setIsDebugOpen(false)}
-        onRefresh={() => fetchScriptSteps({ force: true })}
+        onRefresh={() => {
+          if (mode === 'pro') {
+            void pro.refreshDebugStages();
+          } else {
+            void fetchScriptSteps({ force: true });
+          }
+        }}
         onSelectStep={handleSelectDebugStep}
       />
 

@@ -4,6 +4,7 @@ const PRO_TRAIN_V2_PORT_NAME = 'polymas-pro-train-v2' as const;
 const TRAIN_V2_BASE = 'wss://cloudapi.polymas.com/ai-platform/ws/trainV2';
 const MAX_CONNECTION_ID_LENGTH = 256;
 const MAX_CLOSE_REASON_LENGTH = 123;
+const UTF8_ENCODER = new TextEncoder();
 const ALLOWED_TRAIN_V2_EVENTS = new Set([
   'scriptStart',
   'stepStart',
@@ -62,7 +63,7 @@ const isEnvelope = (
   isNonEmptyString(value.type);
 
 const isCloseReason = (value: unknown): value is string =>
-  typeof value === 'string' && value.length <= MAX_CLOSE_REASON_LENGTH;
+  typeof value === 'string' && UTF8_ENCODER.encode(value).byteLength <= MAX_CLOSE_REASON_LENGTH;
 
 const isCloseCommandCode = (value: unknown): value is number =>
   isFiniteNumber(value) && Number.isInteger(value) && (value === 1000 || (value >= 3000 && value <= 4999));

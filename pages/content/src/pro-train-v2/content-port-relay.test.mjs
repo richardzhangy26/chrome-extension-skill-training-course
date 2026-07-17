@@ -152,7 +152,7 @@ test('relay 使用原生 messageSource 校验从 wrapper 转发的页面事件',
   assert.deepEqual(port.posted, [pageEvent]);
 });
 
-test('connectionId 跨 Port 安全转移所有权且仅 owner 能收发或关闭', () => {
+test('connectionId 被占用时拒绝其它 Port，释放后允许重试', () => {
   const fakeWindow = createFakeWindow();
   const onConnect = createConnectEvent();
   const firstPort = createFakePort();
@@ -162,6 +162,7 @@ test('connectionId 跨 Port 安全转移所有权且仅 owner 能收发或关闭
   onConnect.emit(secondPort);
 
   firstPort.emitMessage(connectCommand());
+  firstPort.emitMessage(connectCommand());
   secondPort.emitMessage(connectCommand());
   const pageTextEvent = {
     protocol: PRO_TRAIN_V2_PORT_NAME,
@@ -169,10 +170,10 @@ test('connectionId 跨 Port 安全转移所有权且仅 owner 能收发或关闭
     direction: 'page-to-extension',
     connectionId: 'connection-1',
     type: 'TEXT',
-    payload: { data: 'only second port' },
+    payload: { data: 'only first port' },
   };
   fakeWindow.dispatch({ source: fakeWindow.messageSource, origin: fakeWindow.location.origin, data: pageTextEvent });
-  firstPort.emitMessage({
+  secondPort.emitMessage({
     protocol: PRO_TRAIN_V2_PORT_NAME,
     version: 1,
     direction: 'extension-to-page',
@@ -180,18 +181,17 @@ test('connectionId 跨 Port 安全转移所有权且仅 owner 能收发或关闭
     type: 'SEND',
     payload: { data: '{"event":"scriptStart"}' },
   });
-  firstPort.emitMessage({
+  secondPort.emitMessage({
     protocol: PRO_TRAIN_V2_PORT_NAME,
     version: 1,
     direction: 'extension-to-page',
     connectionId: 'connection-1',
     type: 'CLOSE',
-    payload: { code: 1000, reason: 'old port' },
+    payload: { code: 1000, reason: 'non-owner' },
   });
-  firstPort.emitDisconnect();
 
-  assert.deepEqual(firstPort.posted, []);
-  assert.deepEqual(secondPort.posted, [pageTextEvent]);
+  assert.deepEqual(firstPort.posted, [pageTextEvent]);
+  assert.deepEqual(secondPort.posted, []);
   assert.deepEqual(
     fakeWindow.posted.map(({ data }) => data.type),
     ['CONNECT', 'CONNECT'],
@@ -206,19 +206,61 @@ test('connectionId 跨 Port 安全转移所有权且仅 owner 能收发或关闭
     payload: { code: 1000, reason: 'done', wasClean: true },
   };
   fakeWindow.dispatch({ source: fakeWindow.messageSource, origin: fakeWindow.location.origin, data: pageCloseEvent });
-  secondPort.emitMessage({
+  assert.deepEqual(firstPort.posted, [pageTextEvent, pageCloseEvent]);
+  assert.deepEqual(secondPort.posted, []);
+
+  secondPort.emitMessage(connectCommand());
+  firstPort.emitDisconnect();
+  const newOpenEvent = {
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'page-to-extension',
+    connectionId: 'connection-1',
+    type: 'OPEN',
+  };
+  fakeWindow.dispatch({ source: fakeWindow.messageSource, origin: fakeWindow.location.origin, data: newOpenEvent });
+
+  assert.deepEqual(secondPort.posted, [newOpenEvent]);
+  assert.deepEqual(
+    fakeWindow.posted.map(({ data }) => data.type),
+    ['CONNECT', 'CONNECT', 'CONNECT'],
+  );
+
+  secondPort.emitDisconnect();
+  assert.deepEqual(
+    fakeWindow.posted.map(({ data }) => data.type),
+    ['CONNECT', 'CONNECT', 'CONNECT', 'CLOSE'],
+  );
+});
+
+test('relay 不转发 UTF-8 超过 123 字节的 CLOSE reason', () => {
+  const fakeWindow = createFakeWindow();
+  const onConnect = createConnectEvent();
+  const port = createFakePort();
+  registerContentPortRelay(fakeWindow, onConnect);
+  onConnect.emit(port);
+
+  port.emitMessage(connectCommand());
+  port.emitMessage({
     protocol: PRO_TRAIN_V2_PORT_NAME,
     version: 1,
     direction: 'extension-to-page',
     connectionId: 'connection-1',
-    type: 'SEND',
-    payload: { data: '{"event":"scriptStart"}' },
+    type: 'CLOSE',
+    payload: { code: 1000, reason: '😀'.repeat(60) },
   });
-  secondPort.emitDisconnect();
+  port.emitMessage({
+    protocol: PRO_TRAIN_V2_PORT_NAME,
+    version: 1,
+    direction: 'extension-to-page',
+    connectionId: 'connection-1',
+    type: 'CLOSE',
+    payload: { code: 1000, reason: 'a'.repeat(123) },
+  });
 
-  assert.deepEqual(secondPort.posted, [pageTextEvent, pageCloseEvent]);
   assert.deepEqual(
     fakeWindow.posted.map(({ data }) => data.type),
-    ['CONNECT', 'CONNECT'],
+    ['CONNECT', 'CLOSE'],
   );
+  assert.equal(fakeWindow.posted.at(-1).data.payload.reason, 'a'.repeat(123));
 });

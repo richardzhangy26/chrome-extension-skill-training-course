@@ -29,7 +29,6 @@ interface WindowLike {
 const registerContentPortRelay = (windowRef: WindowLike, onConnect: PortConnectEvent): (() => void) => {
   const cleanups = new Map<PortLike, () => void>();
   const owners = new Map<string, PortLike>();
-  const connectionIdsByPort = new Map<PortLike, Set<string>>();
 
   const forwardCommand = (command: ProTrainV2Command): void => {
     windowRef.postMessage(command, windowRef.location.origin);
@@ -48,10 +47,8 @@ const registerContentPortRelay = (windowRef: WindowLike, onConnect: PortConnectE
     const onPortMessage = (message: unknown): void => {
       if (!isProTrainV2Command(message)) return;
       if (message.type === 'CONNECT') {
-        const previousOwner = owners.get(message.connectionId);
-        if (previousOwner && previousOwner !== port) {
-          connectionIdsByPort.get(previousOwner)?.delete(message.connectionId);
-        }
+        const existingOwner = owners.get(message.connectionId);
+        if (existingOwner && existingOwner !== port) return;
         owners.set(message.connectionId, port);
         connectionIds.add(message.connectionId);
       }
@@ -71,7 +68,6 @@ const registerContentPortRelay = (windowRef: WindowLike, onConnect: PortConnectE
       port.onMessage.removeListener(onPortMessage);
       port.onDisconnect.removeListener(onPortDisconnect);
       cleanups.delete(port);
-      connectionIdsByPort.delete(port);
     };
     const onPortDisconnect = (): void => {
       for (const connectionId of [...connectionIds]) {
@@ -92,7 +88,6 @@ const registerContentPortRelay = (windowRef: WindowLike, onConnect: PortConnectE
     port.onMessage.addListener(onPortMessage);
     port.onDisconnect.addListener(onPortDisconnect);
     windowRef.addEventListener('message', onWindowMessage);
-    connectionIdsByPort.set(port, connectionIds);
     cleanups.set(port, onPortDisconnect);
   };
 

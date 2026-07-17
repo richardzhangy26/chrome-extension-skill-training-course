@@ -5,6 +5,14 @@
  * 供「阶段开场应答」的安静判定使用。心跳走应用层 heartBeat（服务端不依赖协议层 ping）。
  */
 
+import { createTrainV2PageRelaySocket, TRAIN_V2_SOCKET_STATE } from './train-v2-page-relay';
+import type {
+  TrainV2CloseInfo,
+  TrainV2ConnectionParams,
+  TrainV2Socket,
+  TrainV2SocketFactory,
+} from './train-v2-page-relay';
+
 interface TrainV2ConnectedPayload {
   connectType?: string;
 }
@@ -37,7 +45,7 @@ interface TrainV2Handlers {
   onScriptEnd?(): void;
   onServerError?(payload: unknown): void;
   onOpen?(): void;
-  onClose?(ev: CloseEvent): void;
+  onClose?(info: TrainV2CloseInfo): void;
   onUnknownEvent?(event: string, payload: unknown): void;
 }
 
@@ -98,35 +106,44 @@ const dispatchTrainV2Message = (handlers: TrainV2Handlers, raw: string): boolean
 };
 
 class TrainV2Client {
-  private readonly url: string;
+  private readonly params: TrainV2ConnectionParams;
   private readonly handlers: TrainV2Handlers;
-  private ws: WebSocket | null = null;
+  private readonly socketFactory: TrainV2SocketFactory;
+  private ws: TrainV2Socket | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   // 每收到一条事件或音频帧 +1，供「阶段开场应答」检测服务端是否安静
   private activityCounter = 0;
 
-  constructor(params: { taskId: string; userId: string; sessionId: string }, handlers: TrainV2Handlers) {
-    const query = new URLSearchParams({
-      taskId: params.taskId,
-      userId: params.userId,
-      sessionId: params.sessionId,
-    });
-    this.url = `${TRAIN_V2_WS_BASE}?${query.toString()}`;
+  constructor(
+    params: TrainV2ConnectionParams,
+    handlers: TrainV2Handlers,
+    socketFactory: TrainV2SocketFactory = createTrainV2PageRelaySocket,
+  ) {
+    this.params = params;
     this.handlers = handlers;
+    this.socketFactory = socketFactory;
   }
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       let settled = false;
+      let opened = false;
+      let openTimer: ReturnType<typeof setTimeout> | null = null;
+      const settleRejected = (error: Error): void => {
+        if (settled) return;
+        settled = true;
+        if (openTimer) clearTimeout(openTimer);
+        reject(error);
+      };
       try {
-        this.ws = new WebSocket(this.url);
+        this.ws = this.socketFactory(this.params);
       } catch (error) {
         reject(error);
         return;
       }
       this.ws.binaryType = 'arraybuffer';
 
-      const openTimer = setTimeout(() => {
+      openTimer = setTimeout(() => {
         if (!settled) {
           settled = true;
           reject(new Error('WebSocket 握手超时（10s）'));
@@ -135,50 +152,43 @@ class TrainV2Client {
       }, OPEN_TIMEOUT_MS);
 
       this.ws.addEventListener('open', () => {
-        clearTimeout(openTimer);
-        if (!settled) {
-          settled = true;
-          this.startHeartbeat();
-          // 对齐脚本：连接成功立即发 scriptStart（先于服务端 connected 事件）
-          this.sendEvent('scriptStart');
-          this.handlers.onOpen?.();
-          resolve();
-        }
+        if (settled || opened) return;
+        opened = true;
+        settled = true;
+        if (openTimer) clearTimeout(openTimer);
+        this.startHeartbeat();
+        // 对齐脚本：连接成功立即发 scriptStart（先于服务端 connected 事件）
+        this.sendEvent('scriptStart');
+        this.handlers.onOpen?.();
+        resolve();
       });
 
       this.ws.addEventListener('error', event => {
-        const phase = settled ? 'connected' : 'handshake';
-        if (!settled) {
-          settled = true;
-          clearTimeout(openTimer);
-          reject(new Error('WebSocket 连接失败'));
-        }
+        const phase = opened ? 'connected' : 'handshake';
+        settleRejected(new Error('WebSocket 连接失败'));
         // 浏览器 error 事件不透明（无细节）；真正原因看紧随其后的 [pro-ws] close code，
         // 以及 DevTools Network 面板里该 trainV2 请求的握手 HTTP 状态（200/401 等 JS 无法读取）。
         console.warn(`[pro-ws] error (phase=${phase}, 细节不透明，见下方 close code 与 Network 握手状态)`, event);
       });
 
       this.ws.addEventListener('close', ev => {
+        const close = ev as TrainV2CloseInfo;
         this.stopHeartbeat();
         // close code 是握手/连接失败的关键诊断信号（1006=服务器在建立前就断，典型握手被拒）。
         // 始终打印：error 先触发会把 settled 置真，此前该 code 被 if(!settled) 挡掉、无处可见。
         console.warn(
-          `[pro-ws] close code=${ev.code} reason=${ev.reason || '(空)'} wasClean=${ev.wasClean} phase=${settled ? 'connected' : 'handshake'}`,
+          `[pro-ws] close code=${close.code} reason=${close.reason || '(空)'} wasClean=${close.wasClean} phase=${opened ? 'connected' : 'handshake'}`,
         );
-        if (!settled) {
-          settled = true;
-          clearTimeout(openTimer);
-          reject(new Error(`WebSocket 在握手期关闭: code=${ev.code}`));
-        }
-        this.handlers.onClose?.(ev);
+        settleRejected(new Error(`WebSocket 在握手期关闭: code=${close.code}`));
+        this.handlers.onClose?.(close);
       });
 
-      this.ws.addEventListener('message', ev => this.handleMessage(ev));
+      this.ws.addEventListener('message', ev => this.handleMessage(ev as { data: unknown }));
     });
   }
 
   sendEvent(event: string, payload?: Record<string, unknown>): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== TRAIN_V2_SOCKET_STATE.OPEN) {
       console.warn('[pro-ws] sendEvent skipped, ws not open', event);
       return;
     }
@@ -188,7 +198,7 @@ class TrainV2Client {
 
   close(code = 1000, reason = 'client close'): void {
     this.stopHeartbeat();
-    if (this.ws && this.ws.readyState !== WebSocket.CLOSED && this.ws.readyState !== WebSocket.CLOSING) {
+    if (this.ws && this.ws.readyState !== TRAIN_V2_SOCKET_STATE.CLOSED) {
       try {
         this.ws.close(code, reason);
       } catch {
@@ -199,14 +209,14 @@ class TrainV2Client {
   }
 
   get readyState(): number {
-    return this.ws?.readyState ?? WebSocket.CLOSED;
+    return this.ws?.readyState ?? TRAIN_V2_SOCKET_STATE.CLOSED;
   }
 
   get activitySeq(): number {
     return this.activityCounter;
   }
 
-  private handleMessage(ev: MessageEvent): void {
+  private handleMessage(ev: { data: unknown }): void {
     this.activityCounter += 1;
     if (typeof ev.data !== 'string') {
       // TTS MP3 音频帧：本期决策为不播放、直接丢弃（仅计入活动序号）
@@ -237,4 +247,5 @@ export type {
   TrainV2NextStepPayload,
   TrainV2SelectRoleEndPayload,
   TrainV2BotAnswerEndPayload,
+  TrainV2CloseInfo,
 };

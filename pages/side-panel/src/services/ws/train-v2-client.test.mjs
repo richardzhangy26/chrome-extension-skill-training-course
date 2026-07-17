@@ -1,6 +1,44 @@
 import assert from 'node:assert/strict';
+import console from 'node:console';
 import test from 'node:test';
-import { dispatchTrainV2Message, HEARTBEAT_INTERVAL_MS, TRAIN_V2_WS_BASE } from './train-v2-client.ts';
+import { dispatchTrainV2Message, HEARTBEAT_INTERVAL_MS, TRAIN_V2_WS_BASE, TrainV2Client } from './train-v2-client.ts';
+
+const createFakeSocket = () => {
+  const listeners = new Map();
+  const socket = {
+    binaryType: 'blob',
+    readyState: 0,
+    sent: [],
+    addEventListener(type, listener) {
+      const entries = listeners.get(type) ?? [];
+      entries.push(listener);
+      listeners.set(type, entries);
+    },
+    send(data) {
+      this.sent.push(data);
+    },
+    close() {
+      this.readyState = 3;
+    },
+    emit(type, event = {}) {
+      for (const listener of listeners.get(type) ?? []) listener(event);
+    },
+    emitOpen() {
+      this.readyState = 1;
+      this.emit('open');
+    },
+    emitError() {
+      this.emit('error');
+    },
+    emitClose(event) {
+      this.readyState = 3;
+      this.emit('close', event);
+    },
+  };
+  return socket;
+};
+
+const clientParams = { taskId: 'PRO123', userId: 'user-1', sessionId: 'session-1' };
 
 test('botAnswerEnd 分发到 onBotAnswerEnd 并携带 payload', () => {
   const calls = [];
@@ -52,4 +90,43 @@ test('坏 JSON 返回 false，合法 JSON 返回 true', () => {
 test('协议常量与 auto_train_pro.py 实测一致', () => {
   assert.equal(HEARTBEAT_INTERVAL_MS, 30_000);
   assert.equal(TRAIN_V2_WS_BASE, 'wss://cloudapi.polymas.com/ai-platform/ws/trainV2');
+});
+
+test('OPEN 前 error 后 close 仍记录 handshake phase 且 connect 失败', async () => {
+  const socket = createFakeSocket();
+  const logs = [];
+  const warn = console.warn;
+  console.warn = (...args) => logs.push(args.join(' '));
+  try {
+    const client = new TrainV2Client(clientParams, {}, () => socket);
+    const pending = client.connect();
+    socket.emitError();
+    socket.emitClose({ code: 1006, reason: '', wasClean: false });
+    await assert.rejects(pending, /连接失败/);
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(logs.filter(log => log.includes('phase=handshake')).length, 2);
+});
+
+test('OPEN 仅启动一次并发送一次 scriptStart，close 使用 connected phase 且迟到 OPEN 不复活', async () => {
+  const socket = createFakeSocket();
+  const logs = [];
+  const closes = [];
+  const warn = console.warn;
+  console.warn = (...args) => logs.push(args.join(' '));
+  try {
+    const client = new TrainV2Client(clientParams, { onClose: event => closes.push(event) }, () => socket);
+    const pending = client.connect();
+    socket.emitOpen();
+    socket.emitOpen();
+    await pending;
+    socket.emitClose({ code: 1006, reason: '', wasClean: false });
+    socket.emitOpen();
+  } finally {
+    console.warn = warn;
+  }
+  assert.deepEqual(socket.sent, ['{"event":"scriptStart"}']);
+  assert.deepEqual(closes, [{ code: 1006, reason: '', wasClean: false }]);
+  assert.equal(logs.filter(log => log.includes('phase=connected')).length, 1);
 });

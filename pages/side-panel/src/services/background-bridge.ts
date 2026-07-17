@@ -14,6 +14,11 @@ interface AuthInfo {
   cookies: string;
 }
 
+interface CurrentTabInfo {
+  id: number;
+  url: string;
+}
+
 interface ApiRequestPayload {
   endpoint: string;
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -53,6 +58,14 @@ const sendMessage = async <T>(type: string, payload?: unknown): Promise<Backgrou
 const getCurrentTabUrl = async (): Promise<string | null> => {
   const response = await sendMessage<string>('GET_CURRENT_TAB_URL');
   return response.success ? (response.data ?? null) : null;
+};
+
+const connectProTrainV2Page = async (): Promise<chrome.runtime.Port> => {
+  const response = await sendMessage<CurrentTabInfo>('GET_CURRENT_TAB_INFO');
+  if (!response.success || !response.data) {
+    throw new Error(response.error || '请打开能力训练 Pro 页面');
+  }
+  return chrome.tabs.connect(response.data.id, { name: 'polymas-pro-train-v2', frameId: 0 });
 };
 
 // 获取认证信息
@@ -131,5 +144,14 @@ const API_ENDPOINTS = {
   CHAT: '/ai-tools/trainRun/chat',
 } as const;
 
-export { getCurrentTabUrl, getAuth, extractTrainTaskId, apiRequest, onTabUrlChanged, API_ENDPOINTS, adminWebRequest };
-export type { AdminWebRequestPayload, AdminWebResponse };
+export {
+  getCurrentTabUrl,
+  getAuth,
+  extractTrainTaskId,
+  apiRequest,
+  onTabUrlChanged,
+  API_ENDPOINTS,
+  adminWebRequest,
+  connectProTrainV2Page,
+};
+export type { AdminWebRequestPayload, AdminWebResponse, CurrentTabInfo };

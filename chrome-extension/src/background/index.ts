@@ -1,7 +1,9 @@
 import 'webextension-polyfill';
+import { toCurrentTrainingTab } from './current-training-tab';
 import { readTaskIdFromUrl } from './extract-task-id';
 import { ADMIN_WEB_BASE_URLS, IS_DEV } from '@extension/env';
 import { exampleThemeStorage, authSessionStorage, normalizeAuthToken } from '@extension/storage';
+import type { CurrentTabInfo } from './current-training-tab';
 
 // ============ 类型定义 ============
 interface BackgroundMessage<T = unknown> {
@@ -17,6 +19,7 @@ interface BackgroundResponse<T = unknown> {
 
 type BackgroundMessageType =
   | 'GET_CURRENT_TAB_URL'
+  | 'GET_CURRENT_TAB_INFO'
   | 'GET_AUTH'
   | 'EXTRACT_TRAIN_TASK_ID'
   | 'API_REQUEST'
@@ -83,6 +86,9 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
     case 'GET_CURRENT_TAB_URL':
       return handleGetCurrentTabUrl();
 
+    case 'GET_CURRENT_TAB_INFO':
+      return handleGetCurrentTabInfo();
+
     case 'GET_AUTH':
       return handleGetAuth();
 
@@ -110,6 +116,19 @@ const handleGetCurrentTabUrl = async (): Promise<BackgroundResponse<string>> => 
     }
 
     return { success: true, data: tab.url };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+};
+
+const handleGetCurrentTabInfo = async (): Promise<BackgroundResponse<CurrentTabInfo>> => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const currentTab = tab ? toCurrentTrainingTab(tab) : null;
+    if (!currentTab) {
+      return { success: false, error: '请打开能力训练 Pro 页面' };
+    }
+    return { success: true, data: currentTab };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }

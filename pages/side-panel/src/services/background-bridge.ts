@@ -3,6 +3,9 @@
  * 封装与Background Script的通信
  */
 
+import { createCurrentTabUrlMessageHandler } from './current-tab-url-listener';
+import type { TabUrlChangedMessage } from './current-tab-url-listener';
+
 interface BackgroundResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -133,10 +136,9 @@ const adminWebRequest = async (payload: AdminWebRequestPayload): Promise<AdminWe
 
 // 监听URL变化
 const onTabUrlChanged = (callback: (url: string) => void): (() => void) => {
-  const handler = (message: { type: string; payload?: { url: string } }) => {
-    if (message.type === 'TAB_URL_CHANGED' && message.payload?.url) {
-      callback(message.payload.url);
-    }
+  const handleCurrentTabUrl = createCurrentTabUrlMessageHandler(getCurrentTabInfo, callback);
+  const handler = (message: TabUrlChangedMessage) => {
+    void handleCurrentTabUrl(message);
   };
 
   chrome.runtime.onMessage.addListener(handler);

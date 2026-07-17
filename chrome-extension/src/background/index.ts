@@ -1,6 +1,7 @@
 import 'webextension-polyfill';
 import { toCurrentTrainingTab } from './current-training-tab';
 import { readTaskIdFromUrl } from './extract-task-id';
+import { createTrainingTabUrlEventController } from './training-tab-url-events';
 import { ADMIN_WEB_BASE_URLS, IS_DEV } from '@extension/env';
 import { exampleThemeStorage, authSessionStorage, normalizeAuthToken } from '@extension/storage';
 import type { CurrentTabInfo } from './current-training-tab';
@@ -297,19 +298,27 @@ const handleAdminWebRequest = async (
   }
 };
 
-// ============ 监听标签页URL变化 ============
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.url && tab.url?.includes('hike-teaching-center.polymas.com')) {
-    // 通知Side Panel URL已变化
-    chrome.runtime
+// ============ 监听活动标签页URL变化/切换 ============
+const trainingTabUrlEvents = createTrainingTabUrlEventController({
+  getTab: tabId => chrome.tabs.get(tabId),
+  publish: async tab => {
+    await chrome.runtime
       .sendMessage({
         type: 'TAB_URL_CHANGED',
-        payload: { tabId, url: changeInfo.url },
+        payload: { tabId: tab.id, url: tab.url },
       })
       .catch(() => {
         // Side Panel可能未打开，忽略错误
       });
-  }
+  },
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  void trainingTabUrlEvents.onUpdated(tabId, changeInfo, tab);
+});
+
+chrome.tabs.onActivated.addListener(activeInfo => {
+  void trainingTabUrlEvents.onActivated(activeInfo);
 });
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {

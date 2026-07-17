@@ -7,6 +7,7 @@
 import { generateStudentAnswer } from '../services/llm-service';
 import { invalidatePolymasUserInfo, refreshPolymasUserInfo } from '../services/polymas-user-service';
 import { buildStudentAnswerInput, formatProLogEntry } from '../services/pro-conversation';
+import { createProTaskChangeTracker } from '../services/pro-task-change-tracker';
 import { fetchProTrainingContext, toStagePromptContext } from '../services/pro-training-context-service';
 import { resolveTrainingMetadata } from '../services/training-metadata-service';
 import { TrainV2Client } from '../services/ws/train-v2-client';
@@ -85,6 +86,9 @@ const useProAgentChat = (trainTaskId: string | null) => {
   const proContextErrorRef = useRef(false);
   // 会话代际号：teardown 后递增，使旧会话遗留的异步循环立即退出
   const runSeqRef = useRef(0);
+  const taskChangeTrackerRef = useRef<ReturnType<typeof createProTaskChangeTracker> | null>(null);
+  const taskChangeTracker = taskChangeTrackerRef.current ?? createProTaskChangeTracker(trainTaskId);
+  taskChangeTrackerRef.current = taskChangeTracker;
 
   // 状态写入同时同步 ref，避免 WS 回调读到过期值（事件到达早于 useEffect 同步）
   const setProState = useCallback((next: ProState) => {
@@ -222,6 +226,9 @@ const useProAgentChat = (trainTaskId: string | null) => {
   const generateAndSend = useCallback(
     async (seq: number): Promise<{ needConfig: boolean; ok: boolean }> => {
       const config = await llmConfigStorage.get();
+      if (runSeqRef.current !== seq) {
+        return { needConfig: false, ok: false };
+      }
       if (!config.apiKey) {
         return { needConfig: true, ok: false };
       }
@@ -433,6 +440,9 @@ const useProAgentChat = (trainTaskId: string | null) => {
       }
 
       const config = await llmConfigStorage.get();
+      if (runSeqRef.current !== seq) {
+        return;
+      }
       const profile = config.studentProfiles.find(p => p.id === config.studentProfileId) ?? config.studentProfiles[0];
       const profileLabel = profile?.label?.trim() || '学生';
       try {
@@ -442,18 +452,30 @@ const useProAgentChat = (trainTaskId: string | null) => {
           trainingMeta,
           stepNameMapping: {},
         });
+        if (runSeqRef.current !== seq) {
+          return;
+        }
         logSessionIdRef.current = session.id;
       } catch (logError) {
+        if (runSeqRef.current !== seq) {
+          return;
+        }
         console.warn('[pro] 日志初始化失败', logError);
       }
 
+      if (runSeqRef.current !== seq) {
+        return;
+      }
       addMessage('system', `训练任务：${taskDisplayName}`);
 
+      const isCurrentRun = () => runSeqRef.current === seq;
       const handlers: TrainV2Handlers = {
         onConnected: payload => {
+          if (!isCurrentRun()) return;
           console.log('[pro] connected', payload.connectType);
         },
         onNextStep: payload => {
+          if (!isCurrentRun()) return;
           stepIdRef.current = payload.nextStepId;
           stepIndexRef.current += 1;
           setStepIndex(stepIndexRef.current);
@@ -464,6 +486,7 @@ const useProAgentChat = (trainTaskId: string | null) => {
           }
         },
         onSelectRoleEnd: payload => {
+          if (!isCurrentRun()) return;
           if (payload.roleNid === 'user') {
             currentRoleRef.current = null;
             setCurrentRoleNickname(null);
@@ -481,10 +504,12 @@ const useProAgentChat = (trainTaskId: string | null) => {
           }
         },
         onBotAnswerStart: () => {
+          if (!isCurrentRun()) return;
           // 有角色开口 = 本阶段已启动（供阶段开场重试判定成功）
           botSpokeRef.current = true;
         },
         onBotAnswerEnd: payload => {
+          if (!isCurrentRun()) return;
           const nid = payload.roleNid ?? currentRoleRef.current?.nid ?? '';
           const nickname = payload.roleNickname ?? currentRoleRef.current?.nickname ?? '对方';
           if (nid === 'system') {
@@ -496,15 +521,19 @@ const useProAgentChat = (trainTaskId: string | null) => {
           clientRef.current?.sendEvent('continueCurrentStep');
         },
         onContinueSuperseded: () => {
+          if (!isCurrentRun()) return;
           supersededRef.current = true;
         },
         onScriptEnd: () => {
+          if (!isCurrentRun()) return;
           endRun('🎉 训练完成！');
         },
         onServerError: payload => {
+          if (!isCurrentRun()) return;
           failRun(`服务端错误：${JSON.stringify(payload)}`);
         },
         onClose: ev => {
+          if (!isCurrentRun()) return;
           if (proStateRef.current === 'RUNNING' || proStateRef.current === 'CONNECTING') {
             // 带上 close code 便于诊断（1006=握手被拒；4xxx=服务端应用层拒绝）
             failRun(`连接已断开 (code=${ev.code}${ev.reason ? `, ${ev.reason}` : ''})`);
@@ -559,6 +588,12 @@ const useProAgentChat = (trainTaskId: string | null) => {
     proContextRef.current = null;
     proContextErrorRef.current = false;
   }, [setProState, setTurnPhase, teardown]);
+
+  useEffect(() => {
+    if (taskChangeTracker.update(trainTaskId)) {
+      reset();
+    }
+  }, [reset, taskChangeTracker, trainTaskId]);
 
   // 组件卸载时断开连接
   useEffect(

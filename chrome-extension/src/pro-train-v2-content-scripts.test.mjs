@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { URL } from 'node:url';
 import test from 'node:test';
 
 test('manifest 静态注入 MAIN 与 ISOLATED 两个 bridge entry', async () => {

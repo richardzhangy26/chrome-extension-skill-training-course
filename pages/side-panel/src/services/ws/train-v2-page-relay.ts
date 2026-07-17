@@ -1,4 +1,4 @@
-import { connectProTrainV2Page } from '../background-bridge';
+import { connectProTrainV2Page, getRuntimeLastErrorMessage } from '../background-bridge';
 
 const PROTOCOL = 'polymas-pro-train-v2' as const;
 const VERSION = 1 as const;
@@ -110,11 +110,6 @@ const createConnectionId = (): string =>
     ? crypto.randomUUID()
     : `relay_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-const readRuntimeLastError = (): string | undefined => {
-  if (typeof chrome === 'undefined') return undefined;
-  return chrome.runtime.lastError?.message;
-};
-
 const toActionableReason = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
   return fallback;
@@ -127,7 +122,7 @@ const createTrainV2PageRelaySocket = (
   const dependencies: PageRelayDependencies = {
     connectPort: connectProTrainV2Page,
     connectionId: createConnectionId,
-    readLastError: readRuntimeLastError,
+    readLastError: getRuntimeLastErrorMessage,
     scheduleErrorFallback: (callback, delayMs) => setTimeout(callback, delayMs),
     clearErrorFallback: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
     reportListenerError: error => console.error('[pro-train-v2 relay] event listener failed', error),

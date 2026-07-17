@@ -73,6 +73,9 @@ const connectProTrainV2Page = async (): Promise<chrome.runtime.Port> => {
   return chrome.tabs.connect(tab.id, { name: 'polymas-pro-train-v2', frameId: 0 });
 };
 
+const getRuntimeLastErrorMessage = (): string | undefined =>
+  typeof chrome === 'undefined' ? undefined : chrome.runtime.lastError?.message;
+
 // 获取认证信息
 const getAuth = async (): Promise<AuthInfo | null> => {
   const response = await sendMessage<AuthInfo>('GET_AUTH');
@@ -159,5 +162,6 @@ export {
   adminWebRequest,
   getCurrentTabInfo,
   connectProTrainV2Page,
+  getRuntimeLastErrorMessage,
 };
 export type { AdminWebRequestPayload, AdminWebResponse, CurrentTabInfo };

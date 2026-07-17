@@ -3,6 +3,7 @@ import { makeEntryPointPlugin } from '@extension/hmr';
 import { getContentScriptEntries, withPageConfig } from '@extension/vite-config';
 import { IS_DEV } from '@extension/env';
 import { build } from 'vite';
+import { toIifeGlobalName } from './build-name.js';
 
 const rootDir = resolve(import.meta.dirname);
 const srcDir = resolve(rootDir, 'src');
@@ -20,7 +21,7 @@ const configs = Object.entries(getContentScriptEntries(matchesDir)).map(([name, 
     plugins: [IS_DEV && makeEntryPointPlugin()],
     build: {
       lib: {
-        name: name,
+        name: toIifeGlobalName(name),
         formats: ['iife'],
         entry,
         fileName: name,

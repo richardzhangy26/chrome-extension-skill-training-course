@@ -7,6 +7,7 @@ const TRAIN_V2_SOCKET_STATE = {
   OPEN: 1,
   CLOSED: 3,
 } as const;
+const ERROR_CLOSE_GRACE_MS = 100;
 
 interface TrainV2ConnectionParams {
   taskId: string;
@@ -46,6 +47,8 @@ interface PageRelayDependencies {
   connectPort: () => Promise<RelayPort>;
   connectionId: () => string;
   readLastError: () => string | undefined;
+  scheduleErrorFallback: (callback: () => void, delayMs: number) => unknown;
+  clearErrorFallback: (handle: unknown) => void;
 }
 
 type PageEvent =
@@ -111,6 +114,11 @@ const readRuntimeLastError = (): string | undefined => {
   return chrome.runtime.lastError?.message;
 };
 
+const toActionableReason = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  return fallback;
+};
+
 const createTrainV2PageRelaySocket = (
   params: TrainV2ConnectionParams,
   overrides?: Partial<PageRelayDependencies>,
@@ -119,6 +127,8 @@ const createTrainV2PageRelaySocket = (
     connectPort: connectProTrainV2Page,
     connectionId: createConnectionId,
     readLastError: readRuntimeLastError,
+    scheduleErrorFallback: (callback, delayMs) => setTimeout(callback, delayMs),
+    clearErrorFallback: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
     ...overrides,
   };
   const connectionId = dependencies.connectionId();
@@ -127,6 +137,8 @@ const createTrainV2PageRelaySocket = (
   let port: RelayPort | null = null;
   let terminal = false;
   let attached = false;
+  let errorPending = false;
+  let errorFallbackHandle: unknown = null;
 
   const emit = (type: 'open' | 'message' | 'error' | 'close', event: unknown): void => {
     for (const listener of listeners.get(type) ?? []) listener(event);
@@ -134,6 +146,7 @@ const createTrainV2PageRelaySocket = (
 
   const onPortMessage = (message: unknown): void => {
     if (terminal || !isPageEvent(message) || message.connectionId !== connectionId) return;
+    if (errorPending && message.type !== 'ERROR' && message.type !== 'CLOSE') return;
     switch (message.type) {
       case 'OPEN':
         if (readyState !== TRAIN_V2_SOCKET_STATE.CONNECTING) return;
@@ -147,10 +160,17 @@ const createTrainV2PageRelaySocket = (
         if (readyState === TRAIN_V2_SOCKET_STATE.OPEN) emit('message', { data: new ArrayBuffer(0) });
         return;
       case 'ERROR':
-        finishTerminal({ code: 1006, reason: '能力训练 Pro 页面连接失败，请刷新页面后重试', wasClean: false }, true);
+        if (errorPending) return;
+        errorPending = true;
+        errorFallbackHandle = dependencies.scheduleErrorFallback(() => {
+          if (terminal || !errorPending) return;
+          errorPending = false;
+          errorFallbackHandle = null;
+          finishTerminal({ code: 1006, reason: '能力训练 Pro 页面连接失败，请刷新页面后重试', wasClean: false }, true);
+        }, ERROR_CLOSE_GRACE_MS);
         return;
       case 'CLOSE':
-        finishTerminal(message.payload, false);
+        finishTerminal(message.payload, errorPending);
         return;
     }
   };
@@ -174,13 +194,22 @@ const createTrainV2PageRelaySocket = (
     }
   };
 
+  const cancelErrorFallback = (): void => {
+    if (!errorPending) return;
+    errorPending = false;
+    dependencies.clearErrorFallback(errorFallbackHandle);
+    errorFallbackHandle = null;
+  };
+
   const finishTerminal = (close: TrainV2CloseInfo, emitError: boolean): void => {
     if (terminal) return;
     terminal = true;
+    cancelErrorFallback();
     readyState = TRAIN_V2_SOCKET_STATE.CLOSED;
     detachPort();
     if (emitError) emit('error', {});
     emit('close', close);
+    listeners.clear();
     disconnectPort();
   };
 
@@ -219,8 +248,11 @@ const createTrainV2PageRelaySocket = (
         finishTerminal({ code: 1006, reason: '请刷新能力训练 Pro 页面后重试', wasClean: false }, true);
       }
     })
-    .catch(() => {
-      finishTerminal({ code: 1006, reason: '请刷新能力训练 Pro 页面后重试', wasClean: false }, true);
+    .catch(error => {
+      finishTerminal(
+        { code: 1006, reason: toActionableReason(error, '请刷新能力训练 Pro 页面后重试'), wasClean: false },
+        true,
+      );
     });
 
   return {
@@ -234,7 +266,7 @@ const createTrainV2PageRelaySocket = (
       listeners.set(type, typeListeners);
     },
     send(data) {
-      if (terminal || readyState !== TRAIN_V2_SOCKET_STATE.OPEN || !port) return;
+      if (terminal || errorPending || readyState !== TRAIN_V2_SOCKET_STATE.OPEN || !port) return;
       try {
         port.postMessage({
           protocol: PROTOCOL,

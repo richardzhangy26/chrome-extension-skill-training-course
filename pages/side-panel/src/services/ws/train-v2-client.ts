@@ -145,9 +145,8 @@ class TrainV2Client {
 
       openTimer = setTimeout(() => {
         if (!settled) {
-          settled = true;
-          reject(new Error('WebSocket 握手超时（10s）'));
-          this.close(4000);
+          settleRejected(new Error('WebSocket 握手超时（10s）'));
+          this.close(4000, 'handshake timeout');
         }
       }, OPEN_TIMEOUT_MS);
 

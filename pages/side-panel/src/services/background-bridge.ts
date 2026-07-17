@@ -60,12 +60,17 @@ const getCurrentTabUrl = async (): Promise<string | null> => {
   return response.success ? (response.data ?? null) : null;
 };
 
-const connectProTrainV2Page = async (): Promise<chrome.runtime.Port> => {
+const getCurrentTabInfo = async (): Promise<CurrentTabInfo> => {
   const response = await sendMessage<CurrentTabInfo>('GET_CURRENT_TAB_INFO');
   if (!response.success || !response.data) {
     throw new Error(response.error || '请打开能力训练 Pro 页面');
   }
-  return chrome.tabs.connect(response.data.id, { name: 'polymas-pro-train-v2', frameId: 0 });
+  return response.data;
+};
+
+const connectProTrainV2Page = async (): Promise<chrome.runtime.Port> => {
+  const tab = await getCurrentTabInfo();
+  return chrome.tabs.connect(tab.id, { name: 'polymas-pro-train-v2', frameId: 0 });
 };
 
 // 获取认证信息
@@ -152,6 +157,7 @@ export {
   onTabUrlChanged,
   API_ENDPOINTS,
   adminWebRequest,
+  getCurrentTabInfo,
   connectProTrainV2Page,
 };
 export type { AdminWebRequestPayload, AdminWebResponse, CurrentTabInfo };

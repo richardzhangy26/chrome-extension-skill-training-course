@@ -9,6 +9,7 @@ const createFakeSocket = () => {
     binaryType: 'blob',
     readyState: 0,
     sent: [],
+    closeCalls: [],
     addEventListener(type, listener) {
       const entries = listeners.get(type) ?? [];
       entries.push(listener);
@@ -17,8 +18,11 @@ const createFakeSocket = () => {
     send(data) {
       this.sent.push(data);
     },
-    close() {
+    close(code = 1000, reason = '') {
+      if (this.readyState === 3) return;
+      this.closeCalls.push({ code, reason });
       this.readyState = 3;
+      this.emit('close', { code, reason, wasClean: true });
     },
     emit(type, event = {}) {
       for (const listener of listeners.get(type) ?? []) listener(event);
@@ -36,6 +40,52 @@ const createFakeSocket = () => {
     },
   };
   return socket;
+};
+
+const withFakeTimers = async callback => {
+  const originals = {
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+  };
+  let nextHandle = 1;
+  const timeoutCallbacks = new Map();
+  const intervalCallbacks = new Map();
+  const clearedTimeouts = [];
+  const clearedIntervals = [];
+  globalThis.setTimeout = callbackValue => {
+    const handle = nextHandle++;
+    timeoutCallbacks.set(handle, callbackValue);
+    return handle;
+  };
+  globalThis.clearTimeout = handle => {
+    clearedTimeouts.push(handle);
+    timeoutCallbacks.delete(handle);
+  };
+  globalThis.setInterval = callbackValue => {
+    const handle = nextHandle++;
+    intervalCallbacks.set(handle, callbackValue);
+    return handle;
+  };
+  globalThis.clearInterval = handle => {
+    clearedIntervals.push(handle);
+    intervalCallbacks.delete(handle);
+  };
+  const timers = {
+    timeoutCallbacks,
+    intervalCallbacks,
+    clearedTimeouts,
+    clearedIntervals,
+  };
+  try {
+    await callback(timers);
+  } finally {
+    globalThis.setTimeout = originals.setTimeout;
+    globalThis.clearTimeout = originals.clearTimeout;
+    globalThis.setInterval = originals.setInterval;
+    globalThis.clearInterval = originals.clearInterval;
+  }
 };
 
 const clientParams = { taskId: 'PRO123', userId: 'user-1', sessionId: 'session-1' };
@@ -129,4 +179,93 @@ test('OPEN 仅启动一次并发送一次 scriptStart，close 使用 connected p
   assert.deepEqual(socket.sent, ['{"event":"scriptStart"}']);
   assert.deepEqual(closes, [{ code: 1006, reason: '', wasClean: false }]);
   assert.equal(logs.filter(log => log.includes('phase=connected')).length, 1);
+});
+
+test('握手 timeout 重入只 reject/close 一次，清 timeout 且保持 handshake phase', async () => {
+  await withFakeTimers(async timers => {
+    const socket = createFakeSocket();
+    const closes = [];
+    const logs = [];
+    let rejectionCount = 0;
+    const warn = console.warn;
+    console.warn = (...args) => logs.push(args.join(' '));
+    try {
+      const client = new TrainV2Client(clientParams, { onClose: event => closes.push(event) }, () => socket);
+      const observed = client.connect().catch(error => {
+        rejectionCount += 1;
+        throw error;
+      });
+      const [timeoutHandle, timeoutCallback] = [...timers.timeoutCallbacks.entries()][0];
+      timeoutCallback();
+      timeoutCallback();
+
+      await assert.rejects(observed, /握手超时/);
+      assert.equal(rejectionCount, 1);
+      assert.deepEqual(socket.closeCalls, [{ code: 4000, reason: 'handshake timeout' }]);
+      assert.deepEqual(closes, [{ code: 4000, reason: 'handshake timeout', wasClean: true }]);
+      assert.deepEqual(timers.clearedTimeouts, [timeoutHandle]);
+      assert.equal(logs.filter(log => log.includes('phase=handshake')).length, 1);
+    } finally {
+      console.warn = warn;
+    }
+  });
+});
+
+test('握手期主动 close 同步派发 close，拒绝 pending 且迟到 OPEN 不复活', async () => {
+  await withFakeTimers(async timers => {
+    const socket = createFakeSocket();
+    const opens = [];
+    const closes = [];
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const client = new TrainV2Client(
+        clientParams,
+        { onOpen: () => opens.push('open'), onClose: event => closes.push(event) },
+        () => socket,
+      );
+      const pending = client.connect();
+      const [timeoutHandle] = [...timers.timeoutCallbacks.keys()];
+      client.close(1000, 'manual stop');
+      socket.emitOpen();
+
+      await assert.rejects(pending, /握手期关闭/);
+      assert.deepEqual(socket.closeCalls, [{ code: 1000, reason: 'manual stop' }]);
+      assert.deepEqual(closes, [{ code: 1000, reason: 'manual stop', wasClean: true }]);
+      assert.deepEqual(opens, []);
+      assert.deepEqual(socket.sent, []);
+      assert.deepEqual(timers.clearedTimeouts, [timeoutHandle]);
+      assert.equal(timers.intervalCallbacks.size, 0);
+    } finally {
+      console.warn = warn;
+    }
+  });
+});
+
+test('OPEN 后主动 close 清理心跳，使用 connected phase 且迟到 OPEN 不重复启动', async () => {
+  await withFakeTimers(async timers => {
+    const socket = createFakeSocket();
+    const closes = [];
+    const logs = [];
+    const warn = console.warn;
+    console.warn = (...args) => logs.push(args.join(' '));
+    try {
+      const client = new TrainV2Client(clientParams, { onClose: event => closes.push(event) }, () => socket);
+      const pending = client.connect();
+      socket.emitOpen();
+      await pending;
+      const [heartbeatHandle] = [...timers.intervalCallbacks.keys()];
+      client.close(1000, 'manual stop');
+      socket.emitOpen();
+
+      assert.deepEqual(socket.sent, ['{"event":"scriptStart"}']);
+      assert.deepEqual(socket.closeCalls, [{ code: 1000, reason: 'manual stop' }]);
+      assert.deepEqual(closes, [{ code: 1000, reason: 'manual stop', wasClean: true }]);
+      assert.deepEqual(timers.clearedIntervals, [heartbeatHandle]);
+      assert.equal(timers.intervalCallbacks.size, 0);
+      assert.equal(logs.filter(log => log.includes('phase=connected')).length, 1);
+    } finally {
+      console.warn = warn;
+    }
+  });
 });

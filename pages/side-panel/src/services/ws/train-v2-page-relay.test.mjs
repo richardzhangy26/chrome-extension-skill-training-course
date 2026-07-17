@@ -55,6 +55,39 @@ const pageEvent = (type, connectionId = 'cid', payload) => ({
 
 const params = { taskId: 'PRO123', userId: 'user-1', sessionId: 'session-1' };
 
+const createFakeScheduler = () => {
+  let pending = null;
+  let delayMs = null;
+  let clearCalls = 0;
+  return {
+    dependencies: {
+      scheduleErrorFallback(callback, delay) {
+        pending = callback;
+        delayMs = delay;
+        return callback;
+      },
+      clearErrorFallback(handle) {
+        clearCalls += 1;
+        if (pending === handle) pending = null;
+      },
+    },
+    run() {
+      const callback = pending;
+      pending = null;
+      callback?.();
+    },
+    get pending() {
+      return pending !== null;
+    },
+    get delayMs() {
+      return delayMs;
+    },
+    get clearCalls() {
+      return clearCalls;
+    },
+  };
+};
+
 test('relay OPEN 后 readyState=OPEN，SEND/CLOSE 通过同一 connectionId', async () => {
   const port = createPort();
   const socket = createTrainV2PageRelaySocket(params, { connectPort: async () => port, connectionId: () => 'cid' });
@@ -152,7 +185,7 @@ test('Port 在 OPEN 前断开时只报告一次可行动错误与 1006 close，�
   assert.equal(port.onDisconnect.size, 0);
 });
 
-test('OPEN 前 ERROR 即使没有 CLOSE 也会终态释放，并忽略迟到事件', async () => {
+test('Port 在 OPEN 后断开时单次 error + 1006 close，清 listener 并忽略迟到事件', async () => {
   const port = createPort();
   const socket = createTrainV2PageRelaySocket(params, { connectPort: async () => port, connectionId: () => 'cid' });
   const errors = [];
@@ -160,12 +193,144 @@ test('OPEN 前 ERROR 即使没有 CLOSE 也会终态释放，并忽略迟到事�
   socket.addEventListener('error', event => errors.push(event));
   socket.addEventListener('close', event => closes.push(event));
   await flush();
+  port.emitMessage(pageEvent('OPEN'));
+  port.emitDisconnect();
+  port.emitDisconnect();
+  port.emitMessage(pageEvent('TEXT', 'cid', { data: 'late' }));
+
+  assert.equal(errors.length, 1);
+  assert.deepEqual(closes, [{ code: 1006, reason: '能力训练 Pro 页面连接已断开，请刷新页面后重试', wasClean: false }]);
+  assert.equal(socket.readyState, TRAIN_V2_SOCKET_STATE.CLOSED);
+  assert.equal(port.onMessage.size, 0);
+  assert.equal(port.onDisconnect.size, 0);
+});
+
+test('connectPort rejection 保留非空原始可行动原因', async () => {
+  const socket = createTrainV2PageRelaySocket(params, {
+    connectPort: async () => {
+      throw new Error('请打开能力训练 Pro 页面');
+    },
+    connectionId: () => 'cid',
+  });
+  const errors = [];
+  const closes = [];
+  socket.addEventListener('error', event => errors.push(event));
+  socket.addEventListener('close', event => closes.push(event));
+  await flush();
+
+  assert.equal(errors.length, 1);
+  assert.deepEqual(closes, [{ code: 1006, reason: '请打开能力训练 Pro 页面', wasClean: false }]);
+});
+
+test('ERROR 后的具体 CLOSE 保留 code/reason，只产生一次 error/close 并取消 fallback', async () => {
+  const port = createPort();
+  const scheduler = createFakeScheduler();
+  const socket = createTrainV2PageRelaySocket(params, {
+    connectPort: async () => port,
+    connectionId: () => 'cid',
+    ...scheduler.dependencies,
+  });
+  const opens = [];
+  const messages = [];
+  const errors = [];
+  const closes = [];
+  socket.addEventListener('open', event => opens.push(event));
+  socket.addEventListener('message', event => messages.push(event));
+  socket.addEventListener('error', event => errors.push(event));
+  socket.addEventListener('close', event => closes.push(event));
+  await flush();
   port.emitMessage(pageEvent('ERROR'));
+  port.emitMessage(pageEvent('OPEN'));
+  port.emitMessage(pageEvent('TEXT', 'cid', { data: 'late' }));
+  socket.send('{"event":"scriptStart"}');
+
+  assert.equal(scheduler.pending, true);
+  assert.equal(scheduler.delayMs, 100);
+  assert.deepEqual(opens, []);
+  assert.deepEqual(messages, []);
+  assert.deepEqual(
+    port.messages.map(message => message.type),
+    ['CONNECT'],
+  );
+  assert.deepEqual(errors, []);
+  assert.deepEqual(closes, []);
+
   port.emitMessage(pageEvent('CLOSE', 'cid', { code: 4000, reason: 'task mismatch', wasClean: false }));
   port.emitMessage(pageEvent('OPEN'));
+  scheduler.run();
+
+  assert.equal(errors.length, 1);
+  assert.deepEqual(closes, [{ code: 4000, reason: 'task mismatch', wasClean: false }]);
+  assert.equal(scheduler.pending, false);
+  assert.equal(scheduler.clearCalls, 1);
+  assert.equal(port.disconnected, true);
+  assert.equal(socket.readyState, TRAIN_V2_SOCKET_STATE.CLOSED);
+});
+
+test('ERROR 未收到 CLOSE 时由 fake scheduler 触发 1006 fallback', async () => {
+  const port = createPort();
+  const scheduler = createFakeScheduler();
+  const socket = createTrainV2PageRelaySocket(params, {
+    connectPort: async () => port,
+    connectionId: () => 'cid',
+    ...scheduler.dependencies,
+  });
+  const errors = [];
+  const closes = [];
+  socket.addEventListener('error', event => errors.push(event));
+  socket.addEventListener('close', event => closes.push(event));
+  await flush();
+  port.emitMessage(pageEvent('ERROR'));
+
+  assert.equal(scheduler.pending, true);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(closes, []);
+  scheduler.run();
 
   assert.equal(errors.length, 1);
   assert.deepEqual(closes, [{ code: 1006, reason: '能力训练 Pro 页面连接失败，请刷新页面后重试', wasClean: false }]);
-  assert.equal(port.disconnected, true);
   assert.equal(socket.readyState, TRAIN_V2_SOCKET_STATE.CLOSED);
+  assert.equal(port.onMessage.size, 0);
+  assert.equal(port.onDisconnect.size, 0);
+});
+
+test('主动 close 幂等且不发 error，只发送一次 CLOSE', async () => {
+  const port = createPort();
+  const socket = createTrainV2PageRelaySocket(params, { connectPort: async () => port, connectionId: () => 'cid' });
+  const errors = [];
+  const closes = [];
+  socket.addEventListener('error', event => errors.push(event));
+  socket.addEventListener('close', event => closes.push(event));
+  await flush();
+  socket.close(1000, 'done');
+  socket.close(1000, 'done again');
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual(closes, [{ code: 1000, reason: 'done', wasClean: true }]);
+  assert.deepEqual(
+    port.messages.map(message => message.type),
+    ['CONNECT', 'CLOSE'],
+  );
+  assert.equal(port.onMessage.size, 0);
+  assert.equal(port.onDisconnect.size, 0);
+});
+
+test('页面 CLOSE 单次终态且不发 error', async () => {
+  const port = createPort();
+  const socket = createTrainV2PageRelaySocket(params, { connectPort: async () => port, connectionId: () => 'cid' });
+  const errors = [];
+  const closes = [];
+  socket.addEventListener('error', event => errors.push(event));
+  socket.addEventListener('close', event => closes.push(event));
+  await flush();
+  port.emitMessage(pageEvent('CLOSE', 'cid', { code: 4001, reason: 'server closed', wasClean: false }));
+  port.emitMessage(pageEvent('CLOSE', 'cid', { code: 4002, reason: 'late', wasClean: false }));
+  socket.close();
+
+  assert.deepEqual(errors, []);
+  assert.deepEqual(closes, [{ code: 4001, reason: 'server closed', wasClean: false }]);
+  assert.equal(socket.readyState, TRAIN_V2_SOCKET_STATE.CLOSED);
+  assert.equal(port.disconnected, true);
+  assert.equal(port.onMessage.size, 0);
+  assert.equal(port.onDisconnect.size, 0);
 });

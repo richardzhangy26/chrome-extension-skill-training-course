@@ -422,29 +422,27 @@ const useAgentChat = () => {
     initialize();
 
     const unsubscribe = onTabUrlChanged(async url => {
-      if (url.includes('trainTaskId=')) {
-        const taskId = await extractTrainTaskId(url);
-        if (taskId && taskId !== trainTaskId) {
-          const taskName = await fetchTrainTaskName(taskId);
-          setTrainTaskId(taskId);
-          await updateStoredTrainTaskId(taskId);
-          // 重置状态
-          setSessionId(null);
-          setCurrentStepId(null);
-          setWorkflowState('IDLE');
-          setMessages([]);
-          setDialogueRound(0);
-          setActiveLogSessionId(null);
-          activeLogSessionIdRef.current = null;
-          stepNameMappingRef.current = {};
-          stepNodeTypeByIdRef.current = {};
-          setScriptSteps([]);
-          scriptStepsRef.current = [];
-          setStepListError(null);
-          setIsStepListLoading(false);
-          const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
-          addMessage('system', `已切换到新任务: ${displayName}`);
-        }
+      const taskId = await extractTrainTaskId(url);
+      if (taskId && taskId !== trainTaskId) {
+        const taskName = await fetchTrainTaskName(taskId);
+        setTrainTaskId(taskId);
+        await updateStoredTrainTaskId(taskId);
+        // 重置状态
+        setSessionId(null);
+        setCurrentStepId(null);
+        setWorkflowState('IDLE');
+        setMessages([]);
+        setDialogueRound(0);
+        setActiveLogSessionId(null);
+        activeLogSessionIdRef.current = null;
+        stepNameMappingRef.current = {};
+        stepNodeTypeByIdRef.current = {};
+        setScriptSteps([]);
+        scriptStepsRef.current = [];
+        setStepListError(null);
+        setIsStepListLoading(false);
+        const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
+        addMessage('system', `已切换到新任务: ${displayName}`);
       }
     });
 

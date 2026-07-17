@@ -5,7 +5,7 @@
  */
 
 import { generateStudentAnswer } from '../services/llm-service';
-import { fetchPolymasUserInfo } from '../services/polymas-user-service';
+import { invalidatePolymasUserInfo, refreshPolymasUserInfo } from '../services/polymas-user-service';
 import { buildStudentAnswerInput, formatProLogEntry } from '../services/pro-conversation';
 import { fetchProTrainingContext, toStagePromptContext } from '../services/pro-training-context-service';
 import { resolveTrainingMetadata } from '../services/training-metadata-service';
@@ -182,6 +182,7 @@ const useProAgentChat = (trainTaskId: string | null) => {
 
   const failRun = useCallback(
     (message: string) => {
+      invalidatePolymasUserInfo();
       setError(message);
       addMessage('system', `❌ ${message}`);
       setProState('ERROR');
@@ -384,6 +385,7 @@ const useProAgentChat = (trainTaskId: string | null) => {
 
   const start = useCallback(async () => {
     if (!trainTaskId) {
+      invalidatePolymasUserInfo();
       setError('未找到训练任务ID，请在训练页面打开');
       return;
     }
@@ -410,7 +412,7 @@ const useProAgentChat = (trainTaskId: string | null) => {
     proContextRef.current = null;
     proContextErrorRef.current = false;
     try {
-      const [userInfo, trainingMeta] = await Promise.all([fetchPolymasUserInfo(), resolveTrainingMetadata()]);
+      const [userInfo, trainingMeta] = await Promise.all([refreshPolymasUserInfo(), resolveTrainingMetadata()]);
       let taskDisplayName = trainTaskId;
       try {
         const proContext = await fetchProTrainingContext(trainTaskId);

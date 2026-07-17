@@ -39,7 +39,12 @@ const createPolymasUserInfoLoader = (fetcher: () => Promise<PolymasUserInfo>) =>
   let cachedPromise: Promise<PolymasUserInfo> | null = null;
 
   const startFetch = () => {
-    const request = fetcher();
+    let request: Promise<PolymasUserInfo>;
+    try {
+      request = Promise.resolve(fetcher());
+    } catch (error) {
+      request = Promise.reject(error);
+    }
     cachedPromise = request;
     void request.catch(() => {
       if (cachedPromise === request) {

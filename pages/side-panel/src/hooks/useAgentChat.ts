@@ -10,10 +10,12 @@ import {
   onTabUrlChanged,
   API_ENDPOINTS,
 } from '../services/background-bridge';
+import { createLatestTaskSwitchController } from '../services/latest-task-switch-controller';
 import { generateStudentAnswer } from '../services/llm-service';
 import { resolveTrainingMetadata } from '../services/training-metadata-service';
 import { agentLogStorage, agentSessionStorage, llmConfigStorage } from '@extension/storage';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import type { TaskSwitchCandidate, TaskSwitchResult } from '../services/latest-task-switch-controller';
 import type { AgentLogEntry } from '@extension/storage';
 
 // ============ 类型定义 ============
@@ -79,6 +81,18 @@ interface ChatResponse {
   needSkipStep?: boolean;
   nextStepId?: string;
   // 结束判断：当 text 和 nextStepId 都为 null 时表示完成
+}
+
+type TaskSwitchRequest = { kind: 'initialize' } | { kind: 'url-change'; url: string };
+type TaskSwitchSource = 'detected' | 'restored' | 'url-change';
+
+interface TaskSwitchContext {
+  source: TaskSwitchSource;
+}
+
+interface TaskSwitchController {
+  invalidate: () => void;
+  switchTask: (request: TaskSwitchRequest) => Promise<void>;
 }
 
 const TRAINING_DOMAIN = 'hike-teaching-center.polymas.com';
@@ -230,6 +244,11 @@ const useAgentChat = () => {
     },
     [generateMessageId, currentStepId],
   );
+  const addMessageRef = useRef(addMessage);
+
+  useEffect(() => {
+    addMessageRef.current = addMessage;
+  }, [addMessage]);
 
   const isTerminalStep = useCallback((stepId: string) => stepNodeTypeByIdRef.current[stepId] === 'SCRIPT_END', []);
   const completeTraining = useCallback(() => {
@@ -331,36 +350,97 @@ const useAgentChat = () => {
     ],
   );
 
-  // 初始化 - 从URL提取trainTaskId
-  const initialize = useCallback(async () => {
-    const taskId = await extractTrainTaskId();
-    if (taskId) {
-      const taskName = await fetchTrainTaskName(taskId);
-      setTrainTaskId(taskId);
-      await updateStoredTrainTaskId(taskId);
-      const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
-      addMessage('system', `已检测到训练任务: ${displayName}`);
-      return;
-    }
-
-    const currentUrl = await getCurrentTabUrl();
-    if (!currentUrl?.includes(TRAINING_DOMAIN)) {
-      return;
-    }
-
-    try {
-      const storedSession = await agentSessionStorage.get();
-      const storedTaskId = storedSession.trainTaskId?.trim();
-      if (storedTaskId) {
-        const taskName = await fetchTrainTaskName(storedTaskId);
-        setTrainTaskId(storedTaskId);
-        const displayName = taskName?.trim() || `${storedTaskId.substring(0, 8)}...`;
-        addMessage('system', `已从缓存恢复训练任务: ${displayName}`);
+  const extractTaskSwitch = useCallback(
+    async (
+      request: TaskSwitchRequest,
+      isLatest: () => boolean,
+    ): Promise<TaskSwitchCandidate<TaskSwitchContext> | null> => {
+      if (request.kind === 'url-change') {
+        const { url } = request;
+        const taskId = await extractTrainTaskId(url);
+        if (!isLatest() || !taskId) {
+          return null;
+        }
+        return { taskId, context: { source: 'url-change' } };
       }
-    } catch (storageError) {
-      console.warn('⚠️ 读取训练任务缓存失败:', storageError);
+
+      const taskId = await extractTrainTaskId();
+      if (!isLatest()) {
+        return null;
+      }
+      if (taskId) {
+        return { taskId, context: { source: 'detected' } };
+      }
+
+      const currentUrl = await getCurrentTabUrl();
+      if (!isLatest() || !currentUrl?.includes(TRAINING_DOMAIN)) {
+        return null;
+      }
+
+      try {
+        const storedSession = await agentSessionStorage.get();
+        if (!isLatest()) {
+          return null;
+        }
+        const storedTaskId = storedSession.trainTaskId?.trim();
+        return storedTaskId ? { taskId: storedTaskId, context: { source: 'restored' } } : null;
+      } catch (storageError) {
+        if (isLatest()) {
+          console.warn('⚠️ 读取训练任务缓存失败:', storageError);
+        }
+        return null;
+      }
+    },
+    [],
+  );
+
+  const applyTaskSwitch = useCallback(({ taskId, taskName, context }: TaskSwitchResult<TaskSwitchContext>) => {
+    trainTaskIdRef.current = taskId;
+    setTrainTaskId(taskId);
+
+    if (context.source === 'url-change') {
+      // 重置状态
+      setSessionId(null);
+      setCurrentStepId(null);
+      setWorkflowState('IDLE');
+      setMessages([]);
+      setDialogueRound(0);
+      setActiveLogSessionId(null);
+      activeLogSessionIdRef.current = null;
+      stepNameMappingRef.current = {};
+      stepNodeTypeByIdRef.current = {};
+      setScriptSteps([]);
+      scriptStepsRef.current = [];
+      setStepListError(null);
+      setIsStepListLoading(false);
     }
-  }, [addMessage, fetchTrainTaskName, updateStoredTrainTaskId]);
+
+    const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
+    const message =
+      context.source === 'url-change'
+        ? `已切换到新任务: ${displayName}`
+        : context.source === 'restored'
+          ? `已从缓存恢复训练任务: ${displayName}`
+          : `已检测到训练任务: ${displayName}`;
+    addMessageRef.current('system', message);
+  }, []);
+
+  const initialize = useCallback(
+    (taskSwitchController: TaskSwitchController) => taskSwitchController.switchTask({ kind: 'initialize' }),
+    [],
+  );
+
+  const taskSwitchControllerRef = useRef<TaskSwitchController | null>(null);
+  const taskSwitchController =
+    taskSwitchControllerRef.current ??
+    createLatestTaskSwitchController({
+      extractTask: extractTaskSwitch,
+      fetchTaskName: fetchTrainTaskName,
+      persistTaskId: updateStoredTrainTaskId,
+      getCurrentTaskId: () => trainTaskIdRef.current,
+      applyTask: applyTaskSwitch,
+    });
+  taskSwitchControllerRef.current = taskSwitchController;
 
   const fetchScriptSteps = useCallback(
     async ({
@@ -419,35 +499,17 @@ const useAgentChat = () => {
 
   // 监听URL变化
   useEffect(() => {
-    initialize();
+    void initialize(taskSwitchController);
 
-    const unsubscribe = onTabUrlChanged(async url => {
-      const taskId = await extractTrainTaskId(url);
-      if (taskId && taskId !== trainTaskId) {
-        const taskName = await fetchTrainTaskName(taskId);
-        setTrainTaskId(taskId);
-        await updateStoredTrainTaskId(taskId);
-        // 重置状态
-        setSessionId(null);
-        setCurrentStepId(null);
-        setWorkflowState('IDLE');
-        setMessages([]);
-        setDialogueRound(0);
-        setActiveLogSessionId(null);
-        activeLogSessionIdRef.current = null;
-        stepNameMappingRef.current = {};
-        stepNodeTypeByIdRef.current = {};
-        setScriptSteps([]);
-        scriptStepsRef.current = [];
-        setStepListError(null);
-        setIsStepListLoading(false);
-        const displayName = taskName?.trim() || `${taskId.substring(0, 8)}...`;
-        addMessage('system', `已切换到新任务: ${displayName}`);
-      }
+    const unsubscribe = onTabUrlChanged(url => {
+      void taskSwitchController.switchTask({ kind: 'url-change', url });
     });
 
-    return unsubscribe;
-  }, [initialize, trainTaskId, addMessage, fetchTrainTaskName, updateStoredTrainTaskId]);
+    return () => {
+      taskSwitchController.invalidate();
+      unsubscribe();
+    };
+  }, [initialize, taskSwitchController]);
 
   // 开始对话流程
   const startConversation = useCallback(async () => {

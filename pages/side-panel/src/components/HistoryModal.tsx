@@ -2,9 +2,15 @@
  * 历史日志弹窗组件
  */
 
+import {
+  buildAgentLogText,
+  getHistoryAiRoleName,
+  getSessionDisplayName,
+  getStepDisplayName,
+} from '../services/history-log-format';
 import { agentLogStorage, selectVisibleSessions } from '@extension/storage';
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentLogSession, AgentLogEntry } from '@extension/storage';
+import type { AgentLogSession } from '@extension/storage';
 
 // 历史图标
 const HistoryIcon = () => (
@@ -32,59 +38,14 @@ const formatTimestamp = (timestamp: number) =>
     second: '2-digit',
   });
 
-const getStepDisplayName = (session: AgentLogSession, entry: AgentLogEntry) => {
-  if (entry.stepName) {
-    return entry.stepName;
-  }
-  if (session.stepNameMapping?.[entry.stepId]) {
-    return session.stepNameMapping[entry.stepId];
-  }
-  return entry.stepId || '未知步骤';
-};
-
-const getSessionDisplayName = (session: AgentLogSession) => session.taskName?.trim() || session.taskId || session.id;
-
 const sanitizeFileName = (value: string) =>
   value
     .replace(/[\\/:*?"<>|]/g, '_')
     .replace(/\s+/g, ' ')
     .trim();
 
-const buildLogText = (session: AgentLogSession) => {
-  const sessionName = getSessionDisplayName(session);
-  const headerLines = [
-    `日志创建时间: ${formatTimestamp(session.createdAt)}`,
-    `任务名称: ${sessionName}`,
-    `task_id: ${session.taskId}`,
-    '剧本存放位置: 浏览器本地存储 (chrome.storage.local)',
-    '='.repeat(60),
-  ];
-
-  const dialogueLines = [
-    '对话记录',
-    ...headerLines,
-    ...session.entries
-      .filter(entry => entry.type === 'chat')
-      .flatMap(entry => {
-        const stepName = getStepDisplayName(session, entry);
-        const roundInfo = entry.round ? ` | 第 ${entry.round} 轮` : '';
-        const lines = [`Step: ${stepName} | step_id: ${entry.stepId}${roundInfo} | 来源: ${entry.source}`];
-        if (entry.userText) {
-          lines.push(`用户: ${entry.userText}`);
-        }
-        if (entry.aiText) {
-          lines.push(`AI: ${entry.aiText}`);
-        }
-        lines.push('-'.repeat(40));
-        return lines;
-      }),
-  ];
-
-  return dialogueLines.join('\n');
-};
-
 const downloadLogText = (session: AgentLogSession) => {
-  const content = buildLogText(session);
+  const content = buildAgentLogText(session, formatTimestamp);
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -412,7 +373,9 @@ const HistoryModal = ({ isOpen, onClose, initialSessionId, currentUserId }: Hist
                                   )}
                                   {entry.aiText && (
                                     <div className="rounded bg-white p-2">
-                                      <span className="font-medium text-emerald-600">AI:</span>
+                                      <span className="font-medium text-emerald-600">
+                                        {getHistoryAiRoleName(entry)}:
+                                      </span>
                                       <p className="mt-0.5 whitespace-pre-wrap text-slate-600">{entry.aiText}</p>
                                     </div>
                                   )}

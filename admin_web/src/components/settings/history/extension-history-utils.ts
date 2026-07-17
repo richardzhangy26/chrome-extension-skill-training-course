@@ -5,6 +5,9 @@ type BuildHistoryFilename = (session: AgentLogSessionInput) => string;
 
 const getRecentPreviewEntries = (session: AgentLogSessionInput, limit: number) => session.entries.slice(-limit);
 
+const getHistoryAiRoleName = (entry: AgentLogSessionInput['entries'][number]): string =>
+  entry.aiRoleName?.trim() || 'AI';
+
 const getUniqueHistoryFilename = (filename: string, usedNames: Set<string>) => {
   if (!usedNames.has(filename)) {
     return filename;
@@ -41,4 +44,4 @@ const buildBulkHistoryZipEntries = (
   return entries;
 };
 
-export { buildBulkHistoryZipEntries, getRecentPreviewEntries, getUniqueHistoryFilename };
+export { buildBulkHistoryZipEntries, getHistoryAiRoleName, getRecentPreviewEntries, getUniqueHistoryFilename };

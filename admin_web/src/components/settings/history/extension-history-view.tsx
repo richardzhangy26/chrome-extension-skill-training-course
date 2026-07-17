@@ -21,7 +21,7 @@ import {
   buildTrainingMetaSummary,
   getSessionName,
 } from '@/lib/extension-history-filename';
-import { buildBulkHistoryZipEntries, getRecentPreviewEntries } from './extension-history-utils';
+import { buildBulkHistoryZipEntries, getHistoryAiRoleName, getRecentPreviewEntries } from './extension-history-utils';
 import { cn } from '@/lib/utils';
 import { strToU8, zipSync } from 'fflate';
 import {
@@ -88,7 +88,7 @@ const buildLogText = (s: AgentLogSessionInput, formatTime: (ms: number) => strin
       lines.push(`${m.settings_history_user_label()}: ${entry.userText}`);
     }
     if (entry.aiText) {
-      lines.push(`${m.settings_history_ai_label()}: ${entry.aiText}`);
+      lines.push(`${getHistoryAiRoleName(entry)}: ${entry.aiText}`);
     }
     lines.push('-'.repeat(40));
   }
@@ -459,7 +459,7 @@ export function ExtensionHistoryView() {
                           ) : null}
                           {entry.aiText ? (
                             <p className="mt-1 whitespace-pre-wrap">
-                              {m.settings_history_ai_label()}: {entry.aiText}
+                              {getHistoryAiRoleName(entry)}: {entry.aiText}
                             </p>
                           ) : null}
                         </div>

@@ -10,6 +10,7 @@ const chatLogEntrySchema = z.object({
   source: z.enum(['runCard', 'chat']),
   userText: z.string().optional(),
   aiText: z.string().optional(),
+  aiRoleName: z.string().optional(),
 });
 
 const agentTrainingMetaSchema = z.object({

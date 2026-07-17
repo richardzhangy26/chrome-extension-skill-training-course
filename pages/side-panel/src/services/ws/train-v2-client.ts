@@ -49,10 +49,21 @@ interface TrainV2Handlers {
   onUnknownEvent?(event: string, payload: unknown): void;
 }
 
+type TrainV2ConnectionPhase = 'handshake' | 'connected';
+type TrainV2DiagnosticLevel = 'debug' | 'warn';
+
 const TRAIN_V2_WS_BASE = 'wss://cloudapi.polymas.com/ai-platform/ws/trainV2';
 // auto_train_pro.py 实测值：应用层心跳 30s；握手超时 10s
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const OPEN_TIMEOUT_MS = 10_000;
+
+const buildTrainV2CloseDiagnostic = (
+  close: TrainV2CloseInfo,
+  phase: TrainV2ConnectionPhase,
+): { level: TrainV2DiagnosticLevel; message: string } => ({
+  level: close.code === 1000 && close.wasClean ? 'debug' : 'warn',
+  message: `[pro-ws] close code=${close.code} reason=${close.reason || '(空)'} wasClean=${close.wasClean} phase=${phase}`,
+});
 
 // 协议内已知、无需业务处理的事件（对齐脚本 handle_message 中的显式 pass 分支；
 // botAnswer 为流式分片，统一取 botAnswerEnd 整句）
@@ -162,12 +173,12 @@ class TrainV2Client {
         resolve();
       });
 
-      this.ws.addEventListener('error', event => {
+      this.ws.addEventListener('error', () => {
         const phase = opened ? 'connected' : 'handshake';
         settleRejected(new Error('WebSocket 连接失败'));
         // 浏览器 error 事件不透明（无细节）；真正原因看紧随其后的 [pro-ws] close code，
         // 以及 DevTools Network 面板里该 trainV2 请求的握手 HTTP 状态（200/401 等 JS 无法读取）。
-        console.warn(`[pro-ws] error (phase=${phase}, 细节不透明，见下方 close code 与 Network 握手状态)`, event);
+        console.warn(`[pro-ws] error (phase=${phase}, 细节不透明，见下方 close code 与 Network 握手状态)`);
       });
 
       this.ws.addEventListener('close', ev => {
@@ -175,9 +186,8 @@ class TrainV2Client {
         this.stopHeartbeat();
         // close code 是握手/连接失败的关键诊断信号（1006=服务器在建立前就断，典型握手被拒）。
         // 始终打印：error 先触发会把 settled 置真，此前该 code 被 if(!settled) 挡掉、无处可见。
-        console.warn(
-          `[pro-ws] close code=${close.code} reason=${close.reason || '(空)'} wasClean=${close.wasClean} phase=${opened ? 'connected' : 'handshake'}`,
-        );
+        const diagnostic = buildTrainV2CloseDiagnostic(close, opened ? 'connected' : 'handshake');
+        console[diagnostic.level](diagnostic.message);
         settleRejected(new Error(`WebSocket 在握手期关闭: code=${close.code}`));
         this.handlers.onClose?.(close);
       });
@@ -239,10 +249,12 @@ class TrainV2Client {
   }
 }
 
-export { TrainV2Client, dispatchTrainV2Message, TRAIN_V2_WS_BASE, HEARTBEAT_INTERVAL_MS };
+export { TrainV2Client, buildTrainV2CloseDiagnostic, dispatchTrainV2Message, TRAIN_V2_WS_BASE, HEARTBEAT_INTERVAL_MS };
 export type {
   TrainV2Handlers,
+  TrainV2ConnectionPhase,
   TrainV2ConnectedPayload,
+  TrainV2DiagnosticLevel,
   TrainV2NextStepPayload,
   TrainV2SelectRoleEndPayload,
   TrainV2BotAnswerEndPayload,

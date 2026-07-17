@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import console from 'node:console';
 import test from 'node:test';
-import { dispatchTrainV2Message, HEARTBEAT_INTERVAL_MS, TRAIN_V2_WS_BASE, TrainV2Client } from './train-v2-client.ts';
+import {
+  buildTrainV2CloseDiagnostic,
+  dispatchTrainV2Message,
+  HEARTBEAT_INTERVAL_MS,
+  TRAIN_V2_WS_BASE,
+  TrainV2Client,
+} from './train-v2-client.ts';
 
 const createFakeSocket = () => {
   const listeners = new Map();
@@ -89,6 +95,31 @@ const withFakeTimers = async callback => {
 };
 
 const clientParams = { taskId: 'PRO123', userId: 'user-1', sessionId: 'session-1' };
+
+test('clean 1000 close 使用 debug，异常 close 使用 warn', () => {
+  assert.deepEqual(buildTrainV2CloseDiagnostic({ code: 1000, reason: 'client close', wasClean: true }, 'connected'), {
+    level: 'debug',
+    message: '[pro-ws] close code=1000 reason=client close wasClean=true phase=connected',
+  });
+  assert.equal(buildTrainV2CloseDiagnostic({ code: 1006, reason: '', wasClean: false }, 'handshake').level, 'warn');
+});
+
+test('error 事件只向 console.warn 传诊断字符串，不附加不透明对象', async () => {
+  const socket = createFakeSocket();
+  const calls = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => calls.push(args);
+  try {
+    const client = new TrainV2Client(clientParams, {}, () => socket);
+    const connecting = client.connect();
+    socket.emitError();
+    await assert.rejects(connecting, /WebSocket 连接失败/);
+    assert.equal(calls.at(-1).length, 1);
+    assert.match(calls.at(-1)[0], /phase=handshake/);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
 
 test('botAnswerEnd 分发到 onBotAnswerEnd 并携带 payload', () => {
   const calls = [];
@@ -247,8 +278,8 @@ test('OPEN 后主动 close 清理心跳，使用 connected phase 且迟到 OPEN 
     const socket = createFakeSocket();
     const closes = [];
     const logs = [];
-    const warn = console.warn;
-    console.warn = (...args) => logs.push(args.join(' '));
+    const debug = console.debug;
+    console.debug = (...args) => logs.push(args.join(' '));
     try {
       const client = new TrainV2Client(clientParams, { onClose: event => closes.push(event) }, () => socket);
       const pending = client.connect();
@@ -265,7 +296,7 @@ test('OPEN 后主动 close 清理心跳，使用 connected phase 且迟到 OPEN 
       assert.equal(timers.intervalCallbacks.size, 0);
       assert.equal(logs.filter(log => log.includes('phase=connected')).length, 1);
     } finally {
-      console.warn = warn;
+      console.debug = debug;
     }
   });
 });

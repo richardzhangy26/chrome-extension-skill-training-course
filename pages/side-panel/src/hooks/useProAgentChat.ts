@@ -98,6 +98,10 @@ const useProAgentChat = (trainTaskId: string | null) => {
   const proContextErrorRef = useRef(false);
   const debugStagesRef = useRef<ProDebugStage[]>([]);
   const stageStartTargetRef = useRef(createProStageStartTarget());
+  const stageRefreshSeqRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const trainTaskIdRef = useRef(trainTaskId);
+  trainTaskIdRef.current = trainTaskId;
   // 会话代际号：teardown 后递增，使旧会话遗留的异步循环立即退出
   const runSeqRef = useRef(0);
   const taskChangeTrackerRef = useRef<ReturnType<typeof createProTaskChangeTracker> | null>(null);
@@ -183,6 +187,7 @@ const useProAgentChat = (trainTaskId: string | null) => {
   const teardown = useCallback(() => {
     runSeqRef.current += 1;
     stageStartTargetRef.current.clear();
+    stageRefreshSeqRef.current += 1;
     autoRunRef.current = false;
     setIsAutoRunning(false);
     setIsGenerating(false);
@@ -634,20 +639,38 @@ const useProAgentChat = (trainTaskId: string | null) => {
   const start = useCallback(() => beginRun(null), [beginRun]);
 
   const refreshDebugStages = useCallback(async () => {
-    if (!trainTaskId) {
-      storeDebugStages([]);
-      setStageListError('未找到训练任务ID');
+    const requestedTaskId = trainTaskId;
+    const requestSeq = stageRefreshSeqRef.current + 1;
+    stageRefreshSeqRef.current = requestSeq;
+    const isCurrentRequest = () =>
+      stageRefreshSeqRef.current === requestSeq && trainTaskIdRef.current === requestedTaskId && isMountedRef.current;
+
+    if (!requestedTaskId) {
+      if (isCurrentRequest()) {
+        storeDebugStages([]);
+        setStageListError('未找到训练任务ID');
+        setIsStageListLoading(false);
+      }
+      return;
+    }
+    if (!isCurrentRequest()) {
       return;
     }
     setIsStageListLoading(true);
     setStageListError(null);
     try {
-      const context = await fetchProTrainingContext(trainTaskId);
-      storeDebugStages(toProDebugStages(context));
+      const context = await fetchProTrainingContext(requestedTaskId);
+      if (isCurrentRequest()) {
+        storeDebugStages(toProDebugStages(context));
+      }
     } catch (error) {
-      setStageListError(error instanceof Error ? error.message : '获取 Pro 阶段失败');
+      if (isCurrentRequest()) {
+        setStageListError(error instanceof Error ? error.message : '获取 Pro 阶段失败');
+      }
     } finally {
-      setIsStageListLoading(false);
+      if (isCurrentRequest()) {
+        setIsStageListLoading(false);
+      }
     }
   }, [storeDebugStages, trainTaskId]);
 
@@ -701,14 +724,17 @@ const useProAgentChat = (trainTaskId: string | null) => {
   }, [reset, taskChangeTracker, trainTaskId]);
 
   // 组件卸载时断开连接
-  useEffect(
-    () => () => {
-      stageStartTargetRef.current.clear();
+  useEffect(() => {
+    const stageStartTarget = stageStartTargetRef.current;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stageRefreshSeqRef.current += 1;
+      stageStartTarget.clear();
       clientRef.current?.close();
       clientRef.current = null;
-    },
-    [],
-  );
+    };
+  }, []);
 
   return {
     proState,

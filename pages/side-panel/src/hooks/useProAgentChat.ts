@@ -714,6 +714,7 @@ const useProAgentChat = (trainTaskId: string | null) => {
     proContextRef.current = null;
     proContextErrorRef.current = false;
     storeDebugStages([]);
+    setIsStageListLoading(false);
     setStageListError(null);
   }, [setProState, setTurnPhase, storeDebugStages, teardown]);
 

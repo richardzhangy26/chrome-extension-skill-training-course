@@ -147,16 +147,24 @@ class TrainV2Client {
       });
 
       this.ws.addEventListener('error', event => {
+        const phase = settled ? 'connected' : 'handshake';
         if (!settled) {
           settled = true;
           clearTimeout(openTimer);
           reject(new Error('WebSocket 连接失败'));
         }
-        console.warn('[pro-ws] error', event);
+        // 浏览器 error 事件不透明（无细节）；真正原因看紧随其后的 [pro-ws] close code，
+        // 以及 DevTools Network 面板里该 trainV2 请求的握手 HTTP 状态（200/401 等 JS 无法读取）。
+        console.warn(`[pro-ws] error (phase=${phase}, 细节不透明，见下方 close code 与 Network 握手状态)`, event);
       });
 
       this.ws.addEventListener('close', ev => {
         this.stopHeartbeat();
+        // close code 是握手/连接失败的关键诊断信号（1006=服务器在建立前就断，典型握手被拒）。
+        // 始终打印：error 先触发会把 settled 置真，此前该 code 被 if(!settled) 挡掉、无处可见。
+        console.warn(
+          `[pro-ws] close code=${ev.code} reason=${ev.reason || '(空)'} wasClean=${ev.wasClean} phase=${settled ? 'connected' : 'handshake'}`,
+        );
         if (!settled) {
           settled = true;
           clearTimeout(openTimer);

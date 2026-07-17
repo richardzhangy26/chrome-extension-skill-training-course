@@ -502,9 +502,10 @@ const useProAgentChat = (trainTaskId: string | null) => {
         onServerError: payload => {
           failRun(`服务端错误：${JSON.stringify(payload)}`);
         },
-        onClose: () => {
+        onClose: ev => {
           if (proStateRef.current === 'RUNNING' || proStateRef.current === 'CONNECTING') {
-            failRun('连接已断开');
+            // 带上 close code 便于诊断（1006=握手被拒；4xxx=服务端应用层拒绝）
+            failRun(`连接已断开 (code=${ev.code}${ev.reason ? `, ${ev.reason}` : ''})`);
           }
         },
       };

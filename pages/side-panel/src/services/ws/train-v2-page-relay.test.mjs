@@ -334,3 +334,36 @@ test('页面 CLOSE 单次终态且不发 error', async () => {
   assert.equal(port.onMessage.size, 0);
   assert.equal(port.onDisconnect.size, 0);
 });
+
+test('error/close listener 抛错不阻断其余通知与终态 Port 清理', async () => {
+  const port = createPort();
+  const calls = [];
+  const reported = [];
+  const socket = createTrainV2PageRelaySocket(params, {
+    connectPort: async () => port,
+    connectionId: () => 'cid',
+    reportListenerError(error) {
+      reported.push(error.message);
+      throw new Error('reporter failed');
+    },
+  });
+  socket.addEventListener('error', () => {
+    throw new Error('error listener failed');
+  });
+  socket.addEventListener('error', () => calls.push('error listener continued'));
+  socket.addEventListener('close', () => {
+    throw new Error('close listener failed');
+  });
+  socket.addEventListener('close', () => calls.push('close listener continued'));
+  await flush();
+
+  assert.doesNotThrow(() => port.emitDisconnect());
+  assert.doesNotThrow(() => port.emitDisconnect());
+
+  assert.deepEqual(calls, ['error listener continued', 'close listener continued']);
+  assert.deepEqual(reported, ['error listener failed', 'close listener failed']);
+  assert.equal(socket.readyState, TRAIN_V2_SOCKET_STATE.CLOSED);
+  assert.equal(port.disconnected, true);
+  assert.equal(port.onMessage.size, 0);
+  assert.equal(port.onDisconnect.size, 0);
+});

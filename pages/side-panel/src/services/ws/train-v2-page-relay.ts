@@ -49,6 +49,7 @@ interface PageRelayDependencies {
   readLastError: () => string | undefined;
   scheduleErrorFallback: (callback: () => void, delayMs: number) => unknown;
   clearErrorFallback: (handle: unknown) => void;
+  reportListenerError: (error: unknown) => void;
 }
 
 type PageEvent =
@@ -129,6 +130,7 @@ const createTrainV2PageRelaySocket = (
     readLastError: readRuntimeLastError,
     scheduleErrorFallback: (callback, delayMs) => setTimeout(callback, delayMs),
     clearErrorFallback: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    reportListenerError: error => console.error('[pro-train-v2 relay] event listener failed', error),
     ...overrides,
   };
   const connectionId = dependencies.connectionId();
@@ -141,7 +143,17 @@ const createTrainV2PageRelaySocket = (
   let errorFallbackHandle: unknown = null;
 
   const emit = (type: 'open' | 'message' | 'error' | 'close', event: unknown): void => {
-    for (const listener of listeners.get(type) ?? []) listener(event);
+    for (const listener of [...(listeners.get(type) ?? [])]) {
+      try {
+        listener(event);
+      } catch (error) {
+        try {
+          dependencies.reportListenerError(error);
+        } catch {
+          // 错误报告器属于诊断路径，不能破坏 EventTarget 风格的事件分发。
+        }
+      }
+    }
   };
 
   const onPortMessage = (message: unknown): void => {
@@ -206,11 +218,14 @@ const createTrainV2PageRelaySocket = (
     terminal = true;
     cancelErrorFallback();
     readyState = TRAIN_V2_SOCKET_STATE.CLOSED;
-    detachPort();
-    if (emitError) emit('error', {});
-    emit('close', close);
-    listeners.clear();
-    disconnectPort();
+    try {
+      detachPort();
+      if (emitError) emit('error', {});
+      emit('close', close);
+    } finally {
+      listeners.clear();
+      disconnectPort();
+    }
   };
 
   const onPortDisconnect = (): void => {

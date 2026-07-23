@@ -34,6 +34,11 @@ export default function FaqSection() {
       question: m.home_faqs_items_item_5_question(),
       answer: m.home_faqs_items_item_5_answer(),
     },
+    {
+      id: 'item-6',
+      question: m.home_faqs_items_item_6_question(),
+      answer: m.home_faqs_items_item_6_answer(),
+    },
   ];
   return (
     <section id="faqs" className="px-4 py-16 md:py-24">

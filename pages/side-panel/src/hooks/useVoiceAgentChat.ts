@@ -16,6 +16,7 @@ import {
 } from '../services/background-bridge';
 import { generateStudentAnswer } from '../services/llm-service';
 import { fetchPolymasUserInfo, invalidatePolymasUserInfo } from '../services/polymas-user-service';
+import { throttleSafeSleep } from '../services/timing/throttle-safe-sleep';
 import { resolveTrainingMetadata } from '../services/training-metadata-service';
 import { TrainingWsClient } from '../services/ws/training-ws-client';
 import { agentLogStorage, agentSessionStorage, llmConfigStorage } from '@extension/storage';
@@ -46,8 +47,17 @@ const TRAINING_DOMAIN = 'hike-teaching-center.polymas.com';
 const FRAME_INTERVAL_MS = 100;
 // 对齐 auto_audio_train.py _send_next_step_safely 的 10s 排空等待
 const NEXT_STEP_DRAIN_TIMEOUT_MS = 10_000;
+// 单次唤醒最多补发的帧数（2s 音频）：追帧防止节奏漂移累积，上限防止病态大爆发
+const CATCHUP_MAX_BURST_FRAMES = 20;
+// 对齐 auto_audio_train.py 的 SERVER_IDLE_TIMEOUT(45s)：mute 后服务端多久无事件判定卡死
+const RESPONSE_TIMEOUT_MS = 45_000;
+// mute 后无响应时的额外重发次数（对齐 auto_audio_train.py 的重试精神）
+const MAX_SEND_RETRIES = 2;
+const RESPONSE_POLL_MS = 500;
 
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+// 页面隐藏后主线程 setTimeout 会被 Chrome 节流（1 次/秒，隐藏超 5 分钟后 1 次/分钟），
+// 语音链路的所有计时统一走 Worker 驱动的防节流 sleep
+const sleep = throttleSafeSleep;
 
 const generateId = () => `voice_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -109,6 +119,8 @@ const useVoiceAgentChat = () => {
   const awaitingUserReplyRef = useRef(false);
   // 绕过 useCallback 闭包陷阱：auto-run 循环里拿最新 messages
   const messagesRef = useRef<ChatMessage[]>([]);
+  // 最近一次服务端事件到达时间，用于 mute 后的无响应重发判定
+  const lastServerEventAtRef = useRef(0);
 
   useEffect(() => {
     trainTaskIdRef.current = trainTaskId;
@@ -282,6 +294,9 @@ const useVoiceAgentChat = () => {
       addMessage('system', '正在建立语音通道...');
 
       const handlers: TrainingWsHandlers = {
+        onServerActivity: () => {
+          lastServerEventAtRef.current = Date.now();
+        },
         onConnected: payload => {
           sessionIdRef.current = payload.sessionId;
           stepIdRef.current = payload.stepId;
@@ -421,30 +436,78 @@ const useVoiceAgentChat = () => {
     }
     ws.beginAudioSend();
     try {
-      for (const frame of frames) {
-        if (signal.aborted) {
-          return false;
-        }
-        if (!ws.sendBinary(frame)) {
-          return false;
-        }
-        await sleep(FRAME_INTERVAL_MS);
-      }
       const silence = buildSilenceFrame();
-      for (let i = 0; i < SILENCE_TAIL_COUNT; i += 1) {
+      const allFrames = [...frames, ...Array.from({ length: SILENCE_TAIL_COUNT }, () => silence)];
+      // 按绝对时间表发帧：某次唤醒被延迟时把已到期的帧一并补发（有限追帧），
+      // 避免计时抖动累积成音频流里的长间隙、被服务端 VAD 判定为“说话结束”
+      const startedAt = performance.now();
+      let sent = 0;
+      while (sent < allFrames.length) {
         if (signal.aborted) {
           return false;
         }
-        if (!ws.sendBinary(silence)) {
-          return false;
+        const elapsed = performance.now() - startedAt;
+        const due = Math.min(
+          allFrames.length,
+          Math.floor(elapsed / FRAME_INTERVAL_MS) + 1,
+          sent + CATCHUP_MAX_BURST_FRAMES,
+        );
+        while (sent < due) {
+          if (signal.aborted) {
+            return false;
+          }
+          if (!ws.sendBinary(allFrames[sent])) {
+            return false;
+          }
+          sent += 1;
         }
-        await sleep(FRAME_INTERVAL_MS);
+        if (sent < allFrames.length) {
+          await sleep(FRAME_INTERVAL_MS, signal);
+        }
       }
       return true;
     } finally {
       ws.endAudioSend();
     }
   }, []);
+
+  // 对齐 auto_audio_train.py 的 wait_for_response_with_retry：mute 之后服务端长时间
+  // 毫无事件（通常是没识别到语音结束、本轮丢失）时，重发同一段音频自愈
+  const waitServerActivity = useCallback(async (sinceTs: number, signal: AbortSignal) => {
+    const deadline = Date.now() + RESPONSE_TIMEOUT_MS;
+    while (!signal.aborted && lastServerEventAtRef.current <= sinceTs && Date.now() < deadline) {
+      await sleep(RESPONSE_POLL_MS, signal);
+    }
+    return signal.aborted || lastServerEventAtRef.current > sinceTs;
+  }, []);
+
+  const ensureServerResponse = useCallback(
+    async (frames: Uint8Array[], signal: AbortSignal, sentAt: number) => {
+      let responded = await waitServerActivity(sentAt, signal);
+      for (let retry = 1; !responded && !signal.aborted && retry <= MAX_SEND_RETRIES; retry += 1) {
+        console.warn(
+          `[voice] 服务端 ${RESPONSE_TIMEOUT_MS / 1000}s 无响应，重发本轮音频（第 ${retry}/${MAX_SEND_RETRIES} 次）`,
+        );
+        addMessage('system', `⚠️ 服务端无响应，正在重发本轮语音（第 ${retry}/${MAX_SEND_RETRIES} 次）`);
+        setVoiceState('SENDING_AUDIO');
+        const resentAt = Date.now();
+        const resent = await sendAudioFrames(frames, signal);
+        if (!resent || signal.aborted) {
+          return;
+        }
+        wsRef.current?.sendEvent('mute', {});
+        setVoiceState('WAITING_SERVER');
+        responded = await waitServerActivity(resentAt, signal);
+      }
+      if (!responded && !signal.aborted) {
+        addMessage('system', '⚠️ 服务端持续无响应，已跳过本轮；全自动模式将重新生成回答');
+        // 对齐 Python“跳过本轮继续”的行为：放行 auto-run 对同一提问重新生成一轮回答
+        awaitingUserReplyRef.current = true;
+        setVoiceState('CONNECTED');
+      }
+    },
+    [addMessage, sendAudioFrames, waitServerActivity],
+  );
 
   const sendUserText = useCallback(
     async (text: string, opts?: { isAutoGenerated?: boolean }) => {
@@ -485,8 +548,10 @@ const useVoiceAgentChat = () => {
         const completed = await sendAudioFrames(frames, controller.signal);
         resolveAudioDrain();
         if (completed && !controller.signal.aborted) {
+          const sentAt = Date.now();
           ws.sendEvent('mute', {});
           setVoiceState('WAITING_SERVER');
+          await ensureServerResponse(frames, controller.signal, sentAt);
         }
       } catch (err) {
         if ((err as { name?: string }).name === 'AbortError') {
@@ -498,11 +563,11 @@ const useVoiceAgentChat = () => {
       } finally {
         if (currentAbortRef.current === controller) {
           currentAbortRef.current = null;
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     },
-    [addMessage, requestAbort, resolveAudioDrain, sendAudioFrames],
+    [addMessage, ensureServerResponse, requestAbort, resolveAudioDrain, sendAudioFrames],
   );
 
   const autoGenerate = useCallback(async (): Promise<{ needConfig: boolean }> => {

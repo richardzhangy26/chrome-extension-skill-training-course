@@ -15,6 +15,7 @@ pages/side-panel/src/
 ├── hooks/             # Conversation/auth state machines
 ├── services/
 │   ├── audio/         # TTS synthesis and PCM/audio frame helpers
+│   ├── timing/        # Throttle-safe sleep backed by a dedicated Worker
 │   ├── ws/            # Polymas training-flow WebSocket client
 │   ├── llm-service.ts
 │   ├── background-bridge.ts
@@ -44,6 +45,7 @@ pages/side-panel/src/
 - Text and voice sessions must reset cleanly when switching modes.
 - Voice mode sends generated or manually-entered student text through TTS, PCM conversion, and the WS audio frame sender.
 - Voice-mode services talk directly to Polymas via `fetch`/`WebSocket`; do not route binary TTS audio through `apiRequest`, because that path JSON-parses responses.
+- All voice-pipeline timing (frame pacing, heartbeat, response watchdog) must use `services/timing/throttle-safe-sleep.ts`, never bare `setTimeout`: Chrome throttles hidden-page main-thread timers to 1/s (1/min after 5 hidden minutes), which starves the 100ms frame cadence and makes the server-side ASR truncate user audio.
 - Manual voice text input is TTS-sent as user audio. Simulation/knowledge-base content only affects AI auto-generation, matching text-mode behavior.
 
 ## Dialogue Simulation And Knowledge Base

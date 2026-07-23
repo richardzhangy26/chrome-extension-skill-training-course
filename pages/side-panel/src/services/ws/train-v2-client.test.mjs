@@ -48,51 +48,24 @@ const createFakeSocket = () => {
   return socket;
 };
 
-const withFakeTimers = async callback => {
-  const originals = {
-    setTimeout: globalThis.setTimeout,
-    clearTimeout: globalThis.clearTimeout,
-    setInterval: globalThis.setInterval,
-    clearInterval: globalThis.clearInterval,
-  };
-  let nextHandle = 1;
-  const timeoutCallbacks = new Map();
-  const intervalCallbacks = new Map();
-  const clearedTimeouts = [];
-  const clearedIntervals = [];
-  globalThis.setTimeout = callbackValue => {
-    const handle = nextHandle++;
-    timeoutCallbacks.set(handle, callbackValue);
-    return handle;
-  };
-  globalThis.clearTimeout = handle => {
-    clearedTimeouts.push(handle);
-    timeoutCallbacks.delete(handle);
-  };
-  globalThis.setInterval = callbackValue => {
-    const handle = nextHandle++;
-    intervalCallbacks.set(handle, callbackValue);
-    return handle;
-  };
-  globalThis.clearInterval = handle => {
-    clearedIntervals.push(handle);
-    intervalCallbacks.delete(handle);
-  };
-  const timers = {
-    timeoutCallbacks,
-    intervalCallbacks,
-    clearedTimeouts,
-    clearedIntervals,
-  };
-  try {
-    await callback(timers);
-  } finally {
-    globalThis.setTimeout = originals.setTimeout;
-    globalThis.clearTimeout = originals.clearTimeout;
-    globalThis.setInterval = originals.setInterval;
-    globalThis.clearInterval = originals.clearInterval;
-  }
+// 受控 sleep：注入 TrainV2Client 替代 throttleSafeSleep，不建真实定时器。
+// 记录每次调用的 { ms, resolve }，仅在 abort 时自行结束（对齐 throttleSafeSleep 的 signal 语义）。
+const createSleepController = () => {
+  const calls = [];
+  const sleep = (ms, signal) =>
+    new Promise(resolve => {
+      calls.push({ ms, resolve });
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      signal?.addEventListener('abort', () => resolve(), { once: true });
+    });
+  return { sleep, calls };
 };
+
+// 让被 resolve 的 sleep 之后的异步循环续体跑到下一个 await
+const tick = () => new Promise(resolve => globalThis.setTimeout(resolve, 0));
 
 const clientParams = { taskId: 'PRO123', userId: 'user-1', sessionId: 'session-1' };
 
@@ -212,91 +185,125 @@ test('OPEN 仅启动一次并发送一次 scriptStart，close 使用 connected p
   assert.equal(logs.filter(log => log.includes('phase=connected')).length, 1);
 });
 
-test('握手 timeout 重入只 reject/close 一次，清 timeout 且保持 handshake phase', async () => {
-  await withFakeTimers(async timers => {
-    const socket = createFakeSocket();
-    const closes = [];
-    const logs = [];
-    let rejectionCount = 0;
-    const warn = console.warn;
-    console.warn = (...args) => logs.push(args.join(' '));
-    try {
-      const client = new TrainV2Client(clientParams, { onClose: event => closes.push(event) }, () => socket);
-      const observed = client.connect().catch(error => {
-        rejectionCount += 1;
-        throw error;
-      });
-      const [timeoutHandle, timeoutCallback] = [...timers.timeoutCallbacks.entries()][0];
-      timeoutCallback();
-      timeoutCallback();
+test('握手超时：无 OPEN 时到时只 reject/close 一次，保持 handshake phase', async () => {
+  const socket = createFakeSocket();
+  const { sleep, calls } = createSleepController();
+  const closes = [];
+  const logs = [];
+  let rejectionCount = 0;
+  const warn = console.warn;
+  console.warn = (...args) => logs.push(args.join(' '));
+  try {
+    const client = new TrainV2Client(clientParams, { onClose: event => closes.push(event) }, () => socket, sleep);
+    const observed = client.connect().catch(error => {
+      rejectionCount += 1;
+      throw error;
+    });
+    // OPEN 之前仅有握手超时这一个等待中的 sleep
+    assert.equal(calls.length, 1);
+    calls[0].resolve();
+    calls[0].resolve(); // 重入：Promise 只结算一次 + settled 兜底，仅 reject/close 一次
 
-      await assert.rejects(observed, /握手超时/);
-      assert.equal(rejectionCount, 1);
-      assert.deepEqual(socket.closeCalls, [{ code: 4000, reason: 'handshake timeout' }]);
-      assert.deepEqual(closes, [{ code: 4000, reason: 'handshake timeout', wasClean: true }]);
-      assert.deepEqual(timers.clearedTimeouts, [timeoutHandle]);
-      assert.equal(logs.filter(log => log.includes('phase=handshake')).length, 1);
-    } finally {
-      console.warn = warn;
-    }
-  });
+    await assert.rejects(observed, /握手超时/);
+    assert.equal(rejectionCount, 1);
+    assert.deepEqual(socket.closeCalls, [{ code: 4000, reason: 'handshake timeout' }]);
+    assert.deepEqual(closes, [{ code: 4000, reason: 'handshake timeout', wasClean: true }]);
+    assert.equal(logs.filter(log => log.includes('phase=handshake')).length, 1);
+  } finally {
+    console.warn = warn;
+  }
 });
 
 test('握手期主动 close 同步派发 close，拒绝 pending 且迟到 OPEN 不复活', async () => {
-  await withFakeTimers(async timers => {
-    const socket = createFakeSocket();
-    const opens = [];
-    const closes = [];
-    const warn = console.warn;
-    console.warn = () => {};
-    try {
-      const client = new TrainV2Client(
-        clientParams,
-        { onOpen: () => opens.push('open'), onClose: event => closes.push(event) },
-        () => socket,
-      );
-      const pending = client.connect();
-      const [timeoutHandle] = [...timers.timeoutCallbacks.keys()];
-      client.close(1000, 'manual stop');
-      socket.emitOpen();
+  const socket = createFakeSocket();
+  const { sleep } = createSleepController();
+  const opens = [];
+  const closes = [];
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const client = new TrainV2Client(
+      clientParams,
+      { onOpen: () => opens.push('open'), onClose: event => closes.push(event) },
+      () => socket,
+      sleep,
+    );
+    const pending = client.connect();
+    client.close(1000, 'manual stop');
+    socket.emitOpen();
 
-      await assert.rejects(pending, /握手期关闭/);
-      assert.deepEqual(socket.closeCalls, [{ code: 1000, reason: 'manual stop' }]);
-      assert.deepEqual(closes, [{ code: 1000, reason: 'manual stop', wasClean: true }]);
-      assert.deepEqual(opens, []);
-      assert.deepEqual(socket.sent, []);
-      assert.deepEqual(timers.clearedTimeouts, [timeoutHandle]);
-      assert.equal(timers.intervalCallbacks.size, 0);
-    } finally {
-      console.warn = warn;
-    }
-  });
+    await assert.rejects(pending, /握手期关闭/);
+    assert.deepEqual(socket.closeCalls, [{ code: 1000, reason: 'manual stop' }]);
+    assert.deepEqual(closes, [{ code: 1000, reason: 'manual stop', wasClean: true }]);
+    assert.deepEqual(opens, []);
+    assert.deepEqual(socket.sent, []);
+  } finally {
+    console.warn = warn;
+  }
 });
 
-test('OPEN 后主动 close 清理心跳，使用 connected phase 且迟到 OPEN 不重复启动', async () => {
-  await withFakeTimers(async timers => {
-    const socket = createFakeSocket();
-    const closes = [];
-    const logs = [];
-    const debug = console.debug;
-    console.debug = (...args) => logs.push(args.join(' '));
-    try {
-      const client = new TrainV2Client(clientParams, { onClose: event => closes.push(event) }, () => socket);
-      const pending = client.connect();
-      socket.emitOpen();
-      await pending;
-      const [heartbeatHandle] = [...timers.intervalCallbacks.keys()];
-      client.close(1000, 'manual stop');
-      socket.emitOpen();
+test('OPEN 后主动 close 停止心跳循环，使用 connected phase 且迟到 OPEN 不重启', async () => {
+  const socket = createFakeSocket();
+  const { sleep, calls } = createSleepController();
+  const closes = [];
+  const logs = [];
+  const debug = console.debug;
+  console.debug = (...args) => logs.push(args.join(' '));
+  try {
+    const client = new TrainV2Client(clientParams, { onClose: event => closes.push(event) }, () => socket, sleep);
+    const pending = client.connect();
+    socket.emitOpen();
+    await pending;
 
-      assert.deepEqual(socket.sent, ['{"event":"scriptStart"}']);
-      assert.deepEqual(socket.closeCalls, [{ code: 1000, reason: 'manual stop' }]);
-      assert.deepEqual(closes, [{ code: 1000, reason: 'manual stop', wasClean: true }]);
-      assert.deepEqual(timers.clearedIntervals, [heartbeatHandle]);
-      assert.equal(timers.intervalCallbacks.size, 0);
-      assert.equal(logs.filter(log => log.includes('phase=connected')).length, 1);
-    } finally {
-      console.debug = debug;
-    }
-  });
+    const heartbeatWaits = () => calls.filter(c => c.ms === HEARTBEAT_INTERVAL_MS);
+    assert.equal(heartbeatWaits().length, 1);
+
+    client.close(1000, 'manual stop');
+    socket.emitOpen(); // 迟到 OPEN
+    await tick();
+
+    assert.deepEqual(socket.sent, ['{"event":"scriptStart"}']);
+    assert.deepEqual(socket.closeCalls, [{ code: 1000, reason: 'manual stop' }]);
+    assert.deepEqual(closes, [{ code: 1000, reason: 'manual stop', wasClean: true }]);
+    // 迟到 OPEN 不重启心跳：循环已因 abort 退出，未新增等待中的 sleep
+    assert.equal(heartbeatWaits().length, 1);
+    assert.equal(logs.filter(log => log.includes('phase=connected')).length, 1);
+  } finally {
+    console.debug = debug;
+  }
+});
+
+test('心跳走注入的防节流 sleep：按 30s 间隔重复发送 heartBeat，close 后停止', async () => {
+  const socket = createFakeSocket();
+  const { sleep, calls } = createSleepController();
+  const client = new TrainV2Client(clientParams, {}, () => socket, sleep);
+  const pending = client.connect();
+  socket.emitOpen();
+  await pending;
+
+  const heartbeatWaits = () => calls.filter(c => c.ms === HEARTBEAT_INTERVAL_MS);
+  const heartbeatsSent = () => socket.sent.filter(s => s.includes('heartBeat')).length;
+
+  // open 后：心跳循环已在等待一次 30s sleep，此时仅发过 scriptStart
+  assert.equal(heartbeatWaits().length, 1);
+  assert.deepEqual(socket.sent, ['{"event":"scriptStart"}']);
+
+  // 推进一次 30s：发送一次 heartBeat 并续期
+  heartbeatWaits().at(-1).resolve();
+  await tick();
+  assert.equal(heartbeatsSent(), 1);
+  assert.equal(heartbeatWaits().length, 2);
+
+  // 再推进一次：再发送一次并续期
+  heartbeatWaits().at(-1).resolve();
+  await tick();
+  assert.equal(heartbeatsSent(), 2);
+  assert.equal(heartbeatWaits().length, 3);
+
+  // close 后：等待中的 sleep 被 abort，循环退出，不再发送也不再新建 sleep
+  const waitsBeforeClose = heartbeatWaits().length;
+  client.close();
+  await tick();
+  assert.equal(heartbeatsSent(), 2);
+  assert.equal(heartbeatWaits().length, waitsBeforeClose);
 });

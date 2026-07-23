@@ -3,6 +3,8 @@
  * 对齐 auto_audio_train.py 的 TrainingClient.connect / listen_loop / send_json
  */
 
+import { throttleSafeSleep } from '../timing/throttle-safe-sleep';
+
 interface ConnectedPayload {
   sessionId: string;
   stepId: string;
@@ -42,6 +44,8 @@ interface TrainingWsHandlers {
   onOpen?(): void;
   onClose?(ev: CloseEvent): void;
   onUnknownEvent?(event: string, payload: unknown): void;
+  /** 任何服务端事件到达都会触发，用于“无响应重发”的活动监测 */
+  onServerActivity?(event: string): void;
 }
 
 const WS_BASE = 'wss://cloudapi.polymas.com/ai-tools/ws/v2/trainFlow';
@@ -53,7 +57,7 @@ class TrainingWsClient {
   private readonly taskId: string;
   private readonly handlers: TrainingWsHandlers;
   private ws: WebSocket | null = null;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatActive = false;
   // 对齐 auto_audio_train.py 的 _ws_send_lock：音频帧发送期间不得插入 heartBeat 等文本帧，
   // 否则服务端会把音频流提前收束（用户输入被截断）甚至丢会话
   private audioSending = false;
@@ -178,6 +182,9 @@ class TrainingWsClient {
     }
     const event = parsed.event ?? '';
     const payload = parsed.payload ?? {};
+    if (event) {
+      this.handlers.onServerActivity?.(event);
+    }
     switch (event) {
       case 'connected':
         this.handlers.onConnected?.(payload as ConnectedPayload);
@@ -222,22 +229,32 @@ class TrainingWsClient {
   }
 
   private startHeartbeat(): void {
-    this.stopHeartbeat();
-    this.heartbeatTimer = setInterval(() => {
+    if (this.heartbeatActive) {
+      return;
+    }
+    this.heartbeatActive = true;
+    void this.runHeartbeatLoop();
+  }
+
+  // 心跳计时同样走防节流 sleep：页面隐藏后 setInterval 会被节流到 1 次/分钟，
+  // 心跳间隔被拉长可能导致服务端判定超时断连
+  private async runHeartbeatLoop(): Promise<void> {
+    while (this.heartbeatActive) {
+      await throttleSafeSleep(HEARTBEAT_INTERVAL_MS);
+      if (!this.heartbeatActive || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
       if (this.audioSending) {
         this.heartbeatPending = true;
         console.log('[voice-ws] heartBeat deferred: audio frames in flight');
-        return;
+        continue;
       }
       this.sendEvent('heartBeat', {});
-    }, HEARTBEAT_INTERVAL_MS);
+    }
   }
 
   private stopHeartbeat(): void {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
+    this.heartbeatActive = false;
     this.heartbeatPending = false;
   }
 }

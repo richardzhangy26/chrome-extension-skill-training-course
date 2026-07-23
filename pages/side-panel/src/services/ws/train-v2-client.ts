@@ -6,6 +6,7 @@
  */
 
 import { createTrainV2PageRelaySocket, TRAIN_V2_SOCKET_STATE } from './train-v2-page-relay';
+import { throttleSafeSleep } from '../timing/throttle-safe-sleep';
 import type {
   TrainV2CloseInfo,
   TrainV2ConnectionParams,
@@ -51,6 +52,7 @@ interface TrainV2Handlers {
 
 type TrainV2ConnectionPhase = 'handshake' | 'connected';
 type TrainV2DiagnosticLevel = 'debug' | 'warn';
+type TrainV2Sleep = (ms: number, signal?: AbortSignal) => Promise<void>;
 
 const TRAIN_V2_WS_BASE = 'wss://cloudapi.polymas.com/ai-platform/ws/trainV2';
 // auto_train_pro.py 实测值：应用层心跳 30s；握手超时 10s
@@ -120,8 +122,9 @@ class TrainV2Client {
   private readonly params: TrainV2ConnectionParams;
   private readonly handlers: TrainV2Handlers;
   private readonly socketFactory: TrainV2SocketFactory;
+  private readonly sleep: TrainV2Sleep;
   private ws: TrainV2Socket | null = null;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatAbort: AbortController | null = null;
   // 每收到一条事件或音频帧 +1，供「阶段开场应答」检测服务端是否安静
   private activityCounter = 0;
 
@@ -129,21 +132,23 @@ class TrainV2Client {
     params: TrainV2ConnectionParams,
     handlers: TrainV2Handlers,
     socketFactory: TrainV2SocketFactory = createTrainV2PageRelaySocket,
+    sleep: TrainV2Sleep = throttleSafeSleep,
   ) {
     this.params = params;
     this.handlers = handlers;
     this.socketFactory = socketFactory;
+    this.sleep = sleep;
   }
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       let settled = false;
       let opened = false;
-      let openTimer: ReturnType<typeof setTimeout> | null = null;
+      const openAbort = new AbortController();
       const settleRejected = (error: Error): void => {
         if (settled) return;
         settled = true;
-        if (openTimer) clearTimeout(openTimer);
+        openAbort.abort();
         reject(error);
       };
       try {
@@ -154,18 +159,18 @@ class TrainV2Client {
       }
       this.ws.binaryType = 'arraybuffer';
 
-      openTimer = setTimeout(() => {
-        if (!settled) {
-          settleRejected(new Error('WebSocket 握手超时（10s）'));
-          this.close(4000, 'handshake timeout');
-        }
-      }, OPEN_TIMEOUT_MS);
+      // 握手超时同样走防节流 sleep：页面隐藏后裸 setTimeout 会被 Chrome 节流延迟触发
+      void this.sleep(OPEN_TIMEOUT_MS, openAbort.signal).then(() => {
+        if (settled) return;
+        settleRejected(new Error('WebSocket 握手超时（10s）'));
+        this.close(4000, 'handshake timeout');
+      });
 
       this.ws.addEventListener('open', () => {
         if (settled || opened) return;
         opened = true;
         settled = true;
-        if (openTimer) clearTimeout(openTimer);
+        openAbort.abort();
         this.startHeartbeat();
         // 对齐脚本：连接成功立即发 scriptStart（先于服务端 connected 事件）
         this.sendEvent('scriptStart');
@@ -236,16 +241,26 @@ class TrainV2Client {
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    this.heartbeatTimer = setInterval(() => {
+    const abort = new AbortController();
+    this.heartbeatAbort = abort;
+    void this.runHeartbeatLoop(abort.signal);
+  }
+
+  // 心跳计时走防节流 sleep：页面隐藏后 setInterval 会被 Chrome 节流到 1 次/分钟，
+  // 心跳间隔被拉长会让服务端判定连接超时而断连
+  private async runHeartbeatLoop(signal: AbortSignal): Promise<void> {
+    while (!signal.aborted) {
+      await this.sleep(HEARTBEAT_INTERVAL_MS, signal);
+      if (signal.aborted || !this.ws || this.ws.readyState !== TRAIN_V2_SOCKET_STATE.OPEN) {
+        return;
+      }
       this.sendEvent('heartBeat', {});
-    }, HEARTBEAT_INTERVAL_MS);
+    }
   }
 
   private stopHeartbeat(): void {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
+    this.heartbeatAbort?.abort();
+    this.heartbeatAbort = null;
   }
 }
 

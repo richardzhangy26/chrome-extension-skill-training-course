@@ -23,7 +23,7 @@ export default function StatsSection() {
             <p className="text-muted-foreground font-medium">{m.home_stats_items_item_2_title()}</p>
           </ScrollReveal>
           <ScrollReveal delay={240} className="space-y-4 py-4 md:py-0">
-            <div className="text-primary text-5xl font-bold tabular-nums">2</div>
+            <div className="text-primary text-5xl font-bold tabular-nums">3</div>
             <p className="text-muted-foreground font-medium">{m.home_stats_items_item_3_title()}</p>
           </ScrollReveal>
         </div>

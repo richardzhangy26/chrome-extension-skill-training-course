@@ -60,7 +60,7 @@ export const websiteConfig: WebsiteConfig = {
     enableDeleteAccount: true,
   },
   blog: {
-    enable: true,
+    enable: false,
     paginationSize: 6,
   },
   mail: {

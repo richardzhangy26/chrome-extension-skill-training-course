@@ -2,7 +2,12 @@ import { m } from '@/locale/paraglide/messages';
 import { Routes } from '@/lib/routes';
 import type { MenuItemConfig } from '../types';
 import { websiteConfig } from './website';
-import { DOWNLOAD_URL, REPO_URL } from './links';
+import {
+  DOWNLOAD_URL,
+  REPO_URL,
+  FEEDBACK_URL,
+  CHROME_WEB_STORE_URL,
+} from './links';
 /**
  * Footer links, grouped by section
  */
@@ -28,6 +33,8 @@ export function getFooterLinks(): MenuItemConfig[] {
   const resourcesItems: MenuItemConfig[] = [
     { title: 'GitHub', href: REPO_URL, external: true },
     { title: m.home_hero_primary(), href: DOWNLOAD_URL, external: true },
+    { title: m.nav_feedback(), href: FEEDBACK_URL, external: true },
+    { title: m.nav_chrome_store(), href: CHROME_WEB_STORE_URL, external: true },
   ];
   if (websiteConfig.blog?.enable) {
     resourcesItems.push({

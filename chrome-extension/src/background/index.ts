@@ -1,6 +1,10 @@
 import 'webextension-polyfill';
+import { toCurrentTrainingTab } from './current-training-tab';
+import { readTaskIdFromUrl } from './extract-task-id';
+import { createTrainingTabUrlEventController } from './training-tab-url-events';
 import { ADMIN_WEB_BASE_URLS, IS_DEV } from '@extension/env';
 import { exampleThemeStorage, authSessionStorage, normalizeAuthToken } from '@extension/storage';
+import type { CurrentTabInfo } from './current-training-tab';
 
 // ============ 类型定义 ============
 interface BackgroundMessage<T = unknown> {
@@ -16,6 +20,7 @@ interface BackgroundResponse<T = unknown> {
 
 type BackgroundMessageType =
   | 'GET_CURRENT_TAB_URL'
+  | 'GET_CURRENT_TAB_INFO'
   | 'GET_AUTH'
   | 'EXTRACT_TRAIN_TASK_ID'
   | 'API_REQUEST'
@@ -82,6 +87,9 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
     case 'GET_CURRENT_TAB_URL':
       return handleGetCurrentTabUrl();
 
+    case 'GET_CURRENT_TAB_INFO':
+      return handleGetCurrentTabInfo();
+
     case 'GET_AUTH':
       return handleGetAuth();
 
@@ -109,6 +117,19 @@ const handleGetCurrentTabUrl = async (): Promise<BackgroundResponse<string>> => 
     }
 
     return { success: true, data: tab.url };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+};
+
+const handleGetCurrentTabInfo = async (): Promise<BackgroundResponse<CurrentTabInfo>> => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const currentTab = tab ? toCurrentTrainingTab(tab) : null;
+    if (!currentTab) {
+      return { success: false, error: '请打开能力训练 Pro 页面' };
+    }
+    return { success: true, data: currentTab };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
@@ -149,8 +170,7 @@ const handleExtractTrainTaskId = async (url?: string): Promise<BackgroundRespons
       return { success: false, error: 'No URL available' };
     }
 
-    const urlObj = new URL(targetUrl);
-    const trainTaskId = urlObj.searchParams.get('trainTaskId');
+    const trainTaskId = readTaskIdFromUrl(targetUrl);
 
     if (!trainTaskId) {
       return { success: false, error: 'trainTaskId not found in URL' };
@@ -278,19 +298,27 @@ const handleAdminWebRequest = async (
   }
 };
 
-// ============ 监听标签页URL变化 ============
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.url && tab.url?.includes('hike-teaching-center.polymas.com')) {
-    // 通知Side Panel URL已变化
-    chrome.runtime
+// ============ 监听活动标签页URL变化/切换 ============
+const trainingTabUrlEvents = createTrainingTabUrlEventController({
+  getTab: tabId => chrome.tabs.get(tabId),
+  publish: async tab => {
+    await chrome.runtime
       .sendMessage({
         type: 'TAB_URL_CHANGED',
-        payload: { tabId, url: changeInfo.url },
+        payload: { tabId: tab.id, url: tab.url },
       })
       .catch(() => {
         // Side Panel可能未打开，忽略错误
       });
-  }
+  },
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  void trainingTabUrlEvents.onUpdated(tabId, changeInfo, tab);
+});
+
+chrome.tabs.onActivated.addListener(activeInfo => {
+  void trainingTabUrlEvents.onActivated(activeInfo);
 });
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {

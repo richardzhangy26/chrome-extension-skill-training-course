@@ -22,8 +22,6 @@ interface UserDetailResponse {
 
 const USER_DETAIL_ENDPOINT = 'https://cloudapi.polymas.com/console/v1/get-current-user-detail';
 
-let cachedPromise: Promise<PolymasUserInfo> | null = null;
-
 const doFetch = async (): Promise<PolymasUserInfo> => {
   const response = await apiRequest<UserDetailResponse>({
     endpoint: USER_DETAIL_ENDPOINT,
@@ -37,19 +35,44 @@ const doFetch = async (): Promise<PolymasUserInfo> => {
   return { userId, schoolId };
 };
 
-const fetchPolymasUserInfo = async (): Promise<PolymasUserInfo> => {
-  if (!cachedPromise) {
-    cachedPromise = doFetch().catch(error => {
-      cachedPromise = null;
-      throw error;
+const createPolymasUserInfoLoader = (fetcher: () => Promise<PolymasUserInfo>) => {
+  let cachedPromise: Promise<PolymasUserInfo> | null = null;
+
+  const startFetch = () => {
+    let request: Promise<PolymasUserInfo>;
+    try {
+      request = Promise.resolve(fetcher());
+    } catch (error) {
+      request = Promise.reject(error);
+    }
+    cachedPromise = request;
+    void request.catch(() => {
+      if (cachedPromise === request) {
+        cachedPromise = null;
+      }
     });
-  }
-  return cachedPromise;
+    return request;
+  };
+
+  return {
+    fetch: () => cachedPromise ?? startFetch(),
+    refresh: () => {
+      cachedPromise = null;
+      return startFetch();
+    },
+    invalidate: () => {
+      cachedPromise = null;
+    },
+  };
 };
 
-const invalidatePolymasUserInfo = () => {
-  cachedPromise = null;
-};
+const userInfoLoader = createPolymasUserInfoLoader(doFetch);
 
-export { fetchPolymasUserInfo, invalidatePolymasUserInfo };
+const fetchPolymasUserInfo = () => userInfoLoader.fetch();
+
+const refreshPolymasUserInfo = () => userInfoLoader.refresh();
+
+const invalidatePolymasUserInfo = () => userInfoLoader.invalidate();
+
+export { createPolymasUserInfoLoader, fetchPolymasUserInfo, refreshPolymasUserInfo, invalidatePolymasUserInfo };
 export type { PolymasUserInfo };

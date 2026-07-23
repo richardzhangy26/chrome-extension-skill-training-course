@@ -41,6 +41,20 @@ const manifest = {
   ],
   optional_host_permissions: ['http://*/*', 'https://*/*'],
   permissions: ['storage', 'tabs', 'sidePanel', 'cookies', 'activeTab'],
+  content_scripts: [
+    {
+      matches: ['https://hike-teaching-center.polymas.com/*'],
+      js: ['content/pro-train-v2-main.iife.js'],
+      run_at: 'document_start',
+      world: 'MAIN',
+    },
+    {
+      matches: ['https://hike-teaching-center.polymas.com/*'],
+      js: ['content/pro-train-v2-relay.iife.js'],
+      run_at: 'document_start',
+      world: 'ISOLATED',
+    },
+  ],
   options_page: 'options/index.html',
   background: {
     service_worker: 'background.js',

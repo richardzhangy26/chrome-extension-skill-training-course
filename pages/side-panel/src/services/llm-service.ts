@@ -5,7 +5,9 @@
 
 import { apiRequest, API_ENDPOINTS } from './background-bridge';
 import { assertHostPermission } from './host-permission-service';
+import { buildProContextSections } from './pro-training-context-service';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_PROFILE_ID, llmConfigStorage, normalizeLLMConfig } from '@extension/storage';
+import type { ProStagePromptContext } from './pro-training-context-service';
 import type { RoleRuntimeConfig } from '../types/multi-role-types';
 import type { LLMConfig, StudentProfile } from '@extension/storage';
 
@@ -82,8 +84,9 @@ type PresetGeneratorProfile = 'good' | 'medium' | 'poor';
 type GeneratorProfile = PresetGeneratorProfile | 'custom';
 
 interface RuntimeProfileOverride {
-  profile: StudentProfile;
+  profile?: StudentProfile;
   runtimeConfigOverride?: RoleRuntimeConfig;
+  proContext?: ProStagePromptContext;
 }
 
 interface DialogueGeneratorStage {
@@ -642,6 +645,7 @@ const buildStudentRoleSystemPrompt = (
     'dialogueSimulationEnabled' | 'dialogueSimulationContent' | 'knowledgeBaseEnabled' | 'knowledgeBaseContent'
   >,
   runtimeConfigOverride?: RoleRuntimeConfig,
+  proContext?: ProStagePromptContext,
 ) => {
   const effectiveDialogueEnabled = runtimeConfigOverride?.dialogueSimulationEnabled ?? config.dialogueSimulationEnabled;
   const effectiveDialogueContent = runtimeConfigOverride?.dialogueSimulationContent ?? config.dialogueSimulationContent;
@@ -684,6 +688,10 @@ const buildStudentRoleSystemPrompt = (
       knowledgeBaseContent,
       '',
     );
+  }
+
+  if (proContext) {
+    sections.push(...buildProContextSections(proContext));
   }
 
   sections.push(
@@ -808,6 +816,7 @@ const generateStudentAnswer = async (
       profile,
       config,
       runtimeOverride?.runtimeConfigOverride,
+      runtimeOverride?.proContext,
     );
 
     const historyMessages: ChatMessage[] = [];

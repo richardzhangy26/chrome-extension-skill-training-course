@@ -4,18 +4,18 @@
 
 import { useMemo, useState } from 'react';
 
-type ScriptStepItem = {
+interface DebugStepItem {
   stepId: string;
-  stepDetailDTO?: {
-    stepName?: string;
-    stepOrder?: number;
-    nodeType?: 'SCRIPT_START' | 'SCRIPT_END' | 'SCRIPT_NODE';
-  };
-};
+  stepName: string;
+  stepOrder?: number;
+  nodeType?: 'SCRIPT_START' | 'SCRIPT_END' | 'SCRIPT_NODE';
+  description?: string;
+}
 
 interface DebugStepsModalProps {
   isOpen: boolean;
-  steps: ScriptStepItem[];
+  steps: DebugStepItem[];
+  variant: 'standard' | 'pro';
   isLoading: boolean;
   error: string | null;
   onClose: () => void;
@@ -37,11 +37,10 @@ const BugIcon = () => (
   </svg>
 );
 
-const getStepName = (step: ScriptStepItem) => step.stepDetailDTO?.stepName?.trim() || step.stepId;
+const getStepName = (step: DebugStepItem) => step.stepName.trim() || step.stepId;
 
-const getStepMeta = (step: ScriptStepItem) => {
-  const order = step.stepDetailDTO?.stepOrder;
-  const type = step.stepDetailDTO?.nodeType;
+const getStepMeta = (step: DebugStepItem) => {
+  const { stepOrder: order, nodeType: type } = step;
   if (order == null && !type) {
     return null;
   }
@@ -53,6 +52,7 @@ const getStepMeta = (step: ScriptStepItem) => {
 const DebugStepsModal = ({
   isOpen,
   steps,
+  variant,
   isLoading,
   error,
   onClose,
@@ -64,10 +64,7 @@ const DebugStepsModal = ({
   const filteredSteps = useMemo(() => {
     const query = keyword.trim().toLowerCase();
     return steps
-      .filter(step => {
-        const type = step.stepDetailDTO?.nodeType;
-        return type !== 'SCRIPT_START' && type !== 'SCRIPT_END';
-      })
+      .filter(step => variant === 'pro' || (step.nodeType !== 'SCRIPT_START' && step.nodeType !== 'SCRIPT_END'))
       .filter(step => {
         if (!query) {
           return true;
@@ -76,7 +73,7 @@ const DebugStepsModal = ({
         const id = step.stepId.toLowerCase();
         return name.includes(query) || id.includes(query);
       });
-  }, [keyword, steps]);
+  }, [keyword, steps, variant]);
 
   if (!isOpen) {
     return null;
@@ -108,7 +105,11 @@ const DebugStepsModal = ({
 
         <div className="flex flex-1 flex-col gap-4 overflow-hidden p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-slate-600">选择一个步骤直接运行该节点 RunCard</div>
+            <div className="text-sm text-slate-600">
+              {variant === 'pro'
+                ? '选择一个阶段，关闭当前会话并从该阶段新建 Pro 会话'
+                : '选择一个步骤直接运行该节点 RunCard'}
+            </div>
             <button
               onClick={onRefresh}
               disabled={isLoading}
@@ -150,6 +151,7 @@ const DebugStepsModal = ({
                         {meta && <span className="text-xs text-slate-400">{meta}</span>}
                       </div>
                       <div className="mt-1 text-xs text-slate-400">{step.stepId}</div>
+                      {step.description && <div className="mt-1 text-xs text-slate-500">{step.description}</div>}
                     </button>
                   );
                 })}
@@ -163,3 +165,4 @@ const DebugStepsModal = ({
 };
 
 export { DebugStepsModal };
+export type { DebugStepItem };

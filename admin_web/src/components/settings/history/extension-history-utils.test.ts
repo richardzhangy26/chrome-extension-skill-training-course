@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import type { AgentLogSessionInput } from '@/lib/agent-log-schema';
 import {
   buildBulkHistoryZipEntries,
+  getHistoryAiRoleName,
   getRecentPreviewEntries,
   getUniqueHistoryFilename,
 } from './extension-history-utils';
@@ -56,3 +57,5 @@ assert.deepEqual(zipEntries, {
 });
 
 assert.equal(formatTime(123), 'time:123');
+assert.equal(getHistoryAiRoleName({ ...entry(1, 'pro'), aiRoleName: ' 小研 ' }), '小研');
+assert.equal(getHistoryAiRoleName(entry(1, 'normal')), 'AI');

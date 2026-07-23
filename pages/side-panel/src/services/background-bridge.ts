@@ -3,6 +3,9 @@
  * 封装与Background Script的通信
  */
 
+import { createCurrentTabUrlMessageHandler } from './current-tab-url-listener';
+import type { TabUrlChangedMessage } from './current-tab-url-listener';
+
 interface BackgroundResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -12,6 +15,11 @@ interface BackgroundResponse<T = unknown> {
 interface AuthInfo {
   authorization: string | null;
   cookies: string;
+}
+
+interface CurrentTabInfo {
+  id: number;
+  url: string;
 }
 
 interface ApiRequestPayload {
@@ -54,6 +62,22 @@ const getCurrentTabUrl = async (): Promise<string | null> => {
   const response = await sendMessage<string>('GET_CURRENT_TAB_URL');
   return response.success ? (response.data ?? null) : null;
 };
+
+const getCurrentTabInfo = async (): Promise<CurrentTabInfo> => {
+  const response = await sendMessage<CurrentTabInfo>('GET_CURRENT_TAB_INFO');
+  if (!response.success || !response.data) {
+    throw new Error(response.error || '请打开能力训练 Pro 页面');
+  }
+  return response.data;
+};
+
+const connectProTrainV2Page = async (): Promise<chrome.runtime.Port> => {
+  const tab = await getCurrentTabInfo();
+  return chrome.tabs.connect(tab.id, { name: 'polymas-pro-train-v2', frameId: 0 });
+};
+
+const getRuntimeLastErrorMessage = (): string | undefined =>
+  typeof chrome === 'undefined' ? undefined : chrome.runtime.lastError?.message;
 
 // 获取认证信息
 const getAuth = async (): Promise<AuthInfo | null> => {
@@ -112,10 +136,9 @@ const adminWebRequest = async (payload: AdminWebRequestPayload): Promise<AdminWe
 
 // 监听URL变化
 const onTabUrlChanged = (callback: (url: string) => void): (() => void) => {
-  const handler = (message: { type: string; payload?: { url: string } }) => {
-    if (message.type === 'TAB_URL_CHANGED' && message.payload?.url) {
-      callback(message.payload.url);
-    }
+  const handleCurrentTabUrl = createCurrentTabUrlMessageHandler(getCurrentTabInfo, callback);
+  const handler = (message: TabUrlChangedMessage) => {
+    void handleCurrentTabUrl(message);
   };
 
   chrome.runtime.onMessage.addListener(handler);
@@ -131,5 +154,16 @@ const API_ENDPOINTS = {
   CHAT: '/ai-tools/trainRun/chat',
 } as const;
 
-export { getCurrentTabUrl, getAuth, extractTrainTaskId, apiRequest, onTabUrlChanged, API_ENDPOINTS, adminWebRequest };
-export type { AdminWebRequestPayload, AdminWebResponse };
+export {
+  getCurrentTabUrl,
+  getAuth,
+  extractTrainTaskId,
+  apiRequest,
+  onTabUrlChanged,
+  API_ENDPOINTS,
+  adminWebRequest,
+  getCurrentTabInfo,
+  connectProTrainV2Page,
+  getRuntimeLastErrorMessage,
+};
+export type { AdminWebRequestPayload, AdminWebResponse, CurrentTabInfo };

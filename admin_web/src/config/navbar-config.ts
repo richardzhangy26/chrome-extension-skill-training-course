@@ -2,7 +2,7 @@ import { m } from '@/locale/paraglide/messages';
 import { Routes } from '@/lib/routes';
 import type { MenuItemConfig } from '../types';
 import { websiteConfig } from './website';
-import { REPO_URL } from './links';
+import { REPO_URL, FEEDBACK_URL } from './links';
 /**
  * Navbar links
  */
@@ -19,5 +19,6 @@ export function getNavbarLinks(): MenuItemConfig[] {
     links.push({ title: m.nav_blog(), href: Routes.Blog, external: false });
   }
   links.push({ title: 'GitHub', href: REPO_URL, external: true });
+  links.push({ title: m.nav_feedback(), href: FEEDBACK_URL, external: true });
   return links;
 }

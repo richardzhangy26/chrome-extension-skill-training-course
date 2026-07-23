@@ -144,7 +144,15 @@ export function Navbar({ scroll = true }: NavbarProps) {
                   ) : (
                     <NavigationMenuItem key={item.title}>
                       <NavigationMenuLink
-                        render={<Link to={item.href ?? '#'} />}
+                        render={
+                          <Link
+                            to={item.href ?? '#'}
+                            target={item.external ? '_blank' : undefined}
+                            rel={
+                              item.external ? 'noopener noreferrer' : undefined
+                            }
+                          />
+                        }
                         className={cn(
                           navigationMenuTriggerStyle(),
                           'bg-transparent',

@@ -26,5 +26,11 @@ tsconfig.tsbuildinfo
 
 .claude 
 
-.playwright-mcp/.worktrees/
+.playwright-mcp/
 .worktrees/
+
+# local tooling artifacts & reference scripts
+.qoder/
+auto_train_pro.py
+test_auto_train_pro_jump.py
+English Speech Training on Reform and Opening-Up Comprehensive-优秀学生-口语.txt

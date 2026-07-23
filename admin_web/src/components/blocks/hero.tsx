@@ -4,7 +4,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { IconArrowRight } from '@tabler/icons-react';
 import { getR2AssetUrl } from '@/config/r2-assets';
-import { DOWNLOAD_URL, REPO_URL } from '@/config/links';
+import { DOWNLOAD_URL, REPO_URL, CHROME_WEB_STORE_URL } from '@/config/links';
 export default function HeroSection() {
   return (
     <section id="hero" className="overflow-hidden">
@@ -66,6 +66,16 @@ export default function HeroSection() {
                 <span className="text-nowrap">{m.home_hero_secondary()}</span>
               </a>
             </div>
+
+            <p className="animate-fade-up delay-3 mt-4 text-center text-xs text-muted-foreground">
+              <a
+                href={CHROME_WEB_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground">
+                {m.home_hero_store_note()}
+              </a>
+            </p>
           </div>
 
           {/* Polymas extension product showcase */}

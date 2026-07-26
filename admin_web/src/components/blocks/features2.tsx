@@ -25,7 +25,7 @@ const Features2Section = () => {
       key: 'step-1',
       title: m.home_features2_step1_title(),
       description: m.home_features2_step1_description(),
-      image: getR2AssetUrl('steps/install-extension.webp'),
+      image: getR2AssetUrl('steps/install-chrome-web-store.webp'),
       alt: m.home_features2_step1_alt(),
       icon: IconDownload,
     },

@@ -4,13 +4,13 @@
 
 ## 🚀 快速下载
 
-**👉 [点击下载最新版本 v1.0.0](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v1.0.0)**
+**🌐 [Chrome 应用商店安装（推荐）](https://chromewebstore.google.com/detail/hike-teaching-center/mhhonaofiieikgebniaihgbphfplbhah?hl=zh-CN)**
 
-下载 ZIP 文件后，按照下方安装步骤操作即可使用。
+打开链接后点击「添加至 Chrome」即可，无需手动操作。
 
-**🌐 Chrome 应用商店**：[hike-teaching-center](https://chromewebstore.google.com/detail/hike-teaching-center/mhhonaofiieikgebniaihgbphfplbhah?hl=zh-CN)
+**👉 也可以[手动下载最新版本 v1.0.0 ZIP](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v1.0.0) 自行安装**
 
-> ⚠️ 应用商店当前版本仍为 **v0.8.0**，请优先下载上方 **v1.0.0** ZIP 手动安装；商店版本将在后续更新至 v1.0.0。
+下载 ZIP 文件后，按照下方 [安装使用](#安装使用) 章节的手动安装步骤操作即可。
 
 ---
 
@@ -37,6 +37,15 @@
 | Firefox | ✅ 支持 | 需单独构建 |
 
 ### Chrome / Edge / Brave 安装步骤
+
+#### 方式一：Chrome 应用商店安装（推荐）
+
+1. 打开 [Chrome 应用商店安装页](https://chromewebstore.google.com/detail/hike-teaching-center/mhhonaofiieikgebniaihgbphfplbhah?hl=zh-CN)
+2. 点击 **添加至 Chrome**，安装成功后工具栏会出现扩展图标
+
+Edge / Brave 用户也可以直接打开上方链接，同样支持从 Chrome 应用商店安装。
+
+#### 方式二：手动安装（Gitee ZIP，适合无法访问应用商店的场景）
 
 1. [下载 ZIP 文件](https://gitee.com/richardzhangy26/chrome-extension-skill-training-course/releases/tag/v1.0.0)
 

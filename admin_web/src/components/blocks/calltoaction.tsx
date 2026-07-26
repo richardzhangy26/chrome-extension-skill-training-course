@@ -2,7 +2,7 @@ import { m } from '@/locale/paraglide/messages';
 import { ScrollReveal } from '@/components/shared/scroll-reveal';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { DOWNLOAD_URL, REPO_URL } from '@/config/links';
+import { CHROME_WEB_STORE_URL, INSTALL_GUIDE_URL } from '@/config/links';
 export default function CallToActionSection() {
   return (
     <section id="call-to-action" className="relative overflow-hidden px-4 py-16 md:py-24">
@@ -15,14 +15,14 @@ export default function CallToActionSection() {
 
           <div className="mt-12 flex flex-wrap justify-center gap-4">
             <a
-              href={DOWNLOAD_URL}
+              href={CHROME_WEB_STORE_URL}
               target="_blank"
               rel="noopener noreferrer"
               className={cn(buttonVariants({ size: 'lg' }))}>
               <span>{m.home_call_to_action_primary_button()}</span>
             </a>
             <a
-              href={REPO_URL}
+              href={INSTALL_GUIDE_URL}
               target="_blank"
               rel="noopener noreferrer"
               className={cn(buttonVariants({ size: 'lg', variant: 'outline' }))}>

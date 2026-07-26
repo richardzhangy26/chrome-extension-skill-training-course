@@ -4,7 +4,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { IconArrowRight } from '@tabler/icons-react';
 import { getR2AssetUrl } from '@/config/r2-assets';
-import { DOWNLOAD_URL, REPO_URL, CHROME_WEB_STORE_URL } from '@/config/links';
+import { DOWNLOAD_URL, REPO_URL, CHROME_WEB_STORE_URL, INSTALL_GUIDE_URL } from '@/config/links';
 export default function HeroSection() {
   return (
     <section id="hero" className="overflow-hidden">
@@ -51,7 +51,7 @@ export default function HeroSection() {
             <div className="animate-fade-up delay-3 mt-8 flex flex-wrap items-center justify-center gap-3 sm:mt-12 sm:gap-4">
               <div className="bg-foreground/10 rounded-xl">
                 <a
-                  href={DOWNLOAD_URL}
+                  href={CHROME_WEB_STORE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(buttonVariants({ size: 'lg' }), 'h-10.5 rounded-xl px-5 text-base')}>
@@ -59,7 +59,7 @@ export default function HeroSection() {
                 </a>
               </div>
               <a
-                href={REPO_URL}
+                href={INSTALL_GUIDE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), 'h-10.5 rounded-xl px-5')}>
@@ -69,7 +69,7 @@ export default function HeroSection() {
 
             <p className="animate-fade-up delay-3 mt-4 text-center text-xs text-muted-foreground">
               <a
-                href={CHROME_WEB_STORE_URL}
+                href={DOWNLOAD_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-2 hover:text-foreground">

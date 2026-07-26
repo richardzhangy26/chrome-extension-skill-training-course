@@ -4,7 +4,7 @@ import { MODEL_BRAND_ICONS } from '@/components/blocks/model-brand-icons';
 import { Logo } from '@/components/shared/logo';
 import { ScrollReveal } from '@/components/shared/scroll-reveal';
 import { buttonVariants } from '@/components/ui/button';
-import { DOWNLOAD_URL, REPO_URL } from '@/config/links';
+import { CHROME_WEB_STORE_URL, INSTALL_GUIDE_URL } from '@/config/links';
 import { m } from '@/locale/paraglide/messages';
 import { cn } from '@/lib/utils';
 
@@ -64,14 +64,14 @@ const Integration2Section = () => {
 
               <div className="mt-12 flex flex-wrap justify-center gap-4 md:justify-start">
                 <a
-                  href={DOWNLOAD_URL}
+                  href={CHROME_WEB_STORE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(buttonVariants({ size: 'lg' }))}>
                   <span>{m.home_integration2_primary_button()}</span>
                 </a>
                 <a
-                  href={REPO_URL}
+                  href={INSTALL_GUIDE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(buttonVariants({ size: 'lg', variant: 'outline' }))}>
